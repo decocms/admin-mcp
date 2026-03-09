@@ -5,8 +5,6 @@ import type { Env } from "../types/env.ts";
 const ADMIN_BASE_URL =
 	process.env.DECO_ADMIN_URL ?? "https://admin.deco.cx";
 
-export const DELETE_ASSET_RESOURCE_URI = "ui://mcp-app/assets";
-
 export const deleteAssetInputSchema = z.object({
 	id: z
 		.string()
@@ -31,7 +29,6 @@ export const deleteAssetTool = (env: Env) =>
 			"Permanently delete a media asset by its ID from the configured deco.cx site. This is irreversible — the file is removed from storage and the database index.",
 		inputSchema: deleteAssetInputSchema,
 		outputSchema: deleteAssetOutputSchema,
-		_meta: { ui: { resourceUri: DELETE_ASSET_RESOURCE_URI } },
 		annotations: {
 			readOnlyHint: false,
 			destructiveHint: true,

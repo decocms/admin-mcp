@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/card.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { Skeleton } from "@/components/ui/skeleton.tsx";
-import { useMcpState } from "@/context.tsx";
+import { useMcpApp, useMcpState } from "@/context.tsx";
 import { cn } from "@/lib/utils.ts";
 import {
 	AlertTriangle,
@@ -27,13 +27,14 @@ import {
 	X,
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
+
+const PAGE_SIZE = 24;
 import type {
 	Asset,
 	AssetsInput,
 	AssetsOutput,
-	DeleteConfig,
-	UploadConfig,
 } from "../../../api/tools/assets.ts";
+import type { UploadAssetOutput } from "../../../api/tools/upload-asset.ts";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -66,56 +67,27 @@ interface UploadItem {
 	result?: Asset;
 }
 
-async function uploadFile(
-	file: File,
-	config: UploadConfig,
-): Promise<Asset> {
-	const form = new FormData();
-	form.append("sitename", config.sitename);
-	form.append("file", file, file.name);
-
-	const res = await fetch(config.endpoint, {
-		method: "POST",
-		headers: { "x-api-key": config.apiKey },
-		body: form,
+function fileToBase64(file: File): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onload = () => {
+			const result = reader.result as string;
+			resolve(result.split(",")[1]);
+		};
+		reader.onerror = reject;
+		reader.readAsDataURL(file);
 	});
-
-	if (!res.ok) {
-		const text = await res.text().catch(() => res.statusText);
-		throw new Error(text || `Upload failed (${res.status})`);
-	}
-
-	return res.json();
-}
-
-async function deleteAsset(
-	id: number,
-	config: DeleteConfig,
-): Promise<void> {
-	const res = await fetch(config.endpoint, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-			"x-api-key": config.apiKey,
-		},
-		body: JSON.stringify({ sitename: config.sitename, id: String(id) }),
-	});
-
-	if (!res.ok) {
-		const text = await res.text().catch(() => res.statusText);
-		throw new Error(text || `Delete failed (${res.status})`);
-	}
 }
 
 // ─── AssetCard ───────────────────────────────────────────────────────────────
 
 function AssetCard({
 	asset,
-	deleteConfig,
+	onDelete,
 	onDeleted,
 }: {
 	asset: Asset;
-	deleteConfig: DeleteConfig;
+	onDelete: (id: number) => Promise<void>;
 	onDeleted: (id: number) => void;
 }) {
 	const [copied, setCopied] = useState(false);
@@ -149,7 +121,7 @@ function AssetCard({
 		setDeleteState("deleting");
 		setDeleteError(undefined);
 		try {
-			await deleteAsset(asset.id, deleteConfig);
+			await onDelete(asset.id);
 			onDeleted(asset.id);
 		} catch (err) {
 			setDeleteError(
@@ -160,8 +132,16 @@ function AssetCard({
 	};
 
 	return (
-		<div className="group relative flex flex-col rounded-lg border bg-card overflow-hidden hover:border-primary/50 transition-colors">
-			<div className="relative aspect-square bg-muted/30 flex items-center justify-center overflow-hidden">
+		<div className="group relative flex flex-col rounded-lg border border-border bg-card overflow-hidden transition-colors hover:border-primary/40">
+			<div
+				className="relative aspect-square flex items-center justify-center overflow-hidden"
+				style={{
+					backgroundImage:
+						"linear-gradient(45deg, hsl(var(--muted)) 25%, transparent 25%), linear-gradient(-45deg, hsl(var(--muted)) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, hsl(var(--muted)) 75%), linear-gradient(-45deg, transparent 75%, hsl(var(--muted)) 75%)",
+					backgroundSize: "12px 12px",
+					backgroundPosition: "0 0, 0 6px, 6px -6px, -6px 0px",
+				}}
+			>
 				{isImage ? (
 					<img
 						src={asset.publicUrl}
@@ -280,14 +260,6 @@ function AssetCard({
 				>
 					{name}
 				</p>
-				{asset.mime && (
-					<Badge
-						variant="secondary"
-						className="text-xs px-1 py-0 h-4 font-mono w-fit"
-					>
-						{asset.mime.split("/")[1] ?? asset.mime}
-					</Badge>
-				)}
 			</div>
 		</div>
 	);
@@ -357,16 +329,16 @@ function UploadQueue({
 function AssetsGallery({
 	initialAssets,
 	sitename,
-	uploadConfig,
-	deleteConfig,
 }: {
 	initialAssets: Asset[];
 	sitename: string;
-	uploadConfig: UploadConfig;
-	deleteConfig: DeleteConfig;
 }) {
+	const app = useMcpApp();
 	const [assets, setAssets] = useState<Asset[]>(initialAssets);
 	const [search, setSearch] = useState("");
+	const [hasMore, setHasMore] = useState(initialAssets.length >= PAGE_SIZE);
+	const [isFetchingMore, setIsFetchingMore] = useState(false);
+	const [fetchMoreError, setFetchMoreError] = useState<string>();
 	const [queue, setQueue] = useState<UploadItem[]>([]);
 	const [isDragging, setIsDragging] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement>(null);
@@ -377,6 +349,45 @@ function AssetsGallery({
 				return label.includes(search.toLowerCase());
 			})
 		: assets;
+
+	const handleShowMore = useCallback(async () => {
+		setIsFetchingMore(true);
+		setFetchMoreError(undefined);
+		try {
+			const result = await app?.callServerTool({
+				name: "fetch_assets",
+				arguments: { offset: assets.length, limit: PAGE_SIZE },
+			});
+			if (result?.isError) {
+				const text = result.content?.find((c) => c.type === "text");
+				throw new Error(text?.type === "text" ? text.text : "Failed to load more assets");
+			}
+			const data = result?.structuredContent as AssetsOutput | undefined;
+			const newAssets = data?.assets ?? [];
+			setAssets((prev) => [...prev, ...newAssets]);
+			if (newAssets.length < PAGE_SIZE) setHasMore(false);
+		} catch (err) {
+			setFetchMoreError(err instanceof Error ? err.message : "Failed to load more");
+		} finally {
+			setIsFetchingMore(false);
+		}
+	}, [app, assets.length]);
+
+	const handleDelete = useCallback(
+		async (id: number) => {
+			const result = await app?.callServerTool({
+				name: "delete_asset",
+				arguments: { id: String(id) },
+			});
+			if (result?.isError) {
+				const text = result.content?.find((c) => c.type === "text");
+				throw new Error(
+					text?.type === "text" ? text.text : "Delete failed",
+				);
+			}
+		},
+		[app],
+	);
 
 	const processFiles = useCallback(
 		async (files: File[]) => {
@@ -397,13 +408,33 @@ function AssetsGallery({
 					),
 				);
 				try {
-					const result = await uploadFile(item.file, uploadConfig);
+					const base64 = await fileToBase64(item.file);
+					const result = await app?.callServerTool({
+						name: "upload_asset",
+						arguments: {
+							data: base64,
+							mimeType: item.file.type || "application/octet-stream",
+							filename: item.file.name,
+						},
+					});
+					if (result?.isError) {
+						const text = result.content?.find((c) => c.type === "text");
+						throw new Error(
+							text?.type === "text" ? text.text : "Upload failed",
+						);
+					}
+					const uploaded = result?.structuredContent as UploadAssetOutput | undefined;
+					const uploadedAsset = uploaded?.asset;
 					setQueue((prev) =>
 						prev.map((q) =>
-							q.id === item.id ? { ...q, status: "done", result } : q,
+							q.id === item.id
+								? { ...q, status: "done", result: uploadedAsset }
+								: q,
 						),
 					);
-					setAssets((prev) => [result, ...prev]);
+					if (uploadedAsset) {
+						setAssets((prev) => [uploadedAsset, ...prev]);
+					}
 				} catch (err) {
 					const msg =
 						err instanceof Error ? err.message : "Unknown error";
@@ -415,8 +446,12 @@ function AssetsGallery({
 				}
 			}
 		},
-		[uploadConfig],
+		[app],
 	);
+
+	const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		setSearch(e.target.value);
+	};
 
 	const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
 		const files = Array.from(e.target.files ?? []);
@@ -484,12 +519,12 @@ function AssetsGallery({
 			{/* Search */}
 			<div className="relative">
 				<Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-				<Input
-					placeholder="Filter assets..."
-					value={search}
-					onChange={(e) => setSearch(e.target.value)}
-					className="pl-9"
-				/>
+			<Input
+				placeholder="Filter assets..."
+				value={search}
+				onChange={handleSearchChange}
+				className="pl-9"
+			/>
 			</div>
 
 			{/* Drop overlay hint */}
@@ -502,39 +537,60 @@ function AssetsGallery({
 				</div>
 			)}
 
-			{/* Grid */}
-			{filtered.length === 0 ? (
-				<div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
-					<Image className="w-10 h-10 opacity-40" />
-					<p className="text-sm">
-						{search
-							? `No assets found for "${search}"`
-							: "No assets yet — upload some files to get started"}
-					</p>
-					{!search && (
-						<Button
-							variant="outline"
-							size="sm"
-							onClick={() => fileInputRef.current?.click()}
-							className="gap-2 mt-1"
-						>
-							<Upload className="w-4 h-4" />
-							Upload files
-						</Button>
-					)}
-				</div>
-			) : (
-				<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-					{filtered.map((asset) => (
+		{/* Grid */}
+		{filtered.length === 0 ? (
+			<div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
+				<Image className="w-10 h-10 opacity-40" />
+				<p className="text-sm">
+					{search
+						? `No assets found for "${search}"`
+						: "No assets yet — upload some files to get started"}
+				</p>
+				{!search && (
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={() => fileInputRef.current?.click()}
+						className="gap-2 mt-1"
+					>
+						<Upload className="w-4 h-4" />
+						Upload files
+					</Button>
+				)}
+			</div>
+		) : (
+			<>
+			<div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
+				{filtered.map((asset) => (
 						<AssetCard
 							key={asset.id}
 							asset={asset}
-							deleteConfig={deleteConfig}
+							onDelete={handleDelete}
 							onDeleted={handleAssetDeleted}
 						/>
 					))}
 				</div>
+			{hasMore && (
+				<div className="flex flex-col items-center gap-2 pt-2 pb-4">
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={handleShowMore}
+						disabled={isFetchingMore}
+						className="gap-2"
+					>
+						{isFetchingMore && (
+							<span className="w-3.5 h-3.5 border-2 border-muted border-t-primary rounded-full animate-spin" />
+						)}
+						{isFetchingMore ? "Loading…" : "Show more"}
+					</Button>
+					{fetchMoreError && (
+						<p className="text-xs text-destructive">{fetchMoreError}</p>
+					)}
+				</div>
 			)}
+			</>
+		)}
 		</div>
 	);
 }
@@ -636,22 +692,12 @@ export default function AssetsPage() {
 	}
 
 	// tool-result
-	const { assets, sitename, uploadConfig, deleteConfig } =
-		state.toolResult ?? {
-			assets: [],
-			sitename: "",
-			uploadConfig: { endpoint: "", apiKey: "", sitename: "" },
-			deleteConfig: { endpoint: "", apiKey: "", sitename: "" },
-		};
+	const { assets, sitename } =
+		state.toolResult ?? { assets: [], sitename: "" };
 
 	return (
 		<div className="p-6">
-			<AssetsGallery
-				initialAssets={assets}
-				sitename={sitename}
-				uploadConfig={uploadConfig}
-				deleteConfig={deleteConfig}
-			/>
+			<AssetsGallery initialAssets={assets} sitename={sitename} />
 		</div>
 	);
 }

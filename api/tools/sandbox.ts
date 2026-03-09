@@ -2,8 +2,6 @@ import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
 import type { Env } from "../types/env.ts";
 
-export const SANDBOX_RESOURCE_URI = "ui://mcp-app/sandbox";
-
 const ADMIN_BASE_URL = process.env.DECO_ADMIN_URL ?? "https://admin.deco.cx";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -102,7 +100,6 @@ export const createSandboxTaskTool = (env: Env) =>
 			"Create a new AI agent (Claude Code) task in a sandbox environment. The agent works autonomously on the given prompt or GitHub issue in an isolated Kubernetes pod. Returns a live terminal connection so you can watch the agent in real time. Requires a sandbox-platform environment.",
 		inputSchema: createSandboxTaskInputSchema,
 		outputSchema: createSandboxTaskOutputSchema,
-		_meta: { ui: { resourceUri: SANDBOX_RESOURCE_URI } },
 		annotations: {
 			readOnlyHint: false,
 			destructiveHint: false,
@@ -173,7 +170,6 @@ export const listSandboxTasksTool = (env: Env) =>
 			"List all AI agent tasks in a sandbox environment with their status (running/completed/error). Returns terminal connection info to watch any task live.",
 		inputSchema: listSandboxTasksInputSchema,
 		outputSchema: listSandboxTasksOutputSchema,
-		_meta: { ui: { resourceUri: SANDBOX_RESOURCE_URI } },
 		annotations: {
 			readOnlyHint: true,
 			destructiveHint: false,

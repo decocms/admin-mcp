@@ -45,28 +45,10 @@ export const assetSchema = z.object({
 
 export type Asset = z.infer<typeof assetSchema>;
 
-export const uploadConfigSchema = z.object({
-	endpoint: z.string().describe("Admin API upload endpoint URL"),
-	apiKey: z.string().describe("API key for the admin upload endpoint"),
-	sitename: z.string().describe("Site name for the upload"),
-});
-
-export type UploadConfig = z.infer<typeof uploadConfigSchema>;
-
-export const deleteConfigSchema = z.object({
-	endpoint: z.string().describe("Admin API delete endpoint URL"),
-	apiKey: z.string().describe("API key for the admin delete endpoint"),
-	sitename: z.string().describe("Site name for the delete"),
-});
-
-export type DeleteConfig = z.infer<typeof deleteConfigSchema>;
-
 export const assetsOutputSchema = z.object({
 	assets: z.array(assetSchema),
 	sitename: z.string(),
 	total: z.number(),
-	uploadConfig: uploadConfigSchema,
-	deleteConfig: deleteConfigSchema,
 });
 
 export type AssetsOutput = z.infer<typeof assetsOutputSchema>;
@@ -133,16 +115,6 @@ export const assetsTool = (env: Env) =>
 				assets,
 				sitename,
 				total: assets.length,
-				uploadConfig: {
-					endpoint: `${ADMIN_BASE_URL}/live/invoke/deco-sites/admin/actions/assets/upload.ts`,
-					apiKey,
-					sitename,
-				},
-				deleteConfig: {
-					endpoint: `${ADMIN_BASE_URL}/live/invoke/deco-sites/admin/actions/assets/remove_asset.ts`,
-					apiKey,
-					sitename,
-				},
 			};
 		},
 	});

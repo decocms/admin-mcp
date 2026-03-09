@@ -6,7 +6,6 @@ import {
 	listEnvironmentsTool,
 	previewEnvironmentTool,
 } from "./environments.ts";
-import { helloTool } from "./hello.ts";
 import {
 	createSandboxTaskTool,
 	killSandboxTaskTool,
@@ -15,7 +14,6 @@ import {
 import { uploadAssetTool } from "./upload-asset.ts";
 
 export const tools = [
-	helloTool,
 	assetsTool,
 	uploadAssetTool,
 	deleteAssetTool,

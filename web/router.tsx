@@ -8,33 +8,11 @@ import {
 } from "@tanstack/react-router";
 import { useMcpHostContext, useMcpState } from "./context.tsx";
 import AssetsPage from "./tools/assets/index.tsx";
-import DeleteAssetPage from "./tools/delete-asset/index.tsx";
-import {
-	CreateEnvironmentPage,
-	GetEnvironmentPage,
-	ListEnvironmentsPage,
-	PreviewEnvironmentPage,
-} from "./tools/environments/index.tsx";
-import HelloPage from "./tools/hello/index.tsx";
-import {
-	CreateSandboxTaskPage,
-	KillSandboxTaskPage,
-	ListSandboxTasksPage,
-} from "./tools/sandbox/index.tsx";
-import UploadAssetPage from "./tools/upload-asset/index.tsx";
+import { ListEnvironmentsPage } from "./tools/environments/index.tsx";
 
 const TOOL_PAGES: Record<string, React.ComponentType> = {
-	hello_world: HelloPage,
 	fetch_assets: AssetsPage,
-	upload_asset: UploadAssetPage,
-	delete_asset: DeleteAssetPage,
 	list_environments: ListEnvironmentsPage,
-	get_environment: GetEnvironmentPage,
-	create_environment: CreateEnvironmentPage,
-	preview_environment: PreviewEnvironmentPage,
-	create_sandbox_task: CreateSandboxTaskPage,
-	list_sandbox_tasks: ListSandboxTasksPage,
-	kill_sandbox_task: KillSandboxTaskPage,
 };
 
 function ToolRouter() {

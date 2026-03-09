@@ -77,7 +77,7 @@ export const listEnvironmentsTool = (env: Env) =>
 	createTool({
 		id: "list_environments",
 		description:
-			"List all environments for the configured deco.cx site. Returns each environment's name, URL, platform, branch/commit, and metadata.",
+			"List all sandbox environments (platform=sandbox) for the configured deco.cx site. Returns each environment's name, URL, branch/commit, and metadata.",
 		inputSchema: listEnvironmentsInputSchema,
 		outputSchema: listEnvironmentsOutputSchema,
 		_meta: { ui: { resourceUri: ENVIRONMENTS_RESOURCE_URI } },
@@ -87,17 +87,17 @@ export const listEnvironmentsTool = (env: Env) =>
 			idempotentHint: true,
 			openWorldHint: true,
 		},
-		execute: async (props) => {
+		execute: async () => {
 			const { site, apiKey } = getConfig(env);
-			// list loader uses `sitename` prop
 			const data = (await callAdmin(
 				"deco-sites/admin/loaders/environments/list.ts",
 				{ sitename: site },
 				apiKey,
 			)) as AdminEnvironment[] | { environments: AdminEnvironment[] };
-			const environments = Array.isArray(data)
+			const all = Array.isArray(data)
 				? data
 				: (data as { environments: AdminEnvironment[] }).environments ?? [];
+			const environments = all.filter((e) => e.platform === "sandbox");
 			return { environments, site };
 		},
 	});
@@ -123,7 +123,6 @@ export const getEnvironmentTool = (env: Env) =>
 			"Get details of a specific environment by name, including its URL, platform, git branch/commit, and a ready-to-use preview URL.",
 		inputSchema: getEnvironmentInputSchema,
 		outputSchema: getEnvironmentOutputSchema,
-		_meta: { ui: { resourceUri: ENVIRONMENTS_RESOURCE_URI } },
 		annotations: {
 			readOnlyHint: true,
 			destructiveHint: false,
@@ -183,7 +182,6 @@ export const createEnvironmentTool = (env: Env) =>
 			"Create a new environment for the configured deco.cx site. Provisions a Kubernetes deployment and returns the environment URL once ready (takes 1–3 minutes for deco platform).",
 		inputSchema: createEnvironmentInputSchema,
 		outputSchema: createEnvironmentOutputSchema,
-		_meta: { ui: { resourceUri: ENVIRONMENTS_RESOURCE_URI } },
 		annotations: {
 			readOnlyHint: false,
 			destructiveHint: false,
@@ -243,7 +241,6 @@ export const previewEnvironmentTool = (env: Env) =>
 			"Get a live preview URL for a specific path in an environment. Includes a cache-busting parameter so the latest version is always served.",
 		inputSchema: previewEnvironmentInputSchema,
 		outputSchema: previewEnvironmentOutputSchema,
-		_meta: { ui: { resourceUri: ENVIRONMENTS_RESOURCE_URI, csp: { frameDomains: PREVIEW_FRAME_DOMAINS } } },
 		annotations: {
 			readOnlyHint: true,
 			destructiveHint: false,
