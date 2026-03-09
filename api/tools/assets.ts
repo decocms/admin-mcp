@@ -17,7 +17,7 @@ export const assetsInputSchema = z.object({
 		.int()
 		.min(1)
 		.max(200)
-		.default(50)
+		.default(47)
 		.describe("Number of assets to return (default: 50)"),
 	offset: z
 		.number()
@@ -68,7 +68,8 @@ export const assetsTool = (env: Env) =>
 			openWorldHint: true,
 		},
 		execute: async ({ context }) => {
-			const { term, limit = 50, offset = 0 } = context;
+			console.log("context", context);
+			const { term, limit = 42, offset = 0 } = context;
 
 			const state = env.MESH_REQUEST_CONTEXT?.state;
 			const apiKey = env.MESH_REQUEST_CONTEXT?.authorization;
@@ -85,6 +86,8 @@ export const assetsTool = (env: Env) =>
 					"DECO_ADMIN_API_KEY is not configured. Set it in the MCP configuration.",
 				);
 			}
+
+			console.log("limit", limit);
 
 			const response = await fetch(
 				`${ADMIN_BASE_URL}/live/invoke/deco-sites/admin/loaders/sites/assets.ts`,
