@@ -30,7 +30,7 @@ async function callAdmin(
 
 function getConfig(env: Env) {
 	const state = env.MESH_REQUEST_CONTEXT?.state;
-	const apiKey = state?.DECO_ADMIN_API_KEY;
+	const apiKey = env.MESH_REQUEST_CONTEXT?.authorization;
 	const site = state?.SITE_NAME;
 	if (!site) throw new Error("SITE_NAME is not configured.");
 	if (!apiKey) throw new Error("DECO_ADMIN_API_KEY is not configured.");

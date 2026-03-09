@@ -89,7 +89,7 @@ export const assetsTool = (env: Env) =>
 			const { term, limit = 50, offset = 0 } = context;
 
 			const state = env.MESH_REQUEST_CONTEXT?.state;
-			const apiKey = state?.DECO_ADMIN_API_KEY;
+			const apiKey = env.MESH_REQUEST_CONTEXT?.authorization;
 			const sitename = state?.SITE_NAME;
 
 			if (!sitename) {

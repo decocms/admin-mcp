@@ -53,7 +53,7 @@ async function callAdmin(
 
 function getConfig(env: Env) {
 	const state = env.MESH_REQUEST_CONTEXT?.state;
-	const apiKey = state?.DECO_ADMIN_API_KEY;
+	const apiKey = env.MESH_REQUEST_CONTEXT?.authorization;
 	const site = state?.SITE_NAME;
 	if (!site) throw new Error("SITE_NAME is not configured.");
 	if (!apiKey) throw new Error("DECO_ADMIN_API_KEY is not configured.");
@@ -87,7 +87,7 @@ export const listEnvironmentsTool = (env: Env) =>
 			idempotentHint: true,
 			openWorldHint: true,
 		},
-		execute: async () => {
+		execute: async (props) => {
 			const { site, apiKey } = getConfig(env);
 			// list loader uses `sitename` prop
 			const data = (await callAdmin(
@@ -154,10 +154,13 @@ export const createEnvironmentInputSchema = z.object({
 		.string()
 		.optional()
 		.describe("Git branch to base the environment on (defaults to main branch)"),
+	savedKeyId: z.string().optional().describe("Saved key ID for Anthropic API"),
 	platform: z
-		.enum(["deco", "content", "tunnel"])
+		.enum(["deco", "content", "tunnel", "sandbox"])
 		.optional()
-		.describe("Environment platform — deco (K8s, default), content, or tunnel"),
+		.describe(
+			"Environment platform — deco (K8s, default), content, tunnel, or sandbox (isolated AI agent pod)",
+		),
 });
 export type CreateEnvironmentInput = z.infer<
 	typeof createEnvironmentInputSchema
@@ -194,6 +197,7 @@ export const createEnvironmentTool = (env: Env) =>
 				{
 					site,
 					name: context.name,
+					...(context.savedKeyId ? { savedKeyId: context.savedKeyId } : {}),
 					...(context.branch ? { options: { branch: context.branch } } : {}),
 					...(context.platform ? { platform: context.platform } : {}),
 				},
