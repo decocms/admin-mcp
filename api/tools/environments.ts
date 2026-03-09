@@ -1,7 +1,6 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
 import type { Env } from "../types/env.ts";
-import { PREVIEW_FRAME_DOMAINS } from "api/resources/environments.ts";
 
 export const ENVIRONMENTS_RESOURCE_URI = "ui://mcp-app/environments";
 
@@ -206,7 +205,8 @@ export const createEnvironmentTool = (env: Env) =>
 		execute: async ({ context }) => {
 			const { site, apiKey, anthropicApiKey, savedKeyId } = getConfig(env);
 			const resolvedSavedKeyId = context.savedKeyId ?? savedKeyId;
-			const resolvedAnthropicApiKey = context.anthropicApiKey ?? anthropicApiKey;
+			const resolvedAnthropicApiKey =
+				context.anthropicApiKey ?? anthropicApiKey;
 			const environment = (await callAdmin(
 				"deco-sites/admin/actions/environments/create.ts",
 				{

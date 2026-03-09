@@ -1,7 +1,7 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
-import { assetSchema } from "./assets.ts";
 import type { Env } from "../types/env.ts";
+import { assetSchema } from "./assets.ts";
 
 const ADMIN_BASE_URL = process.env.DECO_ADMIN_URL ?? "https://admin.deco.cx";
 
@@ -44,7 +44,7 @@ function filenameFromUrl(url: string): string {
 	try {
 		const pathname = new URL(url).pathname;
 		const name = pathname.split("/").pop();
-		return name && name.includes(".") ? name : "asset";
+		return name?.includes(".") ? name : "asset";
 	} catch {
 		return "asset";
 	}
@@ -100,7 +100,8 @@ export const uploadAssetTool = (env: Env) =>
 				name = filename ?? "asset";
 				fileBlob = new Blob([bytes], { type: contentType });
 			} else {
-				const fetchResponse = await fetch(url!);
+				const resolvedUrl = url as string;
+				const fetchResponse = await fetch(resolvedUrl);
 				if (!fetchResponse.ok) {
 					throw new Error(
 						`Failed to fetch file from URL: ${fetchResponse.status} ${fetchResponse.statusText}`,
@@ -111,7 +112,7 @@ export const uploadAssetTool = (env: Env) =>
 					fetchResponse.headers.get("content-type") ??
 					fileBlob.type ??
 					"application/octet-stream";
-				name = filename ?? filenameFromUrl(url!);
+				name = filename ?? filenameFromUrl(resolvedUrl);
 			}
 
 			// Upload to admin as multipart

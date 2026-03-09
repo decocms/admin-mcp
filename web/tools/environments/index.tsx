@@ -1,3 +1,22 @@
+import {
+	AlertTriangle,
+	ArrowLeft,
+	Check,
+	CheckCircle2,
+	Clock,
+	Copy,
+	ExternalLink,
+	GitBranch,
+	Globe,
+	Pencil,
+	Plus,
+	RefreshCw,
+	Search,
+	Server,
+	Trash2,
+	Wifi,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
@@ -13,30 +32,9 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog.tsx";
+import { Input } from "@/components/ui/input.tsx";
 import { useMcpApp, useMcpState } from "@/context.tsx";
 import { cn } from "@/lib/utils.ts";
-import { Input } from "@/components/ui/input.tsx";
-import {
-	AlertTriangle,
-	ArrowLeft,
-	Box,
-	Check,
-	CheckCircle2,
-	Clock,
-	Copy,
-	ExternalLink,
-	GitBranch,
-	Globe,
-	Plus,
-	Pencil,
-	RefreshCw,
-	Search,
-	Server,
-	Trash2,
-	Wifi,
-	X,
-} from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
 import type {
 	AdminEnvironment,
 	CreateEnvironmentOutput,
@@ -113,29 +111,6 @@ function CopyButton({ text }: { text: string }) {
 	);
 }
 
-function UrlRow({ label, url }: { label: string; url: string }) {
-	return (
-		<div className="flex flex-col gap-1">
-			<span className="text-xs font-medium text-muted-foreground">{label}</span>
-			<div className="flex items-center gap-1 rounded-md border border-border bg-muted/40 pl-2 pr-1 py-0.5">
-				<code className="flex-1 text-xs truncate text-foreground/80 py-0.5">
-					{url}
-				</code>
-				<CopyButton text={url} />
-				<a
-					href={url}
-					target="_blank"
-					rel="noreferrer"
-					className="shrink-0 p-1.5 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
-					title="Open"
-				>
-					<ExternalLink className="w-3.5 h-3.5" />
-				</a>
-			</div>
-		</div>
-	);
-}
-
 function EnvironmentCard({
 	env,
 	onClick,
@@ -177,6 +152,7 @@ function EnvironmentCard({
 	};
 
 	return (
+		// biome-ignore lint/a11y/useSemanticElements: contains nested <button> elements — cannot use <button> as outer wrapper
 		<div
 			className={cn(
 				"relative group flex flex-col gap-3 rounded-lg border border-border bg-card p-4 transition-all cursor-pointer",
@@ -287,7 +263,10 @@ function EnvironmentCard({
 			{deleteState !== "idle" && (
 				<div
 					className="absolute inset-0 rounded-lg bg-background/90 border border-destructive/30 flex flex-col items-center justify-center gap-2.5 p-3 z-10"
+					role="alertdialog"
+					aria-label="Confirm delete"
 					onClick={(e) => e.stopPropagation()}
+					onKeyDown={(e) => e.stopPropagation()}
 				>
 					{deleteState === "error" ? (
 						<>
@@ -839,10 +818,14 @@ function EnvironmentsList({
 						<form onSubmit={handleCreate} className="space-y-4">
 							<div className="space-y-3">
 								<div className="flex flex-col gap-1.5">
-									<label className="text-xs font-medium text-muted-foreground">
+									<label
+										htmlFor="create-env-name"
+										className="text-xs font-medium text-muted-foreground"
+									>
 										Name <span className="text-destructive">*</span>
 									</label>
 									<Input
+										id="create-env-name"
 										placeholder="e.g. my-feature"
 										value={createName}
 										onChange={(e) => setCreateName(e.target.value)}
@@ -852,7 +835,7 @@ function EnvironmentsList({
 										disabled={createState === "creating"}
 									/>
 								</div>
-							<div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-0.5">
+								<div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-0.5">
 									<span>Platform:</span>
 									<Badge variant="secondary" className="font-mono text-xs">
 										sandbox

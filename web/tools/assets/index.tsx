@@ -1,15 +1,3 @@
-import { Badge } from "@/components/ui/badge.tsx";
-import { Button } from "@/components/ui/button.tsx";
-import {
-	Card,
-	CardContent,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card.tsx";
-import { Input } from "@/components/ui/input.tsx";
-import { Skeleton } from "@/components/ui/skeleton.tsx";
-import { useMcpApp, useMcpState } from "@/context.tsx";
-import { cn } from "@/lib/utils.ts";
 import {
 	AlertTriangle,
 	Check,
@@ -27,8 +15,21 @@ import {
 	X,
 } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
+import { Badge } from "@/components/ui/badge.tsx";
+import { Button } from "@/components/ui/button.tsx";
+import {
+	Card,
+	CardContent,
+	CardHeader,
+	CardTitle,
+} from "@/components/ui/card.tsx";
+import { Input } from "@/components/ui/input.tsx";
+import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { useMcpApp, useMcpState } from "@/context.tsx";
+import { cn } from "@/lib/utils.ts";
 
 const PAGE_SIZE = 21;
+
 import type {
 	Asset,
 	AssetsInput,
@@ -483,11 +484,12 @@ function AssetsGallery({
 	};
 
 	return (
-		<div
+		<section
 			className={cn(
 				"flex flex-col gap-4 min-h-dvh transition-colors duration-200",
 				isDragging && "bg-primary/4",
 			)}
+			aria-label="Asset drop zone"
 			onDragOver={(e) => {
 				e.preventDefault();
 				setIsDragging(true);
@@ -598,7 +600,7 @@ function AssetsGallery({
 					)}
 				</>
 			)}
-		</div>
+		</section>
 	);
 }
 
