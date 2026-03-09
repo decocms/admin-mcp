@@ -2,6 +2,7 @@ import { assetsTool } from "./assets.ts";
 import { deleteAssetTool } from "./delete-asset.ts";
 import {
 	createEnvironmentTool,
+	deleteEnvironmentTool,
 	getEnvironmentTool,
 	listEnvironmentsTool,
 	previewEnvironmentTool,
@@ -20,6 +21,7 @@ export const tools = [
 	listEnvironmentsTool,
 	getEnvironmentTool,
 	createEnvironmentTool,
+	deleteEnvironmentTool,
 	previewEnvironmentTool,
 	createSandboxTaskTool,
 	listSandboxTasksTool,

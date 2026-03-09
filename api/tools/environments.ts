@@ -33,17 +33,14 @@ async function callAdmin(
 	body: unknown,
 	apiKey: string,
 ): Promise<unknown> {
-	const res = await fetch(
-		`${ADMIN_BASE_URL}/live/invoke/${path}`,
-		{
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"x-api-key": apiKey,
-			},
-			body: JSON.stringify(body),
+	const res = await fetch(`${ADMIN_BASE_URL}/live/invoke/${path}`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			"x-api-key": apiKey,
 		},
-	);
+		body: JSON.stringify(body),
+	});
 	if (!res.ok) {
 		const text = await res.text().catch(() => res.statusText);
 		throw new Error(`Admin API error (${res.status}): ${text}`);
@@ -57,7 +54,12 @@ function getConfig(env: Env) {
 	const site = state?.SITE_NAME;
 	if (!site) throw new Error("SITE_NAME is not configured.");
 	if (!apiKey) throw new Error("DECO_ADMIN_API_KEY is not configured.");
-	return { site, apiKey };
+	return {
+		site,
+		apiKey,
+		anthropicApiKey: state?.ANTHROPIC_API_KEY,
+		savedKeyId: state?.SAVED_KEY_ID,
+	};
 }
 
 // ─── list_environments ────────────────────────────────────────────────────────
@@ -96,7 +98,7 @@ export const listEnvironmentsTool = (env: Env) =>
 			)) as AdminEnvironment[] | { environments: AdminEnvironment[] };
 			const all = Array.isArray(data)
 				? data
-				: (data as { environments: AdminEnvironment[] }).environments ?? [];
+				: ((data as { environments: AdminEnvironment[] }).environments ?? []);
 			const environments = all.filter((e) => e.platform === "sandbox");
 			return { environments, site };
 		},
@@ -152,8 +154,21 @@ export const createEnvironmentInputSchema = z.object({
 	branch: z
 		.string()
 		.optional()
-		.describe("Git branch to base the environment on (defaults to main branch)"),
-	savedKeyId: z.string().optional().describe("Saved key ID for Anthropic API"),
+		.describe(
+			"Git branch to base the environment on (defaults to main branch)",
+		),
+	anthropicApiKey: z
+		.string()
+		.optional()
+		.describe(
+			"Anthropic API key for Claude Code (overrides the state-level ANTHROPIC_API_KEY if provided)",
+		),
+	savedKeyId: z
+		.string()
+		.optional()
+		.describe(
+			"Saved Anthropic key ID stored in deco.cx (overrides the state-level SAVED_KEY_ID if provided)",
+		),
 	platform: z
 		.enum(["deco", "content", "tunnel", "sandbox"])
 		.optional()
@@ -189,13 +204,18 @@ export const createEnvironmentTool = (env: Env) =>
 			openWorldHint: true,
 		},
 		execute: async ({ context }) => {
-			const { site, apiKey } = getConfig(env);
+			const { site, apiKey, anthropicApiKey, savedKeyId } = getConfig(env);
+			const resolvedSavedKeyId = context.savedKeyId ?? savedKeyId;
+			const resolvedAnthropicApiKey = context.anthropicApiKey ?? anthropicApiKey;
 			const environment = (await callAdmin(
 				"deco-sites/admin/actions/environments/create.ts",
 				{
 					site,
 					name: context.name,
-					...(context.savedKeyId ? { savedKeyId: context.savedKeyId } : {}),
+					...(resolvedSavedKeyId ? { savedKeyId: resolvedSavedKeyId } : {}),
+					...(resolvedAnthropicApiKey
+						? { anthropicApiKey: resolvedAnthropicApiKey }
+						: {}),
 					...(context.branch ? { options: { branch: context.branch } } : {}),
 					...(context.platform ? { platform: context.platform } : {}),
 				},
@@ -207,6 +227,55 @@ export const createEnvironmentTool = (env: Env) =>
 				site,
 				previewUrl,
 				message: `Environment "${context.name}" created at ${environment.url}`,
+			};
+		},
+	});
+
+// ─── delete_environment ───────────────────────────────────────────────────────
+
+export const deleteEnvironmentInputSchema = z.object({
+	name: z.string().describe("The name of the environment to delete"),
+});
+export type DeleteEnvironmentInput = z.infer<
+	typeof deleteEnvironmentInputSchema
+>;
+
+export const deleteEnvironmentOutputSchema = z.object({
+	deleted: z.boolean(),
+	name: z.string(),
+	site: z.string(),
+	message: z.string(),
+});
+export type DeleteEnvironmentOutput = z.infer<
+	typeof deleteEnvironmentOutputSchema
+>;
+
+export const deleteEnvironmentTool = (env: Env) =>
+	createTool({
+		id: "delete_environment",
+		description:
+			"Permanently delete a sandbox environment by name. This is irreversible — the environment and all associated resources will be removed.",
+		inputSchema: deleteEnvironmentInputSchema,
+		outputSchema: deleteEnvironmentOutputSchema,
+		_meta: { ui: { resourceUri: ENVIRONMENTS_RESOURCE_URI } },
+		annotations: {
+			readOnlyHint: false,
+			destructiveHint: true,
+			idempotentHint: false,
+			openWorldHint: true,
+		},
+		execute: async ({ context }) => {
+			const { site, apiKey } = getConfig(env);
+			await callAdmin(
+				"deco-sites/admin/actions/environments/delete.ts",
+				{ site, name: context.name },
+				apiKey,
+			);
+			return {
+				deleted: true,
+				name: context.name,
+				site,
+				message: `Environment "${context.name}" deleted successfully from ${site}.`,
 			};
 		},
 	});

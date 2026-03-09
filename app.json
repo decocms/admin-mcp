@@ -1,12 +1,12 @@
 {
-	"scopeName": "deco",
+	"scopeName": "admin-mcp",
 	"name": "mcp-app",
-	"friendlyName": "MCP App Template",
+	"friendlyName": "Admin MCP",
 	"description": "Starter template for building MCP Apps on deco with interactive UIs.",
 	"icon": "",
 	"connection": {
 		"type": "HTTP",
-		"url": "https://your-app.decocache.com/api/mcp",
+		"url": "https://sites-admin-mcp.decocache.com/api/mcp",
 		"configSchema": {
 			"type": "object",
 			"properties": {},

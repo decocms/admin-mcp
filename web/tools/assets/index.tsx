@@ -181,12 +181,7 @@ function AssetCard({
 								<Copy className="w-3.5 h-3.5" />
 							)}
 						</Button>
-						<a
-							href={asset.publicUrl}
-							download
-							target="_blank"
-							rel="noreferrer"
-						>
+						<a href={asset.publicUrl} download target="_blank" rel="noreferrer">
 							<Button
 								size="icon"
 								variant="secondary"

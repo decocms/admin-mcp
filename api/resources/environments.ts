@@ -19,7 +19,6 @@ export const PREVIEW_FRAME_DOMAINS = [
 	"https://*.deco.site",
 	"https://*.deco.host",
 	"https://*.deco.cx",
-	"https://sites-farmrio--vdqi85.decocdn.com/"
 ];
 
 export const environmentsAppResource = (_env: Env) =>

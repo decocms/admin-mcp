@@ -112,7 +112,12 @@ export const createSandboxTaskTool = (env: Env) =>
 			const [taskResult, authResult] = (await Promise.all([
 				callAdmin(
 					"deco-sites/admin/actions/daemon/sandbox/createTask.ts",
-					{ site, env: context.env, prompt: context.prompt, issue: context.issue },
+					{
+						site,
+						env: context.env,
+						prompt: context.prompt,
+						issue: context.issue,
+					},
 					apiKey,
 				),
 				callAdmin(
@@ -190,10 +195,7 @@ export const listSandboxTasksTool = (env: Env) =>
 					{ site, env: context.env },
 					apiKey,
 				),
-			])) as [
-				SandboxTask[],
-				{ endpoint: string; token: string } | null,
-			];
+			])) as [SandboxTask[], { endpoint: string; token: string } | null];
 
 			if (!authResult) {
 				throw new Error("Sandbox environment has no URL — is it running?");

@@ -4,8 +4,7 @@ import type { Env } from "../types/env.ts";
 
 export const ASSETS_RESOURCE_URI = "ui://mcp-app/assets";
 
-const ADMIN_BASE_URL =
-	process.env.DECO_ADMIN_URL ?? "https://admin.deco.cx";
+const ADMIN_BASE_URL = process.env.DECO_ADMIN_URL ?? "https://admin.deco.cx";
 
 export const assetsInputSchema = z.object({
 	term: z

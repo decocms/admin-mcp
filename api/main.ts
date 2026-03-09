@@ -41,10 +41,7 @@ const runtime = withRuntime<Env, typeof StateSchema>({
 		state: StateSchema,
 	},
 	tools,
-	resources: [
-		assetsAppResource,
-		environmentsAppResource,
-	],
+	resources: [assetsAppResource, environmentsAppResource],
 });
 
 function withLogging(fetcher: Fetcher): Fetcher {

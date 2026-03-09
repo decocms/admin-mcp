@@ -3,8 +3,7 @@ import { z } from "zod";
 import { assetSchema } from "./assets.ts";
 import type { Env } from "../types/env.ts";
 
-const ADMIN_BASE_URL =
-	process.env.DECO_ADMIN_URL ?? "https://admin.deco.cx";
+const ADMIN_BASE_URL = process.env.DECO_ADMIN_URL ?? "https://admin.deco.cx";
 
 export const uploadAssetInputSchema = z.object({
 	url: z
@@ -64,59 +63,65 @@ export const uploadAssetTool = (env: Env) =>
 			idempotentHint: false,
 			openWorldHint: true,
 		},
-	execute: async ({ context }) => {
-		const { url, data, mimeType, filename } = context;
+		execute: async ({ context }) => {
+			const { url, data, mimeType, filename } = context;
 
-		const state = env.MESH_REQUEST_CONTEXT?.state;
-		const apiKey = env.MESH_REQUEST_CONTEXT?.authorization;
-		const sitename = state?.SITE_NAME;
+			const state = env.MESH_REQUEST_CONTEXT?.state;
+			const apiKey = env.MESH_REQUEST_CONTEXT?.authorization;
+			const sitename = state?.SITE_NAME;
 
-		if (!sitename) {
-			throw new Error(
-				"SITE_NAME is not configured. Set it in the MCP configuration.",
-			);
-		}
-
-		if (!apiKey) {
-			throw new Error(
-				"DECO_ADMIN_API_KEY is not configured. Set it in the MCP configuration.",
-			);
-		}
-
-		if (!url && !data) {
-			throw new Error("Either url or data must be provided.");
-		}
-
-		let fileBlob: Blob;
-		let contentType: string;
-		let name: string;
-
-		if (data) {
-			const binary = atob(data);
-			const bytes = new Uint8Array(binary.length);
-			for (let i = 0; i < binary.length; i++) {
-				bytes[i] = binary.charCodeAt(i);
-			}
-			contentType = mimeType ?? "application/octet-stream";
-			name = filename ?? "asset";
-			fileBlob = new Blob([bytes], { type: contentType });
-		} else {
-			const fetchResponse = await fetch(url!);
-			if (!fetchResponse.ok) {
+			if (!sitename) {
 				throw new Error(
-					`Failed to fetch file from URL: ${fetchResponse.status} ${fetchResponse.statusText}`,
+					"SITE_NAME is not configured. Set it in the MCP configuration.",
 				);
 			}
-			fileBlob = await fetchResponse.blob();
-			contentType =
-				fetchResponse.headers.get("content-type") ?? fileBlob.type ?? "application/octet-stream";
-			name = filename ?? filenameFromUrl(url!);
-		}
 
-		// Upload to admin as multipart
-		const form = new FormData();
-		form.append("sitename", sitename);
-		form.append("file", new File([fileBlob], name, { type: contentType }), name);
+			if (!apiKey) {
+				throw new Error(
+					"DECO_ADMIN_API_KEY is not configured. Set it in the MCP configuration.",
+				);
+			}
+
+			if (!url && !data) {
+				throw new Error("Either url or data must be provided.");
+			}
+
+			let fileBlob: Blob;
+			let contentType: string;
+			let name: string;
+
+			if (data) {
+				const binary = atob(data);
+				const bytes = new Uint8Array(binary.length);
+				for (let i = 0; i < binary.length; i++) {
+					bytes[i] = binary.charCodeAt(i);
+				}
+				contentType = mimeType ?? "application/octet-stream";
+				name = filename ?? "asset";
+				fileBlob = new Blob([bytes], { type: contentType });
+			} else {
+				const fetchResponse = await fetch(url!);
+				if (!fetchResponse.ok) {
+					throw new Error(
+						`Failed to fetch file from URL: ${fetchResponse.status} ${fetchResponse.statusText}`,
+					);
+				}
+				fileBlob = await fetchResponse.blob();
+				contentType =
+					fetchResponse.headers.get("content-type") ??
+					fileBlob.type ??
+					"application/octet-stream";
+				name = filename ?? filenameFromUrl(url!);
+			}
+
+			// Upload to admin as multipart
+			const form = new FormData();
+			form.append("sitename", sitename);
+			form.append(
+				"file",
+				new File([fileBlob], name, { type: contentType }),
+				name,
+			);
 
 			const uploadResponse = await fetch(
 				`${ADMIN_BASE_URL}/live/invoke/deco-sites/admin/actions/assets/upload.ts`,
@@ -128,7 +133,9 @@ export const uploadAssetTool = (env: Env) =>
 			);
 
 			if (!uploadResponse.ok) {
-				const text = await uploadResponse.text().catch(() => uploadResponse.statusText);
+				const text = await uploadResponse
+					.text()
+					.catch(() => uploadResponse.statusText);
 				throw new Error(`Upload failed: ${uploadResponse.status} — ${text}`);
 			}
 

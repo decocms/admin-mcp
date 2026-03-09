@@ -8,11 +8,15 @@ import {
 } from "@tanstack/react-router";
 import { useMcpHostContext, useMcpState } from "./context.tsx";
 import AssetsPage from "./tools/assets/index.tsx";
-import { ListEnvironmentsPage } from "./tools/environments/index.tsx";
+import {
+	DeleteEnvironmentPage,
+	ListEnvironmentsPage,
+} from "./tools/environments/index.tsx";
 
 const TOOL_PAGES: Record<string, React.ComponentType> = {
 	fetch_assets: AssetsPage,
 	list_environments: ListEnvironmentsPage,
+	delete_environment: DeleteEnvironmentPage,
 };
 
 function ToolRouter() {

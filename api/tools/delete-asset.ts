@@ -2,15 +2,12 @@ import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
 import type { Env } from "../types/env.ts";
 
-const ADMIN_BASE_URL =
-	process.env.DECO_ADMIN_URL ?? "https://admin.deco.cx";
+const ADMIN_BASE_URL = process.env.DECO_ADMIN_URL ?? "https://admin.deco.cx";
 
 export const deleteAssetInputSchema = z.object({
 	id: z
 		.string()
-		.describe(
-			"The numeric ID of the asset to delete (as a string, e.g. '42')",
-		),
+		.describe("The numeric ID of the asset to delete (as a string, e.g. '42')"),
 });
 
 export const deleteAssetOutputSchema = z.object({
@@ -67,9 +64,7 @@ export const deleteAssetTool = (env: Env) =>
 			);
 
 			if (!response.ok) {
-				const text = await response
-					.text()
-					.catch(() => response.statusText);
+				const text = await response.text().catch(() => response.statusText);
 				throw new Error(
 					`Failed to delete asset ${id}: ${response.status} ${text}`,
 				);
