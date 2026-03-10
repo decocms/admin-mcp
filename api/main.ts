@@ -1,6 +1,7 @@
 import { withRuntime } from "@decocms/runtime";
 import { assetsAppResource } from "./resources/assets.ts";
 import { environmentsAppResource } from "./resources/environments.ts";
+import { monitorAppResource } from "./resources/monitor.ts";
 import { tools } from "./tools/index.ts";
 import { type Env, StateSchema } from "./types/env.ts";
 
@@ -41,7 +42,7 @@ const runtime = withRuntime<Env, typeof StateSchema>({
 		state: StateSchema,
 	},
 	tools,
-	resources: [assetsAppResource, environmentsAppResource],
+	resources: [assetsAppResource, environmentsAppResource, monitorAppResource],
 });
 
 function withLogging(fetcher: Fetcher): Fetcher {

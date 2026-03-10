@@ -12,11 +12,13 @@ import {
 	DeleteEnvironmentPage,
 	ListEnvironmentsPage,
 } from "./tools/environments/index.tsx";
+import MonitorPage from "./tools/monitor/index.tsx";
 
 const TOOL_PAGES: Record<string, React.ComponentType> = {
 	fetch_assets: AssetsPage,
 	list_environments: ListEnvironmentsPage,
 	delete_environment: DeleteEnvironmentPage,
+	get_monitor_data: MonitorPage,
 };
 
 function ToolRouter() {

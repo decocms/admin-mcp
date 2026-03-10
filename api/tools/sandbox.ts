@@ -3,10 +3,6 @@ import { z } from "zod";
 import { callAdmin, getConfig } from "../lib/admin.ts";
 import type { Env } from "../types/env.ts";
 
-function toWss(endpoint: string): string {
-	return endpoint.replace(/^https/, "wss").replace(/^http(?!s)/, "ws");
-}
-
 // ─── shared schemas ───────────────────────────────────────────────────────────
 
 export const sandboxTaskSchema = z
@@ -15,18 +11,11 @@ export const sandboxTaskSchema = z
 		status: z.string(),
 		issue: z.string().optional(),
 		prompt: z.string().optional(),
-		createdAt: z.string().optional(),
+		type: z.string().optional(),
+		prUrl: z.string().nullable().optional(),
 	})
 	.passthrough();
 export type SandboxTask = z.infer<typeof sandboxTaskSchema>;
-
-// The wsEndpoint is the raw pod URL (https→wss already converted).
-// wsUrl is built in the UI as: `${wsEndpoint}/sandbox/tasks/${taskId}/ws?token=${wsToken}`
-const wsAuthFields = {
-	wsEndpoint: z.string().describe("WebSocket base URL of the sandbox pod"),
-	wsToken: z.string().describe("JWT token for the WebSocket connection"),
-};
-
 // ─── create_sandbox_task ──────────────────────────────────────────────────────
 
 export const createSandboxTaskInputSchema = z.object({
@@ -55,7 +44,6 @@ export const createSandboxTaskOutputSchema = z.object({
 	env: z.string(),
 	prompt: z.string().optional(),
 	issue: z.string().optional(),
-	...wsAuthFields,
 });
 export type CreateSandboxTaskOutput = z.infer<
 	typeof createSandboxTaskOutputSchema
@@ -113,8 +101,6 @@ export const createSandboxTaskTool = (env: Env) =>
 				env: context.env,
 				prompt: context.prompt,
 				issue: context.issue,
-				wsEndpoint: toWss(authResult.endpoint),
-				wsToken: authResult.token,
 			};
 		},
 	});
@@ -130,7 +116,6 @@ export const listSandboxTasksOutputSchema = z.object({
 	tasks: z.array(sandboxTaskSchema),
 	site: z.string(),
 	env: z.string(),
-	...wsAuthFields,
 });
 export type ListSandboxTasksOutput = z.infer<
 	typeof listSandboxTasksOutputSchema
@@ -173,8 +158,6 @@ export const listSandboxTasksTool = (env: Env) =>
 				tasks: Array.isArray(tasks) ? tasks : [],
 				site,
 				env: context.env,
-				wsEndpoint: toWss(authResult.endpoint),
-				wsToken: authResult.token,
 			};
 		},
 	});

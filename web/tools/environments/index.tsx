@@ -493,9 +493,7 @@ function EnvironmentPreview({
 	};
 
 	if (showChanges) {
-		return (
-			<ChangesView env={env} onBack={() => setShowChanges(false)} />
-		);
+		return <ChangesView env={env} onBack={() => setShowChanges(false)} />;
 	}
 
 	return (
@@ -605,7 +603,9 @@ function EnvironmentPreview({
 
 function DiffViewer({
 	diff,
-}: { diff: { from: string | null; to: string | null } }) {
+}: {
+	diff: { from: string | null; to: string | null };
+}) {
 	const chunks = diffLines(diff.from ?? "", diff.to ?? "");
 
 	let addedCount = 0;
@@ -642,9 +642,7 @@ function DiffViewer({
 				<span className="text-xs font-medium text-muted-foreground">
 					Changes
 				</span>
-				<span className="text-xs font-medium text-success">
-					+{addedCount}
-				</span>
+				<span className="text-xs font-medium text-success">+{addedCount}</span>
 				<span className="text-xs font-medium text-destructive">
 					-{removedCount}
 				</span>
@@ -652,9 +650,9 @@ function DiffViewer({
 			<div className="flex-1 overflow-auto">
 				<table className="w-full border-collapse font-mono text-xs">
 					<tbody>
-						{rows.map((row, idx) => (
+						{rows.map((row) => (
 							<tr
-								key={idx}
+								key={`${row.lineNoA ?? ""}-${row.lineNoB ?? ""}-${row.sign}-${String(row.content).slice(0, 80)}`}
 								className={cn(
 									"leading-5",
 									row.sign === "+" && "bg-success/10",
@@ -696,7 +694,8 @@ function fileStatusLabel(file: GitStatusFile): {
 } {
 	const wd = file.working_dir.trim();
 	const idx = file.index.trim();
-	if (wd === "D" || idx === "D") return { label: "D", color: "text-destructive" };
+	if (wd === "D" || idx === "D")
+		return { label: "D", color: "text-destructive" };
 	if (wd === "A" || idx === "A" || file.path === "?" || wd === "?")
 		return { label: "A", color: "text-success" };
 	return { label: "M", color: "text-warning-foreground" };
@@ -716,7 +715,6 @@ function ChangesView({
 	const [statusLoading, setStatusLoading] = useState(true);
 	const [selectedFile, setSelectedFile] = useState<string | null>(null);
 	const [diffs, setDiffs] = useState<GitDiffResult["diffs"] | null>(null);
-	const [diffsLoading, setDiffsLoading] = useState(false);
 	const [publishState, setPublishState] = useState<
 		"idle" | "publishing" | "success" | "error"
 	>("idle");
@@ -769,13 +767,9 @@ function ChangesView({
 			});
 			if (result?.isError) {
 				const text = result.content?.find((c) => c.type === "text");
-				throw new Error(
-					text?.type === "text" ? text.text : "Publish failed",
-				);
+				throw new Error(text?.type === "text" ? text.text : "Publish failed");
 			}
-			const data = result?.structuredContent as
-				| { commit?: string }
-				| undefined;
+			const data = result?.structuredContent as { commit?: string } | undefined;
 			setPublishCommit(data?.commit);
 			setPublishState("success");
 		} catch (err) {
@@ -1000,28 +994,30 @@ function ChangesView({
 									: "No changes to show"}
 							</p>
 						</div>
-					) : (() => {
-						const fileDiff = getDiffForFile(selectedFile);
-						return fileDiff ? (
-							<div className="flex flex-col h-full overflow-hidden">
-								<div className="px-4 py-2 border-b border-border bg-muted/20 shrink-0">
-									<p
-										className="text-xs font-mono text-muted-foreground truncate"
-										title={selectedFile}
-									>
-										{selectedFile}
-									</p>
+					) : (
+						(() => {
+							const fileDiff = getDiffForFile(selectedFile);
+							return fileDiff ? (
+								<div className="flex flex-col h-full overflow-hidden">
+									<div className="px-4 py-2 border-b border-border bg-muted/20 shrink-0">
+										<p
+											className="text-xs font-mono text-muted-foreground truncate"
+											title={selectedFile}
+										>
+											{selectedFile}
+										</p>
+									</div>
+									<div className="flex-1 overflow-hidden">
+										<DiffViewer diff={fileDiff} />
+									</div>
 								</div>
-								<div className="flex-1 overflow-hidden">
-									<DiffViewer diff={fileDiff} />
+							) : (
+								<div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+									No diff available for this file
 								</div>
-							</div>
-						) : (
-							<div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-								No diff available for this file
-							</div>
-						);
-					})()}
+							);
+						})()
+					)}
 				</div>
 			</div>
 		</div>

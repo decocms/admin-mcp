@@ -1,3 +1,4 @@
+import { analyticsQueryTool } from "./analytics-query.ts";
 import { assetsTool } from "./assets.ts";
 import { deleteAssetTool } from "./delete-asset.ts";
 import {
@@ -9,11 +10,21 @@ import {
 } from "./environments.ts";
 import {
 	fsUnlinkTool,
-	gitDiscardTool,
 	gitDiffTool,
+	gitDiscardTool,
 	gitPublishTool,
 	gitStatusTool,
 } from "./git.ts";
+import {
+	getAnalyticsDataTool,
+	getMonitorCacheStatusTool,
+	getMonitorDataTool,
+	getMonitorStatusCodesTool,
+	getMonitorSummaryTool,
+	getMonitorTimelineTool,
+	getMonitorTopCountriesTool,
+	getMonitorTopPathsTool,
+} from "./monitor.ts";
 import {
 	createSandboxTaskTool,
 	killSandboxTaskTool,
@@ -22,6 +33,7 @@ import {
 import { uploadAssetTool } from "./upload-asset.ts";
 
 export const tools = [
+	analyticsQueryTool,
 	assetsTool,
 	uploadAssetTool,
 	deleteAssetTool,
@@ -38,4 +50,12 @@ export const tools = [
 	gitPublishTool,
 	gitDiscardTool,
 	fsUnlinkTool,
+	getMonitorDataTool,
+	getMonitorSummaryTool,
+	getMonitorTimelineTool,
+	getMonitorTopPathsTool,
+	getMonitorTopCountriesTool,
+	getMonitorCacheStatusTool,
+	getMonitorStatusCodesTool,
+	getAnalyticsDataTool,
 ];

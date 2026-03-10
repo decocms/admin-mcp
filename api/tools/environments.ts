@@ -24,7 +24,6 @@ export const environmentSchema = z
 
 export type AdminEnvironment = z.infer<typeof environmentSchema>;
 
-
 // ─── list_environments ────────────────────────────────────────────────────────
 
 export const listEnvironmentsInputSchema = z.object({});
@@ -221,7 +220,6 @@ export const deleteEnvironmentTool = (env: Env) =>
 			"Permanently delete a sandbox environment by name. This is irreversible — the environment and all associated resources will be removed.",
 		inputSchema: deleteEnvironmentInputSchema,
 		outputSchema: deleteEnvironmentOutputSchema,
-		_meta: { ui: { resourceUri: ENVIRONMENTS_RESOURCE_URI } },
 		annotations: {
 			readOnlyHint: false,
 			destructiveHint: true,
