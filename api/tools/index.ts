@@ -8,6 +8,13 @@ import {
 	previewEnvironmentTool,
 } from "./environments.ts";
 import {
+	fsUnlinkTool,
+	gitDiscardTool,
+	gitDiffTool,
+	gitPublishTool,
+	gitStatusTool,
+} from "./git.ts";
+import {
 	createSandboxTaskTool,
 	killSandboxTaskTool,
 	listSandboxTasksTool,
@@ -26,4 +33,9 @@ export const tools = [
 	createSandboxTaskTool,
 	listSandboxTasksTool,
 	killSandboxTaskTool,
+	gitStatusTool,
+	gitDiffTool,
+	gitPublishTool,
+	gitDiscardTool,
+	fsUnlinkTool,
 ];

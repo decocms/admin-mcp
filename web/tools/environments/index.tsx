@@ -1,3 +1,4 @@
+import { diffLines } from "diff";
 import {
 	AlertTriangle,
 	ArrowLeft,
@@ -6,14 +7,19 @@ import {
 	Clock,
 	Copy,
 	ExternalLink,
+	FileDiff,
+	FileText,
 	GitBranch,
 	Globe,
+	Loader2,
 	Pencil,
 	Plus,
 	RefreshCw,
 	Search,
 	Server,
 	Trash2,
+	Undo2,
+	Upload,
 	Wifi,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -43,6 +49,11 @@ import type {
 	ListEnvironmentsInput,
 	ListEnvironmentsOutput,
 } from "../../../api/tools/environments.ts";
+import type {
+	GitDiffResult,
+	GitStatus,
+	GitStatusFile,
+} from "../../../api/tools/git.ts";
 
 // ─── shared components ────────────────────────────────────────────────────────
 
@@ -417,12 +428,15 @@ function EnvironmentPreview({
 	env: AdminEnvironment;
 	onBack: () => void;
 }) {
+	const app = useMcpApp();
 	const [previewUrl, setPreviewUrl] = useState(
 		() => `${env.url}?__cb=${crypto.randomUUID()}`,
 	);
 	const [status, setStatus] = useState<PreviewStatus>("loading");
 	const [elapsedSec, setElapsedSec] = useState(0);
 	const retryTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+	const [changeCount, setChangeCount] = useState<number | null>(null);
+	const [showChanges, setShowChanges] = useState(false);
 
 	// Wall-clock elapsed counter — ticks every second while loading
 	useEffect(() => {
@@ -441,6 +455,21 @@ function EnvironmentPreview({
 	useEffect(() => {
 		return () => clearTimeout(retryTimerRef.current);
 	}, []);
+
+	// Fetch git status to show change count badge
+	useEffect(() => {
+		if (!app) return;
+		(async () => {
+			const result = await app.callServerTool({
+				name: "git_status",
+				arguments: { env: env.name },
+			});
+			if (!result?.isError && result?.structuredContent) {
+				const s = result.structuredContent as { files?: unknown[] };
+				setChangeCount(s.files?.length ?? 0);
+			}
+		})();
+	}, [env.name, app]);
 
 	// iframe fired onLoad → environment responded, show it
 	const handleLoad = useCallback(() => {
@@ -462,6 +491,12 @@ function EnvironmentPreview({
 		setStatus("loading");
 		setElapsedSec(0);
 	};
+
+	if (showChanges) {
+		return (
+			<ChangesView env={env} onBack={() => setShowChanges(false)} />
+		);
+	}
 
 	return (
 		<div className="flex flex-col h-dvh">
@@ -492,7 +527,7 @@ function EnvironmentPreview({
 					<button
 						type="button"
 						onClick={refresh}
-						className="p-1.5 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+						className="cursor-pointer p-1.5 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
 						title="Refresh preview"
 					>
 						<RefreshCw
@@ -502,12 +537,39 @@ function EnvironmentPreview({
 							)}
 						/>
 					</button>
+
+					{/* Changes count button */}
+					<button
+						type="button"
+						onClick={() => setShowChanges(true)}
+						className={cn(
+							"cursor-pointer relative p-1.5 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground",
+							changeCount !== null &&
+								changeCount > 0 &&
+								"text-warning hover:text-warning",
+						)}
+						title={
+							changeCount === null
+								? "Loading changes…"
+								: changeCount === 0
+									? "No changes"
+									: `${changeCount} change${changeCount !== 1 ? "s" : ""}`
+						}
+					>
+						<FileDiff className="w-3.5 h-3.5" />
+						{changeCount !== null && changeCount > 0 && (
+							<span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] flex items-center justify-center rounded-full bg-warning text-black text-[9px] font-bold leading-none px-0.5">
+								{changeCount > 99 ? "99+" : changeCount}
+							</span>
+						)}
+					</button>
+
 					<CopyButton text={env.url ?? ""} />
 					<a
 						href={previewUrl}
 						target="_blank"
 						rel="noreferrer"
-						className="p-1.5 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+						className="cursor-pointer p-1.5 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
 						title="Open in browser"
 					>
 						<ExternalLink className="w-3.5 h-3.5" />
@@ -534,6 +596,433 @@ function EnvironmentPreview({
 					onError={handleError}
 					className="absolute inset-0 w-full h-full border-0"
 				/>
+			</div>
+		</div>
+	);
+}
+
+// ─── DiffViewer ───────────────────────────────────────────────────────────────
+
+function DiffViewer({
+	diff,
+}: { diff: { from: string | null; to: string | null } }) {
+	const chunks = diffLines(diff.from ?? "", diff.to ?? "");
+
+	let addedCount = 0;
+	let removedCount = 0;
+	for (const c of chunks) {
+		if (c.added) addedCount += c.count ?? 0;
+		if (c.removed) removedCount += c.count ?? 0;
+	}
+
+	const rows: {
+		lineNoA: number | null;
+		lineNoB: number | null;
+		sign: "+" | "-" | " ";
+		content: string;
+	}[] = [];
+	let lineA = 1;
+	let lineB = 1;
+	for (const chunk of chunks) {
+		const lines = chunk.value.replace(/\n$/, "").split("\n");
+		for (const content of lines) {
+			if (chunk.added) {
+				rows.push({ lineNoA: null, lineNoB: lineB++, sign: "+", content });
+			} else if (chunk.removed) {
+				rows.push({ lineNoA: lineA++, lineNoB: null, sign: "-", content });
+			} else {
+				rows.push({ lineNoA: lineA++, lineNoB: lineB++, sign: " ", content });
+			}
+		}
+	}
+
+	return (
+		<div className="flex flex-col h-full overflow-hidden">
+			<div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-muted/30 shrink-0">
+				<span className="text-xs font-medium text-muted-foreground">
+					Changes
+				</span>
+				<span className="text-xs font-medium text-success">
+					+{addedCount}
+				</span>
+				<span className="text-xs font-medium text-destructive">
+					-{removedCount}
+				</span>
+			</div>
+			<div className="flex-1 overflow-auto">
+				<table className="w-full border-collapse font-mono text-xs">
+					<tbody>
+						{rows.map((row, idx) => (
+							<tr
+								key={idx}
+								className={cn(
+									"leading-5",
+									row.sign === "+" && "bg-success/10",
+									row.sign === "-" && "bg-destructive/10",
+								)}
+							>
+								<td className="select-none w-10 text-right pr-2 text-muted-foreground/50 border-r border-border/40 py-px pl-2">
+									{row.lineNoA ?? ""}
+								</td>
+								<td className="select-none w-10 text-right pr-2 text-muted-foreground/50 border-r border-border/40 py-px pl-1">
+									{row.lineNoB ?? ""}
+								</td>
+								<td
+									className={cn(
+										"select-none w-4 text-center py-px",
+										row.sign === "+" && "text-success font-bold",
+										row.sign === "-" && "text-destructive font-bold",
+									)}
+								>
+									{row.sign}
+								</td>
+								<td className="py-px pl-1 pr-4 whitespace-pre-wrap break-all">
+									{row.content}
+								</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	);
+}
+
+// ─── file status helpers ──────────────────────────────────────────────────────
+
+function fileStatusLabel(file: GitStatusFile): {
+	label: string;
+	color: string;
+} {
+	const wd = file.working_dir.trim();
+	const idx = file.index.trim();
+	if (wd === "D" || idx === "D") return { label: "D", color: "text-destructive" };
+	if (wd === "A" || idx === "A" || file.path === "?" || wd === "?")
+		return { label: "A", color: "text-success" };
+	return { label: "M", color: "text-warning-foreground" };
+}
+
+// ─── ChangesView ──────────────────────────────────────────────────────────────
+
+function ChangesView({
+	env,
+	onBack,
+}: {
+	env: AdminEnvironment;
+	onBack: () => void;
+}) {
+	const app = useMcpApp();
+	const [status, setStatus] = useState<GitStatus | null>(null);
+	const [statusLoading, setStatusLoading] = useState(true);
+	const [selectedFile, setSelectedFile] = useState<string | null>(null);
+	const [diffs, setDiffs] = useState<GitDiffResult["diffs"] | null>(null);
+	const [diffsLoading, setDiffsLoading] = useState(false);
+	const [publishState, setPublishState] = useState<
+		"idle" | "publishing" | "success" | "error"
+	>("idle");
+	const [publishCommit, setPublishCommit] = useState<string>();
+	const [publishError, setPublishError] = useState<string>();
+
+	useEffect(() => {
+		(async () => {
+			setStatusLoading(true);
+			const [statusResult, diffsResult] = await Promise.all([
+				app?.callServerTool({
+					name: "git_status",
+					arguments: { env: env.name },
+				}),
+				app?.callServerTool({
+					name: "git_diff",
+					arguments: { env: env.name },
+				}),
+			]);
+			if (!statusResult?.isError && statusResult?.structuredContent) {
+				setStatus(statusResult.structuredContent as GitStatus);
+			}
+			if (!diffsResult?.isError && diffsResult?.structuredContent) {
+				const result = diffsResult.structuredContent as GitDiffResult;
+				setDiffs(result.diffs);
+			}
+			setStatusLoading(false);
+		})();
+	}, [env.name, app]);
+
+	const selectFile = (path: string) => {
+		setSelectedFile((prev) => (prev === path ? null : path));
+	};
+
+	// Paths in releases/git/diff.ts have a leading "/" but status paths don't
+	const getDiffForFile = (
+		path: string,
+	): { from: string | null; to: string | null } | null => {
+		if (!diffs) return null;
+		return diffs[`/${path}`] ?? diffs[path] ?? null;
+	};
+
+	const handlePublish = async () => {
+		setPublishState("publishing");
+		setPublishError(undefined);
+		try {
+			const result = await app?.callServerTool({
+				name: "git_publish",
+				arguments: { env: env.name },
+			});
+			if (result?.isError) {
+				const text = result.content?.find((c) => c.type === "text");
+				throw new Error(
+					text?.type === "text" ? text.text : "Publish failed",
+				);
+			}
+			const data = result?.structuredContent as
+				| { commit?: string }
+				| undefined;
+			setPublishCommit(data?.commit);
+			setPublishState("success");
+		} catch (err) {
+			setPublishError(err instanceof Error ? err.message : "Publish failed");
+			setPublishState("error");
+		}
+	};
+
+	const [discarding, setDiscarding] = useState<Set<string>>(new Set());
+
+	const handleDiscard = async (file: GitStatusFile) => {
+		const isNew =
+			file.index === "?" ||
+			file.working_dir === "?" ||
+			(status?.not_added ?? []).includes(file.path);
+
+		setDiscarding((prev) => new Set(prev).add(file.path));
+		try {
+			if (isNew) {
+				await app?.callServerTool({
+					name: "fs_unlink",
+					arguments: { env: env.name, filepath: file.path },
+				});
+			} else {
+				await app?.callServerTool({
+					name: "git_discard",
+					arguments: { env: env.name, filepaths: [file.path] },
+				});
+			}
+			setStatus((prev) =>
+				prev
+					? {
+							...prev,
+							files: prev.files.filter((f) => f.path !== file.path),
+							modified: prev.modified.filter((p) => p !== file.path),
+							created: prev.created.filter((p) => p !== file.path),
+							deleted: prev.deleted.filter((p) => p !== file.path),
+							not_added: prev.not_added.filter((p) => p !== file.path),
+						}
+					: prev,
+			);
+			if (selectedFile === file.path) {
+				setSelectedFile(null);
+			}
+		} finally {
+			setDiscarding((prev) => {
+				const next = new Set(prev);
+				next.delete(file.path);
+				return next;
+			});
+		}
+	};
+
+	const allFiles: GitStatusFile[] = status?.files ?? [];
+	const totalChanges = allFiles.length;
+
+	return (
+		<div className="flex flex-col h-dvh">
+			{/* Header */}
+			<div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-background/95 backdrop-blur-sm shrink-0">
+				<button
+					type="button"
+					onClick={onBack}
+					className="cursor-pointer p-1.5 rounded-md hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+					title="Back to preview"
+				>
+					<ArrowLeft className="w-4 h-4" />
+				</button>
+
+				<div className="h-4 w-px bg-border mx-0.5" />
+
+				<div className="flex items-center gap-2 min-w-0 flex-1">
+					<FileDiff className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+					<span className="text-sm font-medium truncate">{env.name}</span>
+					{status?.current && (
+						<span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+							<GitBranch className="w-3 h-3" />
+							{status.current}
+						</span>
+					)}
+					{!statusLoading && (
+						<span className="text-xs text-muted-foreground shrink-0">
+							{totalChanges} file{totalChanges !== 1 ? "s" : ""} changed
+						</span>
+					)}
+				</div>
+
+				<div className="flex items-center gap-1.5 shrink-0">
+					<a
+						href={`${env.url}?__cb=${crypto.randomUUID()}`}
+						target="_blank"
+						rel="noreferrer"
+						className="flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-border text-xs font-medium hover:bg-accent transition-colors text-muted-foreground hover:text-foreground"
+					>
+						<ExternalLink className="w-3 h-3" />
+						Preview
+					</a>
+					{publishState === "success" ? (
+						<span className="flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-success/10 text-success text-xs font-medium">
+							<CheckCircle2 className="w-3 h-3" />
+							Published
+						</span>
+					) : (
+						<button
+							type="button"
+							onClick={handlePublish}
+							disabled={
+								publishState === "publishing" ||
+								totalChanges === 0 ||
+								statusLoading
+							}
+							className="flex items-center gap-1.5 h-7 px-2.5 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+						>
+							{publishState === "publishing" ? (
+								<Loader2 className="w-3 h-3 animate-spin" />
+							) : (
+								<Upload className="w-3 h-3" />
+							)}
+							{publishState === "publishing" ? "Publishing…" : "Publish"}
+						</button>
+					)}
+				</div>
+			</div>
+
+			{publishState === "error" && publishError && (
+				<div className="px-4 py-2 bg-destructive/10 border-b border-destructive/20 text-xs text-destructive">
+					{publishError}
+				</div>
+			)}
+
+			{publishState === "success" && publishCommit && (
+				<div className="px-4 py-2 bg-success/10 border-b border-success/20 text-xs text-success flex items-center gap-2">
+					<CheckCircle2 className="w-3 h-3" />
+					Commit <span className="font-mono">{publishCommit.slice(0, 7)}</span>{" "}
+					pushed to {status?.tracking ?? "origin"}
+				</div>
+			)}
+
+			{/* Body */}
+			<div className="flex flex-1 overflow-hidden">
+				{/* File list */}
+				<div className="w-56 shrink-0 border-r border-border overflow-y-auto bg-muted/20">
+					{statusLoading ? (
+						<div className="flex items-center justify-center py-8">
+							<Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+						</div>
+					) : allFiles.length === 0 ? (
+						<div className="flex flex-col items-center gap-2 py-8 px-4 text-center">
+							<CheckCircle2 className="w-5 h-5 text-success/60" />
+							<p className="text-xs text-muted-foreground">No changes</p>
+						</div>
+					) : (
+						<div className="py-1">
+							{allFiles.map((file) => {
+								const { label, color } = fileStatusLabel(file);
+								const isSelected = selectedFile === file.path;
+								const isDiscarding = discarding.has(file.path);
+								const shortPath = file.path.split("/").pop() ?? file.path;
+								return (
+									<div
+										key={file.path}
+										className={cn(
+											"group flex items-center gap-1 px-2 py-1 transition-colors",
+											isSelected ? "bg-accent" : "hover:bg-accent/50",
+										)}
+									>
+										<button
+											type="button"
+											onClick={() => selectFile(file.path)}
+											title={file.path}
+											className="cursor-pointer flex items-center gap-2 flex-1 min-w-0 text-left"
+											disabled={isDiscarding}
+										>
+											<FileText className="w-3 h-3 text-muted-foreground shrink-0" />
+											<span className="text-xs truncate flex-1 min-w-0">
+												{shortPath}
+											</span>
+											<span
+												className={cn(
+													"text-xs font-bold font-mono shrink-0",
+													color,
+												)}
+											>
+												{label}
+											</span>
+										</button>
+										<button
+											type="button"
+											onClick={(e) => {
+												e.stopPropagation();
+												handleDiscard(file);
+											}}
+											disabled={isDiscarding}
+											title="Discard changes"
+											className="cursor-pointer shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+										>
+											{isDiscarding ? (
+												<Loader2 className="w-3 h-3 animate-spin" />
+											) : (
+												<Undo2 className="w-3 h-3" />
+											)}
+										</button>
+									</div>
+								);
+							})}
+						</div>
+					)}
+				</div>
+
+				{/* Diff pane */}
+				<div className="flex-1 overflow-hidden bg-background">
+					{statusLoading ? (
+						<div className="flex items-center justify-center h-full">
+							<Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+						</div>
+					) : !selectedFile ? (
+						<div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
+							<FileDiff className="w-8 h-8 opacity-20" />
+							<p className="text-sm">
+								{allFiles.length > 0
+									? "Select a file to view its diff"
+									: "No changes to show"}
+							</p>
+						</div>
+					) : (() => {
+						const fileDiff = getDiffForFile(selectedFile);
+						return fileDiff ? (
+							<div className="flex flex-col h-full overflow-hidden">
+								<div className="px-4 py-2 border-b border-border bg-muted/20 shrink-0">
+									<p
+										className="text-xs font-mono text-muted-foreground truncate"
+										title={selectedFile}
+									>
+										{selectedFile}
+									</p>
+								</div>
+								<div className="flex-1 overflow-hidden">
+									<DiffViewer diff={fileDiff} />
+								</div>
+							</div>
+						) : (
+							<div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+								No diff available for this file
+							</div>
+						);
+					})()}
+				</div>
 			</div>
 		</div>
 	);

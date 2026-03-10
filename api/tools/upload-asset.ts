@@ -1,9 +1,8 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
+import { ADMIN_BASE_URL, getConfig } from "../lib/admin.ts";
 import type { Env } from "../types/env.ts";
 import { assetSchema } from "./assets.ts";
-
-const ADMIN_BASE_URL = process.env.DECO_ADMIN_URL ?? "https://admin.deco.cx";
 
 export const uploadAssetInputSchema = z.object({
 	url: z
@@ -65,22 +64,7 @@ export const uploadAssetTool = (env: Env) =>
 		},
 		execute: async ({ context }) => {
 			const { url, data, mimeType, filename } = context;
-
-			const state = env.MESH_REQUEST_CONTEXT?.state;
-			const apiKey = env.MESH_REQUEST_CONTEXT?.authorization;
-			const sitename = state?.SITE_NAME;
-
-			if (!sitename) {
-				throw new Error(
-					"SITE_NAME is not configured. Set it in the MCP configuration.",
-				);
-			}
-
-			if (!apiKey) {
-				throw new Error(
-					"DECO_ADMIN_API_KEY is not configured. Set it in the MCP configuration.",
-				);
-			}
+			const { site: sitename, apiKey } = getConfig(env);
 
 			if (!url && !data) {
 				throw new Error("Either url or data must be provided.");
