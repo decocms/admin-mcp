@@ -1190,6 +1190,33 @@ function EnvironmentsList({
 	);
 	const [createError, setCreateError] = useState<string>();
 
+	// Keep chat/model context in sync so the assistant knows current site and env
+	useEffect(() => {
+		if (!app) return;
+		console.log("apps")
+		const parts: string[] = [];
+		if (site) {
+			parts.push(`Current site: **${site}**`);
+		}
+		if (selectedEnv) {
+			parts.push(
+				`Selected environment: **${selectedEnv.name}** (platform: ${selectedEnv.platform}${selectedEnv.url ? `, url: ${selectedEnv.url}` : ""})`,
+			);
+		}
+		const text = parts.length > 0 ? parts.join("\n\n") : "";
+		console.log("UPDATE RAN", text)
+		app
+			.updateModelContext({
+				content: text ? [{ type: "text", text }] : [],
+			})
+			.catch(() => {});
+
+		return () => {
+			// Clear context when leaving this view so the model doesn't keep stale env context
+			app.updateModelContext({ content: [] }).catch(() => {});
+		};
+	}, [app, site, selectedEnv]);
+
 	const handleDelete = useCallback(
 		async (name: string) => {
 			const result = await app?.callServerTool({

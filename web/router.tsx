@@ -12,12 +12,14 @@ import {
 	DeleteEnvironmentPage,
 	ListEnvironmentsPage,
 } from "./tools/environments/index.tsx";
+import FileExplorerPage from "./tools/file-explorer/index.tsx";
 import MonitorPage from "./tools/monitor/index.tsx";
 
 const TOOL_PAGES: Record<string, React.ComponentType> = {
 	fetch_assets: AssetsPage,
 	list_environments: ListEnvironmentsPage,
 	delete_environment: DeleteEnvironmentPage,
+	file_explorer: FileExplorerPage,
 	get_monitor_data: MonitorPage,
 };
 

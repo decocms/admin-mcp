@@ -9,6 +9,13 @@ import {
 	previewEnvironmentTool,
 } from "./environments.ts";
 import {
+	deleteFileTool,
+	fileExplorerTool,
+	listFilesTool,
+	readFileTool,
+	writeFileTool,
+} from "./files.ts";
+import {
 	fsUnlinkTool,
 	gitDiffTool,
 	gitDiscardTool,
@@ -42,6 +49,11 @@ export const tools = [
 	createEnvironmentTool,
 	deleteEnvironmentTool,
 	previewEnvironmentTool,
+	fileExplorerTool,
+	listFilesTool,
+	readFileTool,
+	writeFileTool,
+	deleteFileTool,
 	createSandboxTaskTool,
 	listSandboxTasksTool,
 	killSandboxTaskTool,
