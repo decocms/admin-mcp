@@ -32,7 +32,5 @@ export function getConfig(env: Env) {
 	return {
 		site,
 		apiKey,
-		anthropicApiKey: state?.ANTHROPIC_API_KEY,
-		savedKeyId: state?.SAVED_KEY_ID,
 	};
 }

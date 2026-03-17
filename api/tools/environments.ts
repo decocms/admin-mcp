@@ -166,18 +166,15 @@ export const createEnvironmentTool = (env: Env) =>
 			openWorldHint: true,
 		},
 		execute: async ({ context }) => {
-			const { site, apiKey, anthropicApiKey, savedKeyId } = getConfig(env);
-			const resolvedSavedKeyId = context.savedKeyId ?? savedKeyId;
-			const resolvedAnthropicApiKey =
-				context.anthropicApiKey ?? anthropicApiKey;
+			const { site, apiKey } = getConfig(env);
 			const environment = (await callAdmin(
 				"deco-sites/admin/actions/environments/create.ts",
 				{
 					site,
 					name: context.name,
-					...(resolvedSavedKeyId ? { savedKeyId: resolvedSavedKeyId } : {}),
-					...(resolvedAnthropicApiKey
-						? { anthropicApiKey: resolvedAnthropicApiKey }
+					...(context.savedKeyId ? { savedKeyId: context.savedKeyId } : {}),
+					...(context.anthropicApiKey
+						? { anthropicApiKey: context.anthropicApiKey }
 						: {}),
 					...(context.branch ? { options: { branch: context.branch } } : {}),
 					...(context.platform ? { platform: context.platform } : {}),
