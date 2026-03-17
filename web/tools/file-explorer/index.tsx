@@ -1,6 +1,5 @@
 import Editor, { loader, type OnMount } from "@monaco-editor/react";
 import {
-	AlertTriangle,
 	ChevronDown,
 	ChevronRight,
 	ExternalLink,
@@ -9,6 +8,7 @@ import {
 	FileCode2,
 	Folder,
 	FolderOpen,
+	LayoutTemplate,
 	Loader2,
 	Monitor,
 	RefreshCw,
@@ -33,6 +33,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
@@ -66,20 +67,22 @@ import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import { useMcpApp, useMcpState } from "@/context.tsx";
 import { cn } from "@/lib/utils.ts";
 import type {
-	AdminEnvironment,
 	PreviewEnvironmentInput,
 	PreviewEnvironmentOutput,
 } from "../../../api/tools/environments.ts";
 import type {
 	FileExplorerInput,
 	FileExplorerOutput,
+	GetPagesOutput,
 	ListFilesOutput,
+	PageInfo,
 	ReadFileOutput,
 	WriteFileOutput,
 } from "../../../api/tools/files.ts";
 
 type ViewMode = "code" | "preview";
 type PreviewViewport = "desktop" | "mobile";
+type EnvStatus = "warming-up" | "waiting" | "ready";
 
 type TreeNode = {
 	name: string;
@@ -315,22 +318,24 @@ function CancelledView() {
 	);
 }
 
+const WARMUP_TOAST_ID = "env-warmup";
+const WARMUP_TIMEOUT_MS = 5000;
+const POLL_INTERVAL_MS = 5000;
+
 function FileExplorerWorkspace({
-	initialEnvironments,
-	initialEnv,
-	initialFiles,
 	site,
+	userEnv,
+	userEnvUrl,
+	productionUrl,
 }: {
-	initialEnvironments: AdminEnvironment[];
-	initialEnv: string | null;
-	initialFiles: string[];
 	site: string;
+	userEnv: string;
+	userEnvUrl: string | null;
+	productionUrl: string;
 }) {
 	const app = useMcpApp();
-	const [selectedEnvName] = useState(
-		initialEnv ?? initialEnvironments[0]?.name ?? "",
-	);
-	const [files, setFiles] = useState<string[]>(initialEnv ? initialFiles : []);
+	const [envStatus, setEnvStatus] = useState<EnvStatus>("warming-up");
+	const [files, setFiles] = useState<string[]>([]);
 	const [search, setSearch] = useState("");
 	const [openFiles, setOpenFiles] = useState<string[]>([]);
 	const [fileBuffers, setFileBuffers] = useState<Record<string, FileBuffer>>(
@@ -350,10 +355,14 @@ function FileExplorerWorkspace({
 	const [newFilePath, setNewFilePath] = useState("");
 	const [createError, setCreateError] = useState<string>();
 	const [isCreating, setIsCreating] = useState(false);
-	const hydratedInitialFilesRef = useRef(false);
+	const [pages, setPages] = useState<PageInfo[]>([]);
+	const [pagesLoaded, setPagesLoaded] = useState(false);
+	const [pagesLoading, setPagesLoading] = useState(false);
+	const [pagesOpen, setPagesOpen] = useState(false);
 	const selectedFileRef = useRef<string | null>(null);
 	const saveActiveFileRef = useRef<(() => Promise<void>) | null>(null);
 	const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+	const pagesContainerRef = useRef<HTMLDivElement>(null);
 	const [editorTheme, setEditorTheme] = useState<"vs" | "vs-dark">(() =>
 		typeof document !== "undefined" &&
 		document.documentElement.classList.contains("dark")
@@ -395,14 +404,9 @@ function FileExplorerWorkspace({
 		return () => observer.disconnect();
 	}, []);
 
-	const currentEnvironment = useMemo(
-		() =>
-			initialEnvironments.find(
-				(environment) => environment.name === selectedEnvName,
-			),
-		[initialEnvironments, selectedEnvName],
-	);
-	const isReadonly = !!currentEnvironment?.readonly;
+	const isReadonly = false;
+	const envUrl = userEnvUrl;
+
 	const currentFileBuffer = selectedFile
 		? fileBuffers[selectedFile]
 		: undefined;
@@ -423,17 +427,17 @@ function FileExplorerWorkspace({
 	});
 
 	const loadFiles = useCallback(
-		async (
-			envName: string,
-			options?: { preserveSelection?: boolean; nextSelection?: string | null },
-		) => {
+		async (options?: {
+			preserveSelection?: boolean;
+			nextSelection?: string | null;
+		}) => {
 			setIsRefreshing(true);
 			setListError(undefined);
 
 			try {
 				const result = await app?.callServerTool({
 					name: "list_files",
-					arguments: { env: envName },
+					arguments: { env: userEnv },
 				});
 				if (result?.isError) {
 					const text = result.content?.find((block) => block.type === "text");
@@ -488,47 +492,90 @@ function FileExplorerWorkspace({
 				setIsRefreshing(false);
 			}
 		},
-		[app],
+		[app, userEnv],
 	);
 
+	// Warm-up: try to connect to the user's env within 5s.
+	// If it times out, show the production URL in the iframe and poll every 5s.
 	useEffect(() => {
-		if (!selectedEnvName) {
-			setFiles([]);
-			setOpenFiles([]);
-			setFileBuffers({});
-			setSelectedFile(null);
-			setPreviewUrl(null);
-			return;
-		}
+		if (!app || !userEnv) return;
 
-		if (
-			!hydratedInitialFilesRef.current &&
-			initialEnv &&
-			selectedEnvName === initialEnv
-		) {
-			hydratedInitialFilesRef.current = true;
+		let cancelled = false;
+		let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+		toast.loading("Starting your Live Preview…", {
+			id: WARMUP_TOAST_ID,
+			duration: Number.POSITIVE_INFINITY,
+		});
+
+		const tryListFiles = async (
+			timeoutMs?: number,
+		): Promise<string[] | null> => {
+			try {
+				const callPromise = app.callServerTool({
+					name: "list_files",
+					arguments: { env: userEnv },
+				});
+				const result = timeoutMs
+					? await Promise.race([
+							callPromise,
+							new Promise<null>((resolve) =>
+								setTimeout(() => resolve(null), timeoutMs),
+							),
+						])
+					: await callPromise;
+
+				if (!result || result.isError) return null;
+				const data = result.structuredContent as ListFilesOutput | undefined;
+				return data?.files ?? null;
+			} catch {
+				return null;
+			}
+		};
+
+		const onEnvReady = (initialFiles: string[]) => {
+			if (cancelled) return;
 			setFiles(initialFiles);
-			return;
-		}
+			setEnvStatus("ready");
+			toast.dismiss(WARMUP_TOAST_ID);
+		};
 
-		loadFiles(selectedEnvName);
-	}, [initialEnv, initialFiles, loadFiles, selectedEnvName]);
+		const schedulePoll = () => {
+			pollTimer = setTimeout(async () => {
+				if (cancelled) return;
+				const files = await tryListFiles();
+				if (cancelled) return;
+				if (files !== null) {
+					onEnvReady(files);
+				} else {
+					schedulePoll();
+				}
+			}, POLL_INTERVAL_MS);
+		};
 
+		tryListFiles(WARMUP_TIMEOUT_MS).then((files) => {
+			if (cancelled) return;
+			if (files !== null) {
+				onEnvReady(files);
+			} else {
+				setEnvStatus("waiting");
+				setPreviewUrl(
+					`${productionUrl}${productionUrl.endsWith("/") ? "" : "/"}?__cb=${crypto.randomUUID()}`,
+				);
+				schedulePoll();
+			}
+		});
+
+		return () => {
+			cancelled = true;
+			if (pollTimer) clearTimeout(pollTimer);
+			toast.dismiss(WARMUP_TOAST_ID);
+		};
+	}, [app, userEnv, productionUrl]);
+
+	// Fetch preview URL from the env once it's ready
 	useEffect(() => {
-		void selectedEnvName;
-		setPreviewPathInput("/");
-		setPreviewPath("/");
-		setPreviewUrl(null);
-		setPreviewError(undefined);
-		setPreviewRefreshKey(0);
-	}, [selectedEnvName]);
-
-	useEffect(() => {
-		if (
-			viewMode !== "preview" ||
-			!selectedEnvName ||
-			!currentEnvironment?.url
-		) {
+		if (viewMode !== "preview" || envStatus !== "ready") {
 			return;
 		}
 
@@ -544,7 +591,7 @@ function FileExplorerWorkspace({
 				const result = await app?.callServerTool({
 					name: "preview_environment",
 					arguments: {
-						name: selectedEnvName,
+						name: userEnv,
 						path: previewPath,
 					} satisfies PreviewEnvironmentInput,
 				});
@@ -585,17 +632,10 @@ function FileExplorerWorkspace({
 		return () => {
 			cancelled = true;
 		};
-	}, [
-		app,
-		currentEnvironment?.url,
-		previewPath,
-		previewRefreshKey,
-		selectedEnvName,
-		viewMode,
-	]);
+	}, [app, envStatus, previewPath, previewRefreshKey, userEnv, viewMode]);
 
 	useEffect(() => {
-		if (!selectedEnvName || !selectedFile) {
+		if (!userEnv || !selectedFile) {
 			return;
 		}
 
@@ -613,7 +653,7 @@ function FileExplorerWorkspace({
 				const result = await app?.callServerTool({
 					name: "read_file",
 					arguments: {
-						env: selectedEnvName,
+						env: userEnv,
 						filepath: selectedFile,
 					},
 				});
@@ -656,7 +696,7 @@ function FileExplorerWorkspace({
 		return () => {
 			cancelled = true;
 		};
-	}, [app, fileBuffers, selectedEnvName, selectedFile]);
+	}, [app, fileBuffers, userEnv, selectedFile]);
 
 	useEffect(() => {
 		if (!app) {
@@ -667,9 +707,7 @@ function FileExplorerWorkspace({
 		if (site) {
 			parts.push(`Current site: **${site}**`);
 		}
-		if (selectedEnvName) {
-			parts.push(`Selected environment: **${selectedEnvName}**`);
-		}
+		parts.push(`Environment: **${userEnv}**`);
 		if (selectedFile) {
 			parts.push(`Selected file: **${selectedFile}**`);
 		}
@@ -684,7 +722,49 @@ function FileExplorerWorkspace({
 		return () => {
 			app.updateModelContext({ content: [] }).catch(() => {});
 		};
-	}, [app, selectedEnvName, selectedFile, site]);
+	}, [app, userEnv, selectedFile, site]);
+
+	// Close the pages dropdown when clicking outside the URL bar container
+	useEffect(() => {
+		if (!pagesOpen) return;
+		const handler = (e: PointerEvent) => {
+			if (!pagesContainerRef.current?.contains(e.target as Node)) {
+				setPagesOpen(false);
+			}
+		};
+		document.addEventListener("pointerdown", handler);
+		return () => document.removeEventListener("pointerdown", handler);
+	}, [pagesOpen]);
+
+	const fetchPages = useCallback(async () => {
+		if (!app || !userEnv || pagesLoaded || pagesLoading) return;
+		setPagesLoading(true);
+		try {
+			const result = await app.callServerTool({
+				name: "get_pages",
+				arguments: { env: userEnv },
+			});
+			if (!result?.isError) {
+				const data = result?.structuredContent as GetPagesOutput | undefined;
+				setPages(data?.pages ?? []);
+				setPagesLoaded(true);
+			}
+		} catch {
+			// silently fail — user can still type a path manually
+		} finally {
+			setPagesLoading(false);
+		}
+	}, [app, userEnv, pagesLoaded, pagesLoading]);
+
+	const filteredPages = useMemo(() => {
+		const term = previewPathInput.trim();
+		if (!term || term === "/") return pages;
+		return pages.filter(
+			(p) =>
+				p.path.toLowerCase().includes(term.toLowerCase()) ||
+				p.name.toLowerCase().includes(term.toLowerCase()),
+		);
+	}, [pages, previewPathInput]);
 
 	const filteredFiles = useMemo(() => {
 		if (!search.trim()) {
@@ -764,11 +844,7 @@ function FileExplorerWorkspace({
 			return;
 		}
 
-		if (!selectedEnvName) {
-			return;
-		}
-
-		await loadFiles(selectedEnvName, { preserveSelection: true });
+		await loadFiles({ preserveSelection: true });
 	};
 
 	const handlePreviewPathSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -781,13 +857,13 @@ function FileExplorerWorkspace({
 	};
 
 	const handleOpenPreviewInNewTab = () => {
-		if (!currentEnvironment?.url) {
+		if (!envUrl) {
 			return;
 		}
 
 		const nextPath = normalizePath(previewPathInput);
 		const sep = nextPath.includes("?") ? "&" : "?";
-		const url = `${currentEnvironment.url}${nextPath.startsWith("/") ? "" : "/"}${nextPath}${sep}__cb=${crypto.randomUUID()}`;
+		const url = `${envUrl}${nextPath.startsWith("/") ? "" : "/"}${nextPath}${sep}__cb=${crypto.randomUUID()}`;
 		window.open(url, "_blank", "noopener,noreferrer");
 	};
 
@@ -841,7 +917,7 @@ function FileExplorerWorkspace({
 
 	const handleSave = useCallback(
 		async (filepath = selectedFile) => {
-			if (!selectedEnvName || !filepath) {
+			if (!userEnv || !filepath) {
 				return;
 			}
 
@@ -862,7 +938,7 @@ function FileExplorerWorkspace({
 				const result = await app?.callServerTool({
 					name: "write_file",
 					arguments: {
-						env: selectedEnvName,
+						env: userEnv,
 						filepath: normalizedFilepath,
 						content: nextValue,
 					},
@@ -888,7 +964,7 @@ function FileExplorerWorkspace({
 					},
 				}));
 				expandAncestors(normalizedFilepath);
-				await loadFiles(selectedEnvName, {
+				await loadFiles({
 					preserveSelection: true,
 					nextSelection:
 						normalizedFilepath === selectedFile
@@ -909,7 +985,7 @@ function FileExplorerWorkspace({
 			fileBuffers,
 			formatActiveDocument,
 			loadFiles,
-			selectedEnvName,
+			userEnv,
 			selectedFile,
 		],
 	);
@@ -926,7 +1002,7 @@ function FileExplorerWorkspace({
 	}, []);
 
 	const handleDelete = async (filepath = selectedFile) => {
-		if (!selectedEnvName || !filepath) {
+		if (!userEnv || !filepath) {
 			return;
 		}
 
@@ -945,7 +1021,7 @@ function FileExplorerWorkspace({
 			const result = await app?.callServerTool({
 				name: "delete_file",
 				arguments: {
-					env: selectedEnvName,
+					env: userEnv,
 					filepath: normalizedFilepath,
 				},
 			});
@@ -968,7 +1044,7 @@ function FileExplorerWorkspace({
 				delete next[normalizedFilepath];
 				return next;
 			});
-			await loadFiles(selectedEnvName, {
+			await loadFiles({
 				preserveSelection: nextSelectedFile !== null,
 				nextSelection: nextSelectedFile,
 			});
@@ -984,11 +1060,6 @@ function FileExplorerWorkspace({
 	const handleCreateFile = async (event: FormEvent) => {
 		event.preventDefault();
 
-		if (!selectedEnvName) {
-			setCreateError("Select an environment before creating a file.");
-			return;
-		}
-
 		const filepath = normalizePath(newFilePath);
 		if (filepath === "/") {
 			setCreateError("Enter a valid file path.");
@@ -1002,7 +1073,7 @@ function FileExplorerWorkspace({
 			const result = await app?.callServerTool({
 				name: "write_file",
 				arguments: {
-					env: selectedEnvName,
+					env: userEnv,
 					filepath,
 					content: "",
 				},
@@ -1017,7 +1088,7 @@ function FileExplorerWorkspace({
 			expandAncestors(filepath);
 			setCreateDialogOpen(false);
 			setNewFilePath("");
-			await loadFiles(selectedEnvName, { nextSelection: filepath });
+			await loadFiles({ nextSelection: filepath });
 		} catch (error) {
 			setCreateError(
 				error instanceof Error ? error.message : "Failed to create file",
@@ -1030,13 +1101,6 @@ function FileExplorerWorkspace({
 	return (
 		<div className="h-dvh overflow-hidden">
 			<div className="flex h-full min-h-0 flex-col gap-4">
-				{currentEnvironment?.readonly && (
-					<div className="flex items-center gap-2 rounded-md border border-warning/20 bg-warning/10 px-3 py-2 text-xs text-muted-foreground">
-						<AlertTriangle className="w-3.5 h-3.5 text-warning" />
-						This environment is read-only. Editing actions are disabled.
-					</div>
-				)}
-
 				{listError && (
 					<div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
 						{listError}
@@ -1062,7 +1126,7 @@ function FileExplorerWorkspace({
 											: "text-muted-foreground hover:text-foreground",
 									)}
 									onClick={() => setViewMode("preview")}
-									disabled={!selectedEnvName || !currentEnvironment?.url}
+									disabled={envStatus !== "ready"}
 									title="Preview"
 								>
 									<Eye className="h-3.5 w-3.5" />
@@ -1081,65 +1145,125 @@ function FileExplorerWorkspace({
 									<FileCode2 className="h-3.5 w-3.5" />
 								</button>
 							</div>
-							<form
-								onSubmit={handlePreviewPathSubmit}
-								className="min-w-0 flex-1 max-w-xl"
+							<div
+								ref={pagesContainerRef}
+								className="relative min-w-0 flex-1 max-w-xl"
 							>
-								<div className="flex h-7 items-center gap-2 rounded-lg border bg-background px-0.5">
-									<button
-										type="button"
-										className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-										onClick={handleTogglePreviewViewport}
-										title={
-											previewViewport === "desktop"
-												? "Switch to mobile preview"
-												: "Switch to desktop preview"
-										}
-									>
-										{previewViewport === "desktop" ? (
-											<Monitor className="h-3.5 w-3.5" />
-										) : (
-											<Smartphone className="h-3.5 w-3.5" />
-										)}
-									</button>
-									<Input
-										value={previewPathInput}
-										onChange={(event) =>
-											setPreviewPathInput(event.target.value)
-										}
-										placeholder="/"
-										className="h-7 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
-									/>
-									<div className="flex items-center gap-0.5">
-										<button
-											type="button"
-											className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-											onClick={handleOpenPreviewInNewTab}
-											disabled={!currentEnvironment?.url}
-											title="Open in new tab"
-										>
-											<ExternalLink className="h-3.5 w-3.5" />
-										</button>
+								<form
+									onSubmit={(e) => {
+										setPagesOpen(false);
+										handlePreviewPathSubmit(e);
+									}}
+								>
+									<div className="flex h-7 items-center gap-2 rounded-lg border bg-background px-0.5">
 										<button
 											type="button"
 											className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-											onClick={handleRefresh}
+											onClick={handleTogglePreviewViewport}
 											title={
-												viewMode === "preview"
-													? "Refresh preview"
-													: "Refresh file list"
+												previewViewport === "desktop"
+													? "Switch to mobile preview"
+													: "Switch to desktop preview"
 											}
 										>
-											<RefreshCw
-												className={cn(
-													"h-3.5 w-3.5",
-													(isRefreshing || isLoadingPreview) && "animate-spin",
-												)}
-											/>
+											{previewViewport === "desktop" ? (
+												<Monitor className="h-3.5 w-3.5" />
+											) : (
+												<Smartphone className="h-3.5 w-3.5" />
+											)}
 										</button>
+										<Input
+											value={previewPathInput}
+											onChange={(event) =>
+												setPreviewPathInput(event.target.value)
+											}
+											onClick={() => {
+												if (envStatus === "ready") {
+													setPagesOpen(true);
+													void fetchPages();
+												}
+											}}
+											onKeyDown={(e) => {
+												if (e.key === "Escape") setPagesOpen(false);
+											}}
+											placeholder="/"
+											className="h-7 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
+										/>
+										<div className="flex items-center gap-0.5">
+											<button
+												type="button"
+												className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+												onClick={handleOpenPreviewInNewTab}
+												disabled={!envUrl || envStatus !== "ready"}
+												title="Open in new tab"
+											>
+												<ExternalLink className="h-3.5 w-3.5" />
+											</button>
+											<button
+												type="button"
+												className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+												onClick={handleRefresh}
+												title={
+													viewMode === "preview"
+														? "Refresh preview"
+														: "Refresh file list"
+												}
+											>
+												<RefreshCw
+													className={cn(
+														"h-3.5 w-3.5",
+														(isRefreshing || isLoadingPreview) &&
+															"animate-spin",
+													)}
+												/>
+											</button>
+										</div>
 									</div>
-								</div>
-							</form>
+								</form>
+
+								{pagesOpen && (
+									<div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-md border bg-popover shadow-md">
+										{pagesLoading ? (
+											<div className="flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground">
+												<Loader2 className="h-3.5 w-3.5 animate-spin" />
+												Loading pages…
+											</div>
+										) : filteredPages.length === 0 ? (
+											<div className="px-3 py-3 text-xs text-muted-foreground">
+												{pages.length === 0
+													? "No pages found in this environment."
+													: "No pages match your search."}
+											</div>
+										) : (
+											<ScrollArea className="max-h-64">
+												<div className="p-1">
+													{filteredPages.map((page) => (
+														<button
+															key={page.key}
+															type="button"
+															className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+															onMouseDown={(e) => {
+																e.preventDefault();
+																setPreviewPathInput(page.path);
+																setPreviewPath(page.path);
+																setPagesOpen(false);
+															}}
+														>
+															<LayoutTemplate className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+															<span className="flex-1 truncate font-medium">
+																{page.name}
+															</span>
+															<span className="shrink-0 text-xs text-muted-foreground">
+																{page.path}
+															</span>
+														</button>
+													))}
+												</div>
+											</ScrollArea>
+										)}
+									</div>
+								)}
+							</div>
 							<div className="shrink-0">
 								<Button
 									type="button"
@@ -1167,19 +1291,15 @@ function FileExplorerWorkspace({
 										</div>
 										<ScrollArea className="min-h-0 flex-1">
 											<div className="p-2">
-												{!selectedEnvName ? (
-													<Empty className="border-none">
-														<EmptyHeader>
-															<EmptyMedia variant="icon">
-																<Folder className="size-5" />
-															</EmptyMedia>
-															<EmptyTitle>Select an environment</EmptyTitle>
-															<EmptyDescription>
-																Choose a sandbox environment to browse its
-																files.
-															</EmptyDescription>
-														</EmptyHeader>
-													</Empty>
+												{envStatus !== "ready" ? (
+													<div className="flex flex-col items-center justify-center gap-2 py-8 text-muted-foreground">
+														<Loader2 className="h-4 w-4 animate-spin" />
+														<span className="text-xs text-center">
+															{envStatus === "warming-up"
+																? "Connecting to your environment…"
+																: "Waiting for environment to start…"}
+														</span>
+													</div>
 												) : flatNodes.length === 0 ? (
 													<Empty className="border-none">
 														<EmptyHeader>
@@ -1466,19 +1586,15 @@ function FileExplorerWorkspace({
 										</>
 									) : (
 										<div className="min-h-0 flex-1 overflow-hidden bg-muted/10">
-											{!selectedEnvName || !currentEnvironment?.url ? (
-												<Empty className="h-full rounded-lg border border-dashed bg-background/80">
-													<EmptyHeader>
-														<EmptyMedia variant="icon">
-															<Eye className="size-5" />
-														</EmptyMedia>
-														<EmptyTitle>Preview unavailable</EmptyTitle>
-														<EmptyDescription>
-															Select an environment with a live URL to preview
-															it here.
-														</EmptyDescription>
-													</EmptyHeader>
-												</Empty>
+											{envStatus === "warming-up" ? (
+												<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background/80">
+													<div className="flex flex-col items-center gap-3 text-muted-foreground">
+														<Loader2 className="h-5 w-5 animate-spin" />
+														<span className="text-sm">
+															Starting your Live Preview…
+														</span>
+													</div>
+												</div>
 											) : previewError ? (
 												<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background p-6">
 													<div className="max-w-md text-center">
@@ -1514,7 +1630,7 @@ function FileExplorerWorkspace({
 															<iframe
 																key={previewUrl}
 																src={previewUrl}
-																title={`Preview of ${selectedEnvName} at ${previewPath}`}
+																title={`Preview of ${userEnv} at ${previewPath}`}
 																className="h-full w-full border-0"
 															/>
 														) : null}
@@ -1620,19 +1736,19 @@ export default function FileExplorerPage() {
 		return <Spinner label="Opening file explorer..." />;
 	}
 
-	const { environments, env, files, site } = state.toolResult ?? {
-		environments: [],
-		env: null,
-		files: [],
+	const { site, userEnv, userEnvUrl, productionUrl } = state.toolResult ?? {
 		site: "",
+		userEnv: "",
+		userEnvUrl: null,
+		productionUrl: "",
 	};
 
 	return (
 		<FileExplorerWorkspace
-			initialEnvironments={environments}
-			initialEnv={env}
-			initialFiles={files}
 			site={site}
+			userEnv={userEnv}
+			userEnvUrl={userEnvUrl}
+			productionUrl={productionUrl}
 		/>
 	);
 }

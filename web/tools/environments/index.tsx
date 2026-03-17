@@ -1193,7 +1193,7 @@ function EnvironmentsList({
 	// Keep chat/model context in sync so the assistant knows current site and env
 	useEffect(() => {
 		if (!app) return;
-		console.log("apps")
+		console.log("apps");
 		const parts: string[] = [];
 		if (site) {
 			parts.push(`Current site: **${site}**`);
@@ -1204,7 +1204,7 @@ function EnvironmentsList({
 			);
 		}
 		const text = parts.length > 0 ? parts.join("\n\n") : "";
-		console.log("UPDATE RAN", text)
+		console.log("UPDATE RAN", text);
 		app
 			.updateModelContext({
 				content: text ? [{ type: "text", text }] : [],

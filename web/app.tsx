@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { Toaster } from "./components/ui/sonner.tsx";
 import { McpProvider } from "./context.tsx";
 import { AppRouter } from "./router.tsx";
 import "./globals.css";
@@ -15,6 +16,7 @@ root.render(
 	<StrictMode>
 		<McpProvider>
 			<AppRouter />
+			<Toaster />
 		</McpProvider>
 	</StrictMode>,
 );

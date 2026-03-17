@@ -11,8 +11,12 @@ import {
 import {
 	deleteFileTool,
 	fileExplorerTool,
+	getPagesTool,
+	grepFilesTool,
 	listFilesTool,
 	readFileTool,
+	replaceInFileTool,
+	updateJsonTool,
 	writeFileTool,
 } from "./files.ts";
 import {
@@ -32,11 +36,6 @@ import {
 	getMonitorTopCountriesTool,
 	getMonitorTopPathsTool,
 } from "./monitor.ts";
-import {
-	createSandboxTaskTool,
-	killSandboxTaskTool,
-	listSandboxTasksTool,
-} from "./sandbox.ts";
 import { uploadAssetTool } from "./upload-asset.ts";
 
 export const tools = [
@@ -54,9 +53,10 @@ export const tools = [
 	readFileTool,
 	writeFileTool,
 	deleteFileTool,
-	createSandboxTaskTool,
-	listSandboxTasksTool,
-	killSandboxTaskTool,
+	grepFilesTool,
+	replaceInFileTool,
+	updateJsonTool,
+	getPagesTool,
 	gitStatusTool,
 	gitDiffTool,
 	gitPublishTool,
