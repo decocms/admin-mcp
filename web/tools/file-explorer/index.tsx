@@ -11,6 +11,7 @@ import {
 	LayoutTemplate,
 	Loader2,
 	Monitor,
+	MousePointer2,
 	RefreshCw,
 	Save,
 	Search,
@@ -80,7 +81,7 @@ import type {
 	WriteFileOutput,
 } from "../../../api/tools/files.ts";
 
-type ViewMode = "code" | "preview";
+type ViewMode = "code" | "preview" | "visual";
 type PreviewViewport = "desktop" | "mobile";
 type EnvStatus = "warming-up" | "waiting" | "ready";
 
@@ -100,6 +101,21 @@ type FileBuffer = {
 	savedContent: string;
 	editorValue: string;
 	loaded: boolean;
+};
+
+type VisualEditorPayload = {
+	tag: string;
+	id: string;
+	classes: string;
+	text: string;
+	html: string;
+	manifestKey: string | null;
+	componentName: string | null;
+	parents: string;
+	url: string;
+	path: string;
+	viewport: { width: number; height: number };
+	position: { x: number; y: number };
 };
 
 loader.config({ monaco });
@@ -322,6 +338,148 @@ const WARMUP_TOAST_ID = "env-warmup";
 const WARMUP_TIMEOUT_MS = 5000;
 const POLL_INTERVAL_MS = 5000;
 
+function visualEditorScript() {
+	if ((window as unknown as Record<string, unknown>).__visualEditorActive)
+		return;
+	(window as unknown as Record<string, unknown>).__visualEditorActive = true;
+
+	const cursorStyle = document.createElement("style");
+	cursorStyle.textContent = "* { cursor: default !important; }";
+	document.head.appendChild(cursorStyle);
+
+	const highlight = document.createElement("div");
+	highlight.style.cssText =
+		"position:fixed;pointer-events:none;outline:2px solid #6366f1;background:rgba(99,102,241,0.08);border-radius:2px;z-index:2147483647;display:none;transition:top 0.05s,left 0.05s,width 0.05s,height 0.05s;";
+	document.body.appendChild(highlight);
+
+	const badge = document.createElement("div");
+	badge.style.cssText =
+		"position:fixed;pointer-events:none;background:#6366f1;color:white;font:11px/1 monospace;padding:2px 6px;border-radius:2px;z-index:2147483647;display:none;white-space:nowrap;max-width:240px;overflow:hidden;text-overflow:ellipsis;";
+	document.body.appendChild(badge);
+
+	document.addEventListener(
+		"mouseover",
+		(e) => {
+			const el = e.target as HTMLElement;
+			if (!el || el === highlight || el === badge) return;
+			const r = el.getBoundingClientRect();
+			highlight.style.display = "block";
+			highlight.style.top = r.top + "px";
+			highlight.style.left = r.left + "px";
+			highlight.style.width = r.width + "px";
+			highlight.style.height = r.height + "px";
+			const tag = el.tagName.toLowerCase();
+			const id = el.id ? "#" + el.id : "";
+			const cls =
+				el.className && typeof el.className === "string"
+					? "." +
+						el.className
+							.trim()
+							.split(/\s+/)
+							.slice(0, 2)
+							.join(".")
+					: "";
+			badge.textContent = tag + id + cls;
+			badge.style.display = "block";
+			badge.style.top = Math.max(0, r.top - 20) + "px";
+			badge.style.left = r.left + "px";
+		},
+		true,
+	);
+
+	document.addEventListener(
+		"mouseout",
+		() => {
+			highlight.style.display = "none";
+			badge.style.display = "none";
+		},
+		true,
+	);
+
+	document.addEventListener(
+		"click",
+		(e) => {
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			const el = e.target as HTMLElement;
+			if (!el || el === highlight || el === badge) return;
+
+			highlight.style.outline = "2px solid #a855f7";
+			highlight.style.background = "rgba(168,85,247,0.15)";
+			setTimeout(() => {
+				highlight.style.outline = "2px solid #6366f1";
+				highlight.style.background = "rgba(99,102,241,0.08)";
+			}, 400);
+
+			const tag = el.tagName.toLowerCase();
+			const id = el.id || "";
+			const classes =
+				el.className && typeof el.className === "string"
+					? el.className.trim()
+					: "";
+			const text = (el.textContent || "").trim().slice(0, 200);
+			const html = (el.outerHTML || "").slice(0, 800);
+
+			const closestSection = el.closest(
+				"section[data-manifest-key]",
+			) as HTMLElement | null;
+			const manifestKey =
+				closestSection?.getAttribute("data-manifest-key") ?? null;
+
+			let ancestor: HTMLElement | null = el;
+			let componentName: string | null = null;
+			for (let i = 0; i < 10 && ancestor; i++) {
+				const ds = (ancestor as HTMLElement).dataset;
+				if (ds) {
+					componentName = ds.componentName || componentName;
+				}
+				ancestor = ancestor.parentElement;
+			}
+
+			const parents: string[] = [];
+			let p: HTMLElement | null = el.parentElement;
+			for (let i = 0; i < 4 && p && p !== document.body; i++) {
+				const pTag = p.tagName ? p.tagName.toLowerCase() : "";
+				const pId = p.id ? "#" + p.id : "";
+				const pCls =
+					p.className && typeof p.className === "string"
+						? "." + p.className.trim().split(/\s+/)[0]
+						: "";
+				parents.unshift(pTag + pId + pCls);
+				p = p.parentElement;
+			}
+
+			window.parent.postMessage(
+				{
+					type: "visual-editor::element-clicked",
+					payload: {
+						tag,
+						id,
+						classes,
+						text,
+						html,
+						manifestKey,
+						componentName,
+						parents: parents.join(" > "),
+						url: window.location.href,
+						path: window.location.pathname,
+						viewport: {
+							width: window.innerWidth,
+							height: window.innerHeight,
+						},
+						position: {
+							x: Math.round(e.clientX),
+							y: Math.round(e.clientY),
+						},
+					},
+				},
+				"*",
+			);
+		},
+		true,
+	);
+}
+
 function FileExplorerWorkspace({
 	site,
 	userEnv,
@@ -363,6 +521,12 @@ function FileExplorerWorkspace({
 	const saveActiveFileRef = useRef<(() => Promise<void>) | null>(null);
 	const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
 	const pagesContainerRef = useRef<HTMLDivElement>(null);
+	const previewIframeRef = useRef<HTMLIFrameElement>(null);
+	const visualEditorInputRef = useRef<HTMLInputElement>(null);
+	const [visualEditorElement, setVisualEditorElement] =
+		useState<VisualEditorPayload | null>(null);
+	const [visualEditorInput, setVisualEditorInput] = useState("");
+	const [isSendingVisual, setIsSendingVisual] = useState(false);
 	const [editorTheme, setEditorTheme] = useState<"vs" | "vs-dark">(() =>
 		typeof document !== "undefined" &&
 		document.documentElement.classList.contains("dark")
@@ -575,7 +739,10 @@ function FileExplorerWorkspace({
 
 	// Fetch preview URL from the env once it's ready
 	useEffect(() => {
-		if (viewMode !== "preview" || envStatus !== "ready") {
+		if (
+			(viewMode !== "preview" && viewMode !== "visual") ||
+			envStatus !== "ready"
+		) {
 			return;
 		}
 
@@ -724,6 +891,115 @@ function FileExplorerWorkspace({
 		};
 	}, [app, userEnv, selectedFile, site]);
 
+	// Listen for element clicks from the visual editor injected into the preview iframe
+	useEffect(() => {
+		if (viewMode !== "visual") {
+			setVisualEditorElement(null);
+			setVisualEditorInput("");
+			return;
+		}
+
+		const handler = (event: MessageEvent) => {
+			if (event.data?.type !== "visual-editor::element-clicked") return;
+			setVisualEditorElement(event.data.payload as VisualEditorPayload);
+			setVisualEditorInput("");
+		};
+
+		window.addEventListener("message", handler);
+		return () => window.removeEventListener("message", handler);
+	}, [viewMode]);
+
+	// Auto-focus the prompt input when an element is selected
+	useEffect(() => {
+		if (visualEditorElement) {
+			setTimeout(() => visualEditorInputRef.current?.focus(), 50);
+		}
+	}, [visualEditorElement]);
+
+	const handleVisualEditorSend = useCallback(async () => {
+		if (!visualEditorElement || !visualEditorInput.trim() || !app) return;
+		const p = visualEditorElement;
+
+		setIsSendingVisual(true);
+
+		// Fetch fresh pages list to find the exact page block for the current preview path
+		let matchedPage: PageInfo | null = null;
+		try {
+			const result = await app.callServerTool({
+				name: "get_pages",
+				arguments: { env: userEnv },
+			});
+			if (!result?.isError) {
+				const data = result.structuredContent as GetPagesOutput | undefined;
+				const allPages = data?.pages ?? [];
+				const normalize = (s: string) => s.replace(/\/+$/, "") || "/";
+				matchedPage =
+					allPages.find(
+						(pg) => normalize(pg.path) === normalize(p.path),
+					) ?? null;
+				console.log("matchedPage", matchedPage);
+				setPages(allPages);
+				setPagesLoaded(true);
+			}
+		} catch {
+			// Non-fatal — continue without page ID
+		} finally {
+			setIsSendingVisual(false);
+		}
+
+		const lines = [
+			`The user selected an element on the live preview and asked: **"${visualEditorInput.trim()}"**`,
+			"",
+			`For text content, understand which page the user is referring to and apply the change to the correct page at .deco/blocks folder.`,
+			`For code and CSS changes, understand which component the user is referring to and apply changes to the correct component.`,
+			"",
+		];
+
+		if (matchedPage) {
+			lines.push(
+				`**Page:** filepath \`.deco/blocks/${matchedPage.key}.json\``,
+				"",
+				`If the content is not inside the page, note that the page can have Global Compoments inside, the content can be there.`
+			);
+		} else {
+			lines.push(
+				`**Page path:** \`${p.path}\``,
+				"",
+			);
+		}
+
+		if (p.manifestKey) {
+			lines.push(
+				`**Section source file:** \`${p.manifestKey.replace("site/", "")}\``,
+				"",
+			);
+		}
+
+		const selector = [
+			`<${p.tag}`,
+			p.classes ? ` class="${p.classes}"` : "",
+			">",
+		].join("");
+		lines.push(`**Clicked element:** \`${selector}\``);
+		if (p.parents) lines.push(`**DOM breadcrumb:** ${p.parents} > ${p.tag}`);
+		if (p.text) lines.push(`**Text content:** "${p.text}"`);
+		if (p.componentName) lines.push(`**Component name:** ${p.componentName}`);
+		lines.push("", "**HTML snippet:**", "```html", p.html, "```");
+		lines.push("", `Site: **${site}** — Environment: **${userEnv}**`);
+		lines.push(
+			"",
+			"Please read the source file, locate the element, and apply the requested change.",
+		);
+
+		app.sendMessage({
+			role: "user",
+			content: [{ type: "text", text: lines.join("\n") }],
+		});
+
+		setVisualEditorElement(null);
+		setVisualEditorInput("");
+	}, [app, visualEditorElement, visualEditorInput, site, userEnv]);
+
 	// Close the pages dropdown when clicking outside the URL bar container
 	useEffect(() => {
 		if (!pagesOpen) return;
@@ -839,7 +1115,7 @@ function FileExplorerWorkspace({
 	);
 
 	const handleRefresh = async () => {
-		if (viewMode === "preview") {
+		if (viewMode === "preview" || viewMode === "visual") {
 			setPreviewRefreshKey((prev) => prev + 1);
 			return;
 		}
@@ -1116,35 +1392,49 @@ function FileExplorerWorkspace({
 				<div className="min-h-0 flex-1 overflow-hidden rounded-lg border bg-card">
 					<div className="flex h-full min-h-0 flex-col">
 						<div className="flex items-center justify-between gap-3 border-b px-3 py-2">
-							<div className="flex shrink-0 items-center rounded-lg border bg-muted/40">
-								<button
-									type="button"
-									className={cn(
-										"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
-										viewMode === "preview"
-											? "bg-background text-foreground shadow-xs"
-											: "text-muted-foreground hover:text-foreground",
-									)}
-									onClick={() => setViewMode("preview")}
-									disabled={envStatus !== "ready"}
-									title="Preview"
-								>
-									<Eye className="h-3.5 w-3.5" />
-								</button>
-								<button
-									type="button"
-									className={cn(
-										"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
-										viewMode === "code"
-											? "bg-background text-foreground shadow-xs"
-											: "text-muted-foreground hover:text-foreground",
-									)}
-									onClick={() => setViewMode("code")}
-									title="Code"
-								>
-									<FileCode2 className="h-3.5 w-3.5" />
-								</button>
-							</div>
+						<div className="flex shrink-0 items-center rounded-lg border bg-muted/40">
+							<button
+								type="button"
+								className={cn(
+									"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
+									viewMode === "preview"
+										? "bg-background text-foreground shadow-xs"
+										: "text-muted-foreground hover:text-foreground",
+								)}
+								onClick={() => setViewMode("preview")}
+								disabled={envStatus !== "ready"}
+								title="Preview"
+							>
+								<Eye className="h-3.5 w-3.5" />
+							</button>
+							<button
+								type="button"
+								className={cn(
+									"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
+									viewMode === "visual"
+										? "bg-background text-foreground shadow-xs"
+										: "text-muted-foreground hover:text-foreground",
+								)}
+								onClick={() => setViewMode("visual")}
+								disabled={envStatus !== "ready"}
+								title="Visual editor — click any element to ask the AI about it"
+							>
+								<MousePointer2 className="h-3.5 w-3.5" />
+							</button>
+							<button
+								type="button"
+								className={cn(
+									"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
+									viewMode === "code"
+										? "bg-background text-foreground shadow-xs"
+										: "text-muted-foreground hover:text-foreground",
+								)}
+								onClick={() => setViewMode("code")}
+								title="Code"
+							>
+								<FileCode2 className="h-3.5 w-3.5" />
+							</button>
+						</div>
 							<div
 								ref={pagesContainerRef}
 								className="relative min-w-0 flex-1 max-w-xl"
@@ -1626,14 +1916,107 @@ function FileExplorerWorkspace({
 																</div>
 															</div>
 														)}
-														{previewUrl ? (
-															<iframe
-																key={previewUrl}
-																src={previewUrl}
-																title={`Preview of ${userEnv} at ${previewPath}`}
-																className="h-full w-full border-0"
-															/>
-														) : null}
+														{viewMode === "visual" && previewUrl && !visualEditorElement && (
+																<div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 rounded-full border border-violet-400/40 bg-violet-500/90 px-3 py-1 text-xs font-medium text-white shadow-md backdrop-blur-sm pointer-events-none select-none">
+																	<MousePointer2 className="h-3 w-3" />
+																	Click any element to ask the AI
+																</div>
+															)}
+															{viewMode === "visual" && visualEditorElement && (() => {
+																	const POPUP_W = 320;
+																	const POPUP_H = 44;
+																	const PAD = 12;
+																	const { x, y } = visualEditorElement.position;
+																	const { width: vw, height: vh } = visualEditorElement.viewport;
+																	const left = Math.max(PAD, Math.min(x - POPUP_W / 2, vw - POPUP_W - PAD));
+																	const isNearBottom = y / vh > 0.68;
+																	const top = isNearBottom
+																		? Math.max(PAD, y - POPUP_H - 18)
+																		: Math.min(y + 18, vh - POPUP_H - PAD);
+																	return (
+																		<div
+																			className="absolute z-30 pointer-events-none"
+																			style={{
+																				left: `${(left / vw) * 100}%`,
+																				top: `${(top / vh) * 100}%`,
+																				width: `${POPUP_W}px`,
+																			}}
+																		>
+																	<form
+																		className="pointer-events-auto flex w-full items-center gap-1.5 rounded-full border border-border bg-background/95 px-3 py-1.5 shadow-xl backdrop-blur-sm"
+																		onSubmit={(e) => {
+																			e.preventDefault();
+																			void handleVisualEditorSend();
+																		}}
+																	>
+																		<input
+																			ref={visualEditorInputRef}
+																			type="text"
+																			value={visualEditorInput}
+																			onChange={(e) => setVisualEditorInput(e.target.value)}
+																			onKeyDown={(e) => {
+																				if (e.key === "Escape") {
+																					setVisualEditorElement(null);
+																					setVisualEditorInput("");
+																				}
+																			}}
+																			placeholder="Ask the AI..."
+																			className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+																		/>
+																		<button
+																			type="submit"
+																			disabled={!visualEditorInput.trim() || isSendingVisual}
+																			className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-30"
+																			title="Send"
+																		>
+																			{isSendingVisual ? (
+																				<Loader2 className="h-3 w-3 animate-spin" />
+																			) : (
+																				<svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+																					<path d="M5 9V1M1 5l4-4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+																				</svg>
+																			)}
+																		</button>
+																	</form>
+																	</div>
+																);
+															})()}
+															{previewUrl ? (
+																<iframe
+																	key={previewUrl}
+																	ref={previewIframeRef}
+																	src={previewUrl}
+																	title={`Preview of ${userEnv} at ${previewPath}`}
+																	className="h-full w-full border-0"
+																	onLoad={() => {
+																		if (viewMode !== "visual") return;
+																		const win =
+																			previewIframeRef.current
+																				?.contentWindow;
+																		if (!win) return;
+																		try {
+																			const script =
+																				win.document.createElement(
+																					"script",
+																				);
+																			script.textContent = `(${visualEditorScript.toString()})()`;
+																			win.document.head.appendChild(
+																				script,
+																			);
+																		} catch {
+																			win.postMessage(
+																				{
+																					type: "editor::inject",
+																					args: {
+																						script: `(${visualEditorScript.toString()})()`,
+																					},
+																				},
+																				"*",
+																			);
+																		}
+																	}}
+																/>
+															) : null}
 													</div>
 												</div>
 											)}
