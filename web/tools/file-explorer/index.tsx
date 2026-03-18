@@ -364,25 +364,20 @@ function visualEditorScript() {
 			if (!el || el === highlight || el === badge) return;
 			const r = el.getBoundingClientRect();
 			highlight.style.display = "block";
-			highlight.style.top = r.top + "px";
-			highlight.style.left = r.left + "px";
-			highlight.style.width = r.width + "px";
-			highlight.style.height = r.height + "px";
+			highlight.style.top = `${r.top}px`;
+			highlight.style.left = `${r.left}px`;
+			highlight.style.width = `${r.width}px`;
+			highlight.style.height = `${r.height}px`;
 			const tag = el.tagName.toLowerCase();
-			const id = el.id ? "#" + el.id : "";
+			const id = el.id ? `#${el.id}` : "";
 			const cls =
 				el.className && typeof el.className === "string"
-					? "." +
-						el.className
-							.trim()
-							.split(/\s+/)
-							.slice(0, 2)
-							.join(".")
+					? `.${el.className.trim().split(/\s+/).slice(0, 2).join(".")}`
 					: "";
 			badge.textContent = tag + id + cls;
 			badge.style.display = "block";
-			badge.style.top = Math.max(0, r.top - 20) + "px";
-			badge.style.left = r.left + "px";
+			badge.style.top = `${Math.max(0, r.top - 20)}px`;
+			badge.style.left = `${r.left}px`;
 		},
 		true,
 	);
@@ -440,10 +435,10 @@ function visualEditorScript() {
 			let p: HTMLElement | null = el.parentElement;
 			for (let i = 0; i < 4 && p && p !== document.body; i++) {
 				const pTag = p.tagName ? p.tagName.toLowerCase() : "";
-				const pId = p.id ? "#" + p.id : "";
+				const pId = p.id ? `#${p.id}` : "";
 				const pCls =
 					p.className && typeof p.className === "string"
-						? "." + p.className.trim().split(/\s+/)[0]
+						? `.${p.className.trim().split(/\s+/)[0]}`
 						: "";
 				parents.unshift(pTag + pId + pCls);
 				p = p.parentElement;
@@ -934,9 +929,8 @@ function FileExplorerWorkspace({
 				const allPages = data?.pages ?? [];
 				const normalize = (s: string) => s.replace(/\/+$/, "") || "/";
 				matchedPage =
-					allPages.find(
-						(pg) => normalize(pg.path) === normalize(p.path),
-					) ?? null;
+					allPages.find((pg) => normalize(pg.path) === normalize(p.path)) ??
+					null;
 				console.log("matchedPage", matchedPage);
 				setPages(allPages);
 				setPagesLoaded(true);
@@ -959,13 +953,10 @@ function FileExplorerWorkspace({
 			lines.push(
 				`**Page:** filepath \`.deco/blocks/${matchedPage.key}.json\``,
 				"",
-				`If the content is not inside the page, note that the page can have Global Compoments inside, the content can be there.`
+				`If the content is not inside the page, note that the page can have Global Compoments inside, the content can be there.`,
 			);
 		} else {
-			lines.push(
-				`**Page path:** \`${p.path}\``,
-				"",
-			);
+			lines.push(`**Page path:** \`${p.path}\``, "");
 		}
 
 		if (p.manifestKey) {
@@ -1392,49 +1383,49 @@ function FileExplorerWorkspace({
 				<div className="min-h-0 flex-1 overflow-hidden rounded-lg border bg-card">
 					<div className="flex h-full min-h-0 flex-col">
 						<div className="flex items-center justify-between gap-3 border-b px-3 py-2">
-						<div className="flex shrink-0 items-center rounded-lg border bg-muted/40">
-							<button
-								type="button"
-								className={cn(
-									"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
-									viewMode === "preview"
-										? "bg-background text-foreground shadow-xs"
-										: "text-muted-foreground hover:text-foreground",
-								)}
-								onClick={() => setViewMode("preview")}
-								disabled={envStatus !== "ready"}
-								title="Preview"
-							>
-								<Eye className="h-3.5 w-3.5" />
-							</button>
-							<button
-								type="button"
-								className={cn(
-									"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
-									viewMode === "visual"
-										? "bg-background text-foreground shadow-xs"
-										: "text-muted-foreground hover:text-foreground",
-								)}
-								onClick={() => setViewMode("visual")}
-								disabled={envStatus !== "ready"}
-								title="Visual editor — click any element to ask the AI about it"
-							>
-								<MousePointer2 className="h-3.5 w-3.5" />
-							</button>
-							<button
-								type="button"
-								className={cn(
-									"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
-									viewMode === "code"
-										? "bg-background text-foreground shadow-xs"
-										: "text-muted-foreground hover:text-foreground",
-								)}
-								onClick={() => setViewMode("code")}
-								title="Code"
-							>
-								<FileCode2 className="h-3.5 w-3.5" />
-							</button>
-						</div>
+							<div className="flex shrink-0 items-center rounded-lg border bg-muted/40">
+								<button
+									type="button"
+									className={cn(
+										"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
+										viewMode === "preview"
+											? "bg-background text-foreground shadow-xs"
+											: "text-muted-foreground hover:text-foreground",
+									)}
+									onClick={() => setViewMode("preview")}
+									disabled={envStatus !== "ready"}
+									title="Preview"
+								>
+									<Eye className="h-3.5 w-3.5" />
+								</button>
+								<button
+									type="button"
+									className={cn(
+										"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
+										viewMode === "visual"
+											? "bg-background text-foreground shadow-xs"
+											: "text-muted-foreground hover:text-foreground",
+									)}
+									onClick={() => setViewMode("visual")}
+									disabled={envStatus !== "ready"}
+									title="Visual editor — click any element to ask the AI about it"
+								>
+									<MousePointer2 className="h-3.5 w-3.5" />
+								</button>
+								<button
+									type="button"
+									className={cn(
+										"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
+										viewMode === "code"
+											? "bg-background text-foreground shadow-xs"
+											: "text-muted-foreground hover:text-foreground",
+									)}
+									onClick={() => setViewMode("code")}
+									title="Code"
+								>
+									<FileCode2 className="h-3.5 w-3.5" />
+								</button>
+							</div>
 							<div
 								ref={pagesContainerRef}
 								className="relative min-w-0 flex-1 max-w-xl"
@@ -1916,107 +1907,128 @@ function FileExplorerWorkspace({
 																</div>
 															</div>
 														)}
-														{viewMode === "visual" && previewUrl && !visualEditorElement && (
+														{viewMode === "visual" &&
+															previewUrl &&
+															!visualEditorElement && (
 																<div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 rounded-full border border-violet-400/40 bg-violet-500/90 px-3 py-1 text-xs font-medium text-white shadow-md backdrop-blur-sm pointer-events-none select-none">
 																	<MousePointer2 className="h-3 w-3" />
 																	Click any element to ask the AI
 																</div>
 															)}
-															{viewMode === "visual" && visualEditorElement && (() => {
-																	const POPUP_W = 320;
-																	const POPUP_H = 44;
-																	const PAD = 12;
-																	const { x, y } = visualEditorElement.position;
-																	const { width: vw, height: vh } = visualEditorElement.viewport;
-																	const left = Math.max(PAD, Math.min(x - POPUP_W / 2, vw - POPUP_W - PAD));
-																	const isNearBottom = y / vh > 0.68;
-																	const top = isNearBottom
-																		? Math.max(PAD, y - POPUP_H - 18)
-																		: Math.min(y + 18, vh - POPUP_H - PAD);
-																	return (
-																		<div
-																			className="absolute z-30 pointer-events-none"
-																			style={{
-																				left: `${(left / vw) * 100}%`,
-																				top: `${(top / vh) * 100}%`,
-																				width: `${POPUP_W}px`,
-																			}}
-																		>
-																	<form
-																		className="pointer-events-auto flex w-full items-center gap-1.5 rounded-full border border-border bg-background/95 px-3 py-1.5 shadow-xl backdrop-blur-sm"
-																		onSubmit={(e) => {
-																			e.preventDefault();
-																			void handleVisualEditorSend();
+														{viewMode === "visual" &&
+															visualEditorElement &&
+															(() => {
+																const POPUP_W = 320;
+																const POPUP_H = 44;
+																const PAD = 12;
+																const { x, y } = visualEditorElement.position;
+																const { width: vw, height: vh } =
+																	visualEditorElement.viewport;
+																const left = Math.max(
+																	PAD,
+																	Math.min(x - POPUP_W / 2, vw - POPUP_W - PAD),
+																);
+																const isNearBottom = y / vh > 0.68;
+																const top = isNearBottom
+																	? Math.max(PAD, y - POPUP_H - 18)
+																	: Math.min(y + 18, vh - POPUP_H - PAD);
+																return (
+																	<div
+																		className="absolute z-30 pointer-events-none"
+																		style={{
+																			left: `${(left / vw) * 100}%`,
+																			top: `${(top / vh) * 100}%`,
+																			width: `${POPUP_W}px`,
 																		}}
 																	>
-																		<input
-																			ref={visualEditorInputRef}
-																			type="text"
-																			value={visualEditorInput}
-																			onChange={(e) => setVisualEditorInput(e.target.value)}
-																			onKeyDown={(e) => {
-																				if (e.key === "Escape") {
-																					setVisualEditorElement(null);
-																					setVisualEditorInput("");
-																				}
+																		<form
+																			className="pointer-events-auto flex w-full items-center gap-1.5 rounded-full border border-border bg-background/95 px-3 py-1.5 shadow-xl backdrop-blur-sm"
+																			onSubmit={(e) => {
+																				e.preventDefault();
+																				void handleVisualEditorSend();
 																			}}
-																			placeholder="Ask the AI..."
-																			className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-																		/>
-																		<button
-																			type="submit"
-																			disabled={!visualEditorInput.trim() || isSendingVisual}
-																			className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-30"
-																			title="Send"
 																		>
-																			{isSendingVisual ? (
-																				<Loader2 className="h-3 w-3 animate-spin" />
-																			) : (
-																				<svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-																					<path d="M5 9V1M1 5l4-4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-																				</svg>
-																			)}
-																		</button>
-																	</form>
+																			<input
+																				ref={visualEditorInputRef}
+																				type="text"
+																				value={visualEditorInput}
+																				onChange={(e) =>
+																					setVisualEditorInput(e.target.value)
+																				}
+																				onKeyDown={(e) => {
+																					if (e.key === "Escape") {
+																						setVisualEditorElement(null);
+																						setVisualEditorInput("");
+																					}
+																				}}
+																				placeholder="Ask the AI..."
+																				className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+																			/>
+																			<button
+																				type="submit"
+																				disabled={
+																					!visualEditorInput.trim() ||
+																					isSendingVisual
+																				}
+																				className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-30"
+																				title="Send"
+																			>
+																				{isSendingVisual ? (
+																					<Loader2 className="h-3 w-3 animate-spin" />
+																				) : (
+																					<svg
+																						width="10"
+																						height="10"
+																						viewBox="0 0 10 10"
+																						fill="none"
+																						aria-hidden="true"
+																					>
+																						<title>Send</title>
+																						<path
+																							d="M5 9V1M1 5l4-4 4 4"
+																							stroke="currentColor"
+																							strokeWidth="1.5"
+																							strokeLinecap="round"
+																							strokeLinejoin="round"
+																						/>
+																					</svg>
+																				)}
+																			</button>
+																		</form>
 																	</div>
 																);
 															})()}
-															{previewUrl ? (
-																<iframe
-																	key={previewUrl}
-																	ref={previewIframeRef}
-																	src={previewUrl}
-																	title={`Preview of ${userEnv} at ${previewPath}`}
-																	className="h-full w-full border-0"
-																	onLoad={() => {
-																		if (viewMode !== "visual") return;
-																		const win =
-																			previewIframeRef.current
-																				?.contentWindow;
-																		if (!win) return;
-																		try {
-																			const script =
-																				win.document.createElement(
-																					"script",
-																				);
-																			script.textContent = `(${visualEditorScript.toString()})()`;
-																			win.document.head.appendChild(
-																				script,
-																			);
-																		} catch {
-																			win.postMessage(
-																				{
-																					type: "editor::inject",
-																					args: {
-																						script: `(${visualEditorScript.toString()})()`,
-																					},
+														{previewUrl ? (
+															<iframe
+																key={previewUrl}
+																ref={previewIframeRef}
+																src={previewUrl}
+																title={`Preview of ${userEnv} at ${previewPath}`}
+																className="h-full w-full border-0"
+																onLoad={() => {
+																	if (viewMode !== "visual") return;
+																	const win =
+																		previewIframeRef.current?.contentWindow;
+																	if (!win) return;
+																	try {
+																		const script =
+																			win.document.createElement("script");
+																		script.textContent = `(${visualEditorScript.toString()})()`;
+																		win.document.head.appendChild(script);
+																	} catch {
+																		win.postMessage(
+																			{
+																				type: "editor::inject",
+																				args: {
+																					script: `(${visualEditorScript.toString()})()`,
 																				},
-																				"*",
-																			);
-																		}
-																	}}
-																/>
-															) : null}
+																			},
+																			"*",
+																		);
+																	}
+																}}
+															/>
+														) : null}
 													</div>
 												</div>
 											)}

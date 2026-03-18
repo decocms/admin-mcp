@@ -337,9 +337,7 @@ export const grepFilesInputSchema = z.object({
 	filepath: z
 		.string()
 		.optional()
-		.describe(
-			"Specific file path to search within. Omit to search all files.",
-		),
+		.describe("Specific file path to search within. Omit to search all files."),
 	includePattern: z
 		.string()
 		.optional()
