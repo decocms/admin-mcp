@@ -1,4 +1,4 @@
-# deco Admin MCP
+# deco Admin MCP 
 
 An MCP server for managing [deco.cx](https://deco.cx) sites — with interactive UIs built as MCP Apps. Manage assets, environments, and AI sandbox tasks directly from your MCP host (Claude Desktop, Cursor, etc.).
 
