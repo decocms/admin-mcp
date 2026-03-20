@@ -199,6 +199,13 @@ export const readFileOutputSchema = z
 	.object({
 		content: z.string().nullable(),
 		timestamp: z.number().optional(),
+		metadata: z.object({
+			kind: z.string().optional(),
+			name: z.string().optional(),
+			path: z.string().optional(),
+			blockType: z.string().optional(),
+			__resolveType: z.string().optional(),
+		}).optional(),
 	})
 	.passthrough();
 export type ReadFileOutput = z.infer<typeof readFileOutputSchema>;
@@ -227,6 +234,8 @@ export const readFileTool = (env: Env) =>
 				},
 				apiKey,
 			)) as ReadFileOutput;
+
+			console.log("result", result);
 
 			return result;
 		},
