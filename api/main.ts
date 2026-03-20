@@ -1,4 +1,5 @@
 import { withRuntime } from "@decocms/runtime";
+import { storefrontSkillsPrompts } from "./prompts/storefront-skills.ts";
 import { assetsAppResource } from "./resources/assets.ts";
 import { environmentsAppResource } from "./resources/environments.ts";
 import { fileExplorerAppResource } from "./resources/file-explorer.ts";
@@ -43,6 +44,7 @@ const runtime = withRuntime<Env, typeof StateSchema>({
 		state: StateSchema,
 	},
 	tools,
+	prompts: storefrontSkillsPrompts,
 	resources: [
 		assetsAppResource,
 		environmentsAppResource,
