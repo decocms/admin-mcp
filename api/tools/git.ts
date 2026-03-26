@@ -129,7 +129,7 @@ export const gitPublishTool = (cfEnv: Env) =>
 	createTool({
 		id: "git_publish",
 		description:
-			"Publish changes from a sandbox environment to the main branch. This commits and pushes all local changes.",
+			"Always ask user before use this tool.Publish changes from a sandbox environment to the main branch. This commits and pushes all local changes.",
 		inputSchema: gitPublishInputSchema,
 		outputSchema: gitPublishResultSchema,
 		annotations: {
