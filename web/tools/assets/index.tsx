@@ -34,8 +34,8 @@ import type {
 	Asset,
 	AssetsInput,
 	AssetsOutput,
+	UploadAssetOutput,
 } from "../../../api/tools/assets.ts";
-import type { UploadAssetOutput } from "../../../api/tools/upload-asset.ts";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 

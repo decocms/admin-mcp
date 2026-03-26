@@ -1,6 +1,5 @@
 import { analyticsQueryTool } from "./analytics-query.ts";
-import { assetsTool } from "./assets.ts";
-import { deleteAssetTool } from "./delete-asset.ts";
+import { assetsTool, deleteAssetTool, uploadAssetTool } from "./assets.ts";
 import {
 	createEnvironmentTool,
 	deleteEnvironmentTool,
@@ -36,8 +35,6 @@ import {
 	getMonitorTopCountriesTool,
 	getMonitorTopPathsTool,
 } from "./monitor.ts";
-import { uploadAssetTool } from "./upload-asset.ts";
-
 export const tools = [
 	analyticsQueryTool,
 	assetsTool,

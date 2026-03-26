@@ -1,4 +1,5 @@
-import Editor, { loader, type OnMount } from "@monaco-editor/react";
+import Editor, { loader } from "@monaco-editor/react";
+import type { OnMount } from "@monaco-editor/react";
 import {
 	ChevronDown,
 	ChevronRight,
@@ -80,217 +81,49 @@ import type {
 	ReadFileOutput,
 	WriteFileOutput,
 } from "../../../api/tools/files.ts";
+import type { GitStatus } from "../../../api/tools/git.ts";
+import { PublishDialog } from "./publish-dialog.tsx";
+import type {
+	EnvStatus,
+	FileBuffer,
+	FlatNode,
+	PreviewViewport,
+	TreeNode,
+	ViewMode,
+	VisualEditorPayload,
+} from "./types.ts";
+import {
+	buildFileTree,
+	flattenTree,
+	getAncestorDirectories,
+	getBasename,
+	getLanguageFromPath,
+	normalizePath,
+} from "./utils.ts";
 
-type ViewMode = "code" | "preview" | "visual";
-type PreviewViewport = "desktop" | "mobile";
-type EnvStatus = "warming-up" | "waiting" | "ready";
-
-type TreeNode = {
-	name: string;
-	path: string;
-	kind: "directory" | "file";
-	children: TreeNode[];
-};
-
-type FlatNode = {
-	node: TreeNode;
-	depth: number;
-};
-
-type FileBuffer = {
-	savedContent: string;
-	editorValue: string;
-	loaded: boolean;
-};
-
-type VisualEditorPayload = {
-	tag: string;
-	id: string;
-	classes: string;
-	text: string;
-	html: string;
-	manifestKey: string | null;
-	componentName: string | null;
-	parents: string;
-	url: string;
-	path: string;
-	viewport: { width: number; height: number };
-	position: { x: number; y: number };
-};
+// ─── monaco setup ─────────────────────────────────────────────────────────────
 
 loader.config({ monaco });
 
 globalThis.MonacoEnvironment = {
 	getWorker(_workerId, label) {
-		if (label === "json") {
-			return new jsonWorker();
-		}
-		if (label === "css" || label === "scss" || label === "less") {
+		if (label === "json") return new jsonWorker();
+		if (label === "css" || label === "scss" || label === "less")
 			return new cssWorker();
-		}
-		if (label === "html" || label === "handlebars" || label === "razor") {
+		if (label === "html" || label === "handlebars" || label === "razor")
 			return new htmlWorker();
-		}
-		if (label === "typescript" || label === "javascript") {
-			return new tsWorker();
-		}
+		if (label === "typescript" || label === "javascript") return new tsWorker();
 		return new editorWorker();
 	},
 };
 
-function normalizePath(path: string) {
-	if (!path.trim()) {
-		return "/";
-	}
+// ─── constants ────────────────────────────────────────────────────────────────
 
-	const normalized = path.startsWith("/") ? path : `/${path}`;
-	return normalized.replace(/\/+/g, "/");
-}
+const WARMUP_TOAST_ID = "env-warmup";
+const WARMUP_TIMEOUT_MS = 5000;
+const POLL_INTERVAL_MS = 5000;
 
-function getBasename(path: string) {
-	const normalized = normalizePath(path);
-	return normalized.split("/").filter(Boolean).pop() ?? "/";
-}
-
-function getLanguageFromPath(filepath: string | null) {
-	if (!filepath) {
-		return "plaintext";
-	}
-
-	const normalized = filepath.toLowerCase();
-
-	if (normalized.endsWith(".tsx") || normalized.endsWith(".ts")) {
-		return "typescript";
-	}
-	if (
-		normalized.endsWith(".jsx") ||
-		normalized.endsWith(".js") ||
-		normalized.endsWith(".mjs") ||
-		normalized.endsWith(".cjs")
-	) {
-		return "javascript";
-	}
-	if (normalized.endsWith(".json")) {
-		return "json";
-	}
-	if (normalized.endsWith(".md") || normalized.endsWith(".mdx")) {
-		return "markdown";
-	}
-	if (normalized.endsWith(".css")) {
-		return "css";
-	}
-	if (normalized.endsWith(".scss")) {
-		return "scss";
-	}
-	if (normalized.endsWith(".html")) {
-		return "html";
-	}
-	if (normalized.endsWith(".yaml") || normalized.endsWith(".yml")) {
-		return "yaml";
-	}
-	if (normalized.endsWith(".xml") || normalized.endsWith(".svg")) {
-		return "xml";
-	}
-	if (normalized.endsWith(".py")) {
-		return "python";
-	}
-	if (normalized.endsWith(".sql")) {
-		return "sql";
-	}
-	if (normalized.endsWith(".sh")) {
-		return "shell";
-	}
-
-	return "plaintext";
-}
-
-function getAncestorDirectories(filepath: string) {
-	const parts = normalizePath(filepath).split("/").filter(Boolean);
-	const directories = ["/"];
-	let current = "";
-
-	for (const part of parts.slice(0, -1)) {
-		current += `/${part}`;
-		directories.push(current);
-	}
-
-	return directories;
-}
-
-function buildFileTree(files: string[]): TreeNode[] {
-	const root: TreeNode = {
-		name: "/",
-		path: "/",
-		kind: "directory",
-		children: [],
-	};
-
-	for (const rawFile of files) {
-		const file = normalizePath(rawFile);
-		const parts = file.split("/").filter(Boolean);
-		let current = root;
-		let currentPath = "";
-
-		parts.forEach((part, index) => {
-			currentPath += `/${part}`;
-			const isFile = index === parts.length - 1;
-			let child = current.children.find((entry) => entry.name === part);
-
-			if (!child) {
-				child = {
-					name: part,
-					path: currentPath,
-					kind: isFile ? "file" : "directory",
-					children: [],
-				};
-				current.children.push(child);
-			}
-
-			current = child;
-		});
-	}
-
-	const sortNodes = (nodes: TreeNode[]) => {
-		nodes.sort((a, b) => {
-			if (a.kind !== b.kind) {
-				return a.kind === "directory" ? -1 : 1;
-			}
-
-			return a.name.localeCompare(b.name);
-		});
-
-		for (const node of nodes) {
-			if (node.children.length > 0) {
-				sortNodes(node.children);
-			}
-		}
-	};
-
-	sortNodes(root.children);
-	return root.children;
-}
-
-function flattenTree(
-	nodes: TreeNode[],
-	expandedDirectories: Set<string>,
-	depth = 0,
-): FlatNode[] {
-	const rows: FlatNode[] = [];
-
-	for (const node of nodes) {
-		rows.push({ node, depth });
-
-		if (
-			node.kind === "directory" &&
-			node.children.length > 0 &&
-			expandedDirectories.has(node.path)
-		) {
-			rows.push(...flattenTree(node.children, expandedDirectories, depth + 1));
-		}
-	}
-
-	return rows;
-}
+// ─── small view components ────────────────────────────────────────────────────
 
 function Spinner({ label }: { label: string }) {
 	return (
@@ -311,9 +144,7 @@ function ErrorView({ error }: { error?: string }) {
 					<CardTitle className="text-destructive text-base">Error</CardTitle>
 				</CardHeader>
 				<CardContent>
-					<p className="text-sm text-muted-foreground">
-						{error ?? "Unknown error"}
-					</p>
+					<p className="text-sm text-muted-foreground">{error ?? "Unknown error"}</p>
 				</CardContent>
 			</Card>
 		</div>
@@ -334,13 +165,10 @@ function CancelledView() {
 	);
 }
 
-const WARMUP_TOAST_ID = "env-warmup";
-const WARMUP_TIMEOUT_MS = 5000;
-const POLL_INTERVAL_MS = 5000;
+// ─── visual editor script ─────────────────────────────────────────────────────
 
 function visualEditorScript() {
-	if ((window as unknown as Record<string, unknown>).__visualEditorActive)
-		return;
+	if ((window as unknown as Record<string, unknown>).__visualEditorActive) return;
 	(window as unknown as Record<string, unknown>).__visualEditorActive = true;
 
 	const cursorStyle = document.createElement("style");
@@ -425,9 +253,7 @@ function visualEditorScript() {
 			let componentName: string | null = null;
 			for (let i = 0; i < 10 && ancestor; i++) {
 				const ds = (ancestor as HTMLElement).dataset;
-				if (ds) {
-					componentName = ds.componentName || componentName;
-				}
+				if (ds) componentName = ds.componentName || componentName;
 				ancestor = ancestor.parentElement;
 			}
 
@@ -458,14 +284,8 @@ function visualEditorScript() {
 						parents: parents.join(" > "),
 						url: window.location.href,
 						path: window.location.pathname,
-						viewport: {
-							width: window.innerWidth,
-							height: window.innerHeight,
-						},
-						position: {
-							x: Math.round(e.clientX),
-							y: Math.round(e.clientY),
-						},
+						viewport: { width: window.innerWidth, height: window.innerHeight },
+						position: { x: Math.round(e.clientX), y: Math.round(e.clientY) },
 					},
 				},
 				"*",
@@ -474,6 +294,8 @@ function visualEditorScript() {
 		true,
 	);
 }
+
+// ─── main workspace ───────────────────────────────────────────────────────────
 
 function FileExplorerWorkspace({
 	site,
@@ -487,13 +309,13 @@ function FileExplorerWorkspace({
 	productionUrl: string;
 }) {
 	const app = useMcpApp();
+
+	// ── file/env state ──────────────────────────────────────────────────────────
 	const [envStatus, setEnvStatus] = useState<EnvStatus>("warming-up");
 	const [files, setFiles] = useState<string[]>([]);
 	const [search, setSearch] = useState("");
 	const [openFiles, setOpenFiles] = useState<string[]>([]);
-	const [fileBuffers, setFileBuffers] = useState<Record<string, FileBuffer>>(
-		{},
-	);
+	const [fileBuffers, setFileBuffers] = useState<Record<string, FileBuffer>>({});
 	const [selectedFile, setSelectedFile] = useState<string | null>(null);
 	const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(
 		() => new Set(["/"]),
@@ -504,20 +326,24 @@ function FileExplorerWorkspace({
 	const [isDeleting, setIsDeleting] = useState(false);
 	const [listError, setListError] = useState<string>();
 	const [fileError, setFileError] = useState<string>();
+
+	// ── create file dialog state ────────────────────────────────────────────────
 	const [createDialogOpen, setCreateDialogOpen] = useState(false);
 	const [newFilePath, setNewFilePath] = useState("");
 	const [createError, setCreateError] = useState<string>();
 	const [isCreating, setIsCreating] = useState(false);
+
+	// ── pages / url bar state ───────────────────────────────────────────────────
 	const [pages, setPages] = useState<PageInfo[]>([]);
 	const [pagesLoaded, setPagesLoaded] = useState(false);
 	const [pagesLoading, setPagesLoading] = useState(false);
 	const [pagesOpen, setPagesOpen] = useState(false);
-	const selectedFileRef = useRef<string | null>(null);
-	const saveActiveFileRef = useRef<(() => Promise<void>) | null>(null);
-	const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
-	const pagesContainerRef = useRef<HTMLDivElement>(null);
-	const previewIframeRef = useRef<HTMLIFrameElement>(null);
-	const visualEditorInputRef = useRef<HTMLInputElement>(null);
+
+	// ── publish ─────────────────────────────────────────────────────────────────
+	const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
+	const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+
+	// ── editor / preview state ──────────────────────────────────────────────────
 	const [visualEditorElement, setVisualEditorElement] =
 		useState<VisualEditorPayload | null>(null);
 	const [visualEditorInput, setVisualEditorInput] = useState("");
@@ -538,52 +364,313 @@ function FileExplorerWorkspace({
 	const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 	const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
 
+	// ── refs ────────────────────────────────────────────────────────────────────
+	const selectedFileRef = useRef<string | null>(null);
+	const saveActiveFileRef = useRef<(() => Promise<void>) | null>(null);
+	const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
+	const pagesContainerRef = useRef<HTMLDivElement>(null);
+	const previewIframeRef = useRef<HTMLIFrameElement>(null);
+	const visualEditorInputRef = useRef<HTMLInputElement>(null);
+
+	// ── computed ────────────────────────────────────────────────────────────────
+	const isReadonly = false;
+	const envUrl = userEnvUrl;
+
+
+	const currentFileBuffer = selectedFile ? fileBuffers[selectedFile] : undefined;
+
+	const isPathDirty = useCallback(
+		(filepath: string) => {
+			const buf = fileBuffers[filepath];
+			return buf ? buf.editorValue !== buf.savedContent : false;
+		},
+		[fileBuffers],
+	);
+
+	const hasUnsavedFiles = openFiles.some((fp) => {
+		const buf = fileBuffers[fp];
+		return buf ? buf.editorValue !== buf.savedContent : false;
+	});
+
+	const filteredFiles = useMemo(() => {
+		if (!search.trim()) return files;
+		const term = search.toLowerCase();
+		return files.filter((f) => f.toLowerCase().includes(term));
+	}, [files, search]);
+
+	const tree = useMemo(() => buildFileTree(filteredFiles), [filteredFiles]);
+	const flatNodes = useMemo(
+		() => flattenTree(tree, expandedDirectories),
+		[expandedDirectories, tree],
+	);
+
+	const filteredPages = useMemo(() => {
+		const term = previewPathInput.trim();
+		if (!term || term === "/") return pages;
+		return pages.filter(
+			(p) =>
+				p.path.toLowerCase().includes(term.toLowerCase()) ||
+				p.name.toLowerCase().includes(term.toLowerCase()),
+		);
+	}, [pages, previewPathInput]);
+
+	// ── effects ─────────────────────────────────────────────────────────────────
+
 	useEffect(() => {
 		selectedFileRef.current = selectedFile;
 	}, [selectedFile]);
 
 	useEffect(() => {
-		if (typeof document === "undefined") {
-			return;
-		}
-
+		if (typeof document === "undefined") return;
 		const root = document.documentElement;
-		const updateTheme = () => {
+		const update = () =>
 			setEditorTheme(root.classList.contains("dark") ? "vs-dark" : "vs");
-		};
-
-		updateTheme();
-
-		const observer = new MutationObserver(updateTheme);
-		observer.observe(root, {
-			attributes: true,
-			attributeFilter: ["class"],
-		});
-
+		update();
+		const observer = new MutationObserver(update);
+		observer.observe(root, { attributes: true, attributeFilter: ["class"] });
 		return () => observer.disconnect();
 	}, []);
 
-	const isReadonly = false;
-	const envUrl = userEnvUrl;
+	useEffect(() => {
+		if (!app) return;
+		const parts = [];
+		if (site) parts.push(`Current site: **${site}**`);
+		parts.push(`Environment: **${userEnv}**`);
+		if (selectedFile) parts.push(`Selected file: **${selectedFile}**`);
+		app
+			.updateModelContext({
+				content: parts.length > 0 ? [{ type: "text", text: parts.join("\n\n") }] : [],
+			})
+			.catch(() => {});
+		return () => {
+			app.updateModelContext({ content: [] }).catch(() => {});
+		};
+	}, [app, userEnv, selectedFile, site]);
 
-	const currentFileBuffer = selectedFile
-		? fileBuffers[selectedFile]
-		: undefined;
-	const isPathDirty = useCallback(
-		(filepath: string) => {
-			const fileBuffer = fileBuffers[filepath];
-			return fileBuffer
-				? fileBuffer.editorValue !== fileBuffer.savedContent
-				: false;
-		},
-		[fileBuffers],
-	);
-	const hasUnsavedFiles = openFiles.some((filepath) => {
-		const fileBuffer = fileBuffers[filepath];
-		return fileBuffer
-			? fileBuffer.editorValue !== fileBuffer.savedContent
-			: false;
-	});
+	useEffect(() => {
+		if (viewMode !== "visual") {
+			setVisualEditorElement(null);
+			setVisualEditorInput("");
+			return;
+		}
+		const handler = (event: MessageEvent) => {
+			if (event.data?.type !== "visual-editor::element-clicked") return;
+			setVisualEditorElement(event.data.payload as VisualEditorPayload);
+			setVisualEditorInput("");
+		};
+		window.addEventListener("message", handler);
+		return () => window.removeEventListener("message", handler);
+	}, [viewMode]);
+
+	useEffect(() => {
+		if (visualEditorElement) {
+			setTimeout(() => visualEditorInputRef.current?.focus(), 50);
+		}
+	}, [visualEditorElement]);
+
+	// Load git status when env is ready
+	const loadGitStatus = useCallback(async () => {
+		if (!app || !userEnv) return;
+		try {
+			const result = await app.callServerTool({
+				name: "git_status",
+				arguments: { env: userEnv },
+			});
+			if (!result?.isError) {
+				const data = result?.structuredContent as GitStatus | undefined;
+				if (data) setGitStatus(data);
+			}
+		} catch {
+			// non-fatal
+		}
+	}, [app, userEnv]);
+
+	useEffect(() => {
+		if (envStatus === "ready") void loadGitStatus();
+	}, [envStatus, loadGitStatus]);
+
+	// Env warm-up
+	useEffect(() => {
+		if (!app || !userEnv) return;
+		let cancelled = false;
+		let pollTimer: ReturnType<typeof setTimeout> | null = null;
+
+		toast.loading("Starting your Live Preview…", {
+			id: WARMUP_TOAST_ID,
+			duration: Number.POSITIVE_INFINITY,
+		});
+
+		const tryListFiles = async (
+			timeoutMs?: number,
+		): Promise<string[] | null> => {
+			try {
+				const callPromise = app.callServerTool({
+					name: "list_files",
+					arguments: { env: userEnv },
+				});
+				const result = timeoutMs
+					? await Promise.race([
+							callPromise,
+							new Promise<null>((resolve) =>
+								setTimeout(() => resolve(null), timeoutMs),
+							),
+						])
+					: await callPromise;
+				if (!result || result.isError) return null;
+				const data = result.structuredContent as ListFilesOutput | undefined;
+				return data?.files ?? null;
+			} catch {
+				return null;
+			}
+		};
+
+		const onEnvReady = (initialFiles: string[]) => {
+			if (cancelled) return;
+			setFiles(initialFiles);
+			setEnvStatus("ready");
+			toast.dismiss(WARMUP_TOAST_ID);
+		};
+
+		const schedulePoll = () => {
+			pollTimer = setTimeout(async () => {
+				if (cancelled) return;
+				const f = await tryListFiles();
+				if (cancelled) return;
+				if (f !== null) onEnvReady(f);
+				else schedulePoll();
+			}, POLL_INTERVAL_MS);
+		};
+
+		tryListFiles(WARMUP_TIMEOUT_MS).then((f) => {
+			if (cancelled) return;
+			if (f !== null) {
+				onEnvReady(f);
+			} else {
+				setEnvStatus("waiting");
+				setPreviewUrl(
+					`${productionUrl}${productionUrl.endsWith("/") ? "" : "/"}?__cb=${crypto.randomUUID()}`,
+				);
+				schedulePoll();
+			}
+		});
+
+		return () => {
+			cancelled = true;
+			if (pollTimer) clearTimeout(pollTimer);
+			toast.dismiss(WARMUP_TOAST_ID);
+		};
+	}, [app, userEnv, productionUrl]);
+
+	// Fetch preview URL
+	useEffect(() => {
+		if (
+			(viewMode !== "preview" && viewMode !== "visual") ||
+			envStatus !== "ready"
+		)
+			return;
+
+		const refreshKey = previewRefreshKey;
+		let cancelled = false;
+
+		const run = async () => {
+			void refreshKey;
+			setIsLoadingPreview(true);
+			setPreviewError(undefined);
+			try {
+				const result = await app?.callServerTool({
+					name: "preview_environment",
+					arguments: {
+						name: userEnv,
+						path: previewPath,
+					} satisfies PreviewEnvironmentInput,
+				});
+				if (result?.isError) {
+					const text = result.content?.find((b) => b.type === "text");
+					throw new Error(
+						text?.type === "text" ? text.text : "Failed to load preview",
+					);
+				}
+				const data = result?.structuredContent as
+					| PreviewEnvironmentOutput
+					| undefined;
+				if (!data?.previewUrl) throw new Error("Preview URL was not returned");
+				if (!cancelled) setPreviewUrl(data.previewUrl);
+			} catch (error) {
+				if (!cancelled) {
+					setPreviewError(
+						error instanceof Error ? error.message : "Failed to load preview",
+					);
+					setPreviewUrl(null);
+				}
+			} finally {
+				if (!cancelled) setIsLoadingPreview(false);
+			}
+		};
+
+		void run();
+		return () => {
+			cancelled = true;
+		};
+	}, [app, envStatus, previewPath, previewRefreshKey, userEnv, viewMode]);
+
+	// Load file content on selection
+	useEffect(() => {
+		if (!userEnv || !selectedFile) return;
+		if (fileBuffers[selectedFile]?.loaded) return;
+
+		let cancelled = false;
+		const run = async () => {
+			setIsLoadingFile(true);
+			setFileError(undefined);
+			try {
+				const result = await app?.callServerTool({
+					name: "read_file",
+					arguments: { env: userEnv, filepath: selectedFile },
+				});
+				if (result?.isError) {
+					const text = result.content?.find((b) => b.type === "text");
+					throw new Error(
+						text?.type === "text" ? text.text : "Failed to read file",
+					);
+				}
+				if (cancelled) return;
+				const data = result?.structuredContent as ReadFileOutput | undefined;
+				const content = data?.content ?? "";
+				setFileBuffers((prev) => ({
+					...prev,
+					[selectedFile]: {
+						savedContent: content,
+						editorValue: prev[selectedFile]?.editorValue ?? content,
+						loaded: true,
+					},
+				}));
+			} catch (error) {
+				if (!cancelled)
+					setFileError(
+						error instanceof Error ? error.message : "Failed to read file",
+					);
+			} finally {
+				if (!cancelled) setIsLoadingFile(false);
+			}
+		};
+		run();
+		return () => {
+			cancelled = true;
+		};
+	}, [app, fileBuffers, userEnv, selectedFile]);
+
+	// Close pages dropdown on outside click
+	useEffect(() => {
+		if (!pagesOpen) return;
+		const handler = (e: PointerEvent) => {
+			if (!pagesContainerRef.current?.contains(e.target as Node))
+				setPagesOpen(false);
+		};
+		document.addEventListener("pointerdown", handler);
+		return () => document.removeEventListener("pointerdown", handler);
+	}, [pagesOpen]);
+
+	// ── handlers ────────────────────────────────────────────────────────────────
 
 	const loadFiles = useCallback(
 		async (options?: {
@@ -592,19 +679,17 @@ function FileExplorerWorkspace({
 		}) => {
 			setIsRefreshing(true);
 			setListError(undefined);
-
 			try {
 				const result = await app?.callServerTool({
 					name: "list_files",
 					arguments: { env: userEnv },
 				});
 				if (result?.isError) {
-					const text = result.content?.find((block) => block.type === "text");
+					const text = result.content?.find((b) => b.type === "text");
 					throw new Error(
 						text?.type === "text" ? text.text : "Failed to load files",
 					);
 				}
-
 				const data = result?.structuredContent as ListFilesOutput | undefined;
 				const nextFiles = data?.files ?? [];
 				setFiles(nextFiles);
@@ -624,11 +709,8 @@ function FileExplorerWorkspace({
 									nextFiles.includes(currentSelectedFile)
 								? currentSelectedFile
 								: null;
-
-					if (fileToKeepOpen && !nextOpenFiles.includes(fileToKeepOpen)) {
+					if (fileToKeepOpen && !nextOpenFiles.includes(fileToKeepOpen))
 						nextOpenFiles.push(fileToKeepOpen);
-					}
-
 					return nextOpenFiles;
 				});
 
@@ -654,415 +736,16 @@ function FileExplorerWorkspace({
 		[app, userEnv],
 	);
 
-	// Warm-up: try to connect to the user's env within 5s.
-	// If it times out, show the production URL in the iframe and poll every 5s.
-	useEffect(() => {
-		if (!app || !userEnv) return;
-
-		let cancelled = false;
-		let pollTimer: ReturnType<typeof setTimeout> | null = null;
-
-		toast.loading("Starting your Live Preview…", {
-			id: WARMUP_TOAST_ID,
-			duration: Number.POSITIVE_INFINITY,
-		});
-
-		const tryListFiles = async (
-			timeoutMs?: number,
-		): Promise<string[] | null> => {
-			try {
-				const callPromise = app.callServerTool({
-					name: "list_files",
-					arguments: { env: userEnv },
-				});
-				const result = timeoutMs
-					? await Promise.race([
-							callPromise,
-							new Promise<null>((resolve) =>
-								setTimeout(() => resolve(null), timeoutMs),
-							),
-						])
-					: await callPromise;
-
-				if (!result || result.isError) return null;
-				const data = result.structuredContent as ListFilesOutput | undefined;
-				return data?.files ?? null;
-			} catch {
-				return null;
-			}
-		};
-
-		const onEnvReady = (initialFiles: string[]) => {
-			if (cancelled) return;
-			setFiles(initialFiles);
-			setEnvStatus("ready");
-			toast.dismiss(WARMUP_TOAST_ID);
-		};
-
-		const schedulePoll = () => {
-			pollTimer = setTimeout(async () => {
-				if (cancelled) return;
-				const files = await tryListFiles();
-				if (cancelled) return;
-				if (files !== null) {
-					onEnvReady(files);
-				} else {
-					schedulePoll();
-				}
-			}, POLL_INTERVAL_MS);
-		};
-
-		tryListFiles(WARMUP_TIMEOUT_MS).then((files) => {
-			if (cancelled) return;
-			if (files !== null) {
-				onEnvReady(files);
-			} else {
-				setEnvStatus("waiting");
-				setPreviewUrl(
-					`${productionUrl}${productionUrl.endsWith("/") ? "" : "/"}?__cb=${crypto.randomUUID()}`,
-				);
-				schedulePoll();
-			}
-		});
-
-		return () => {
-			cancelled = true;
-			if (pollTimer) clearTimeout(pollTimer);
-			toast.dismiss(WARMUP_TOAST_ID);
-		};
-	}, [app, userEnv, productionUrl]);
-
-	// Fetch preview URL from the env once it's ready
-	useEffect(() => {
-		if (
-			(viewMode !== "preview" && viewMode !== "visual") ||
-			envStatus !== "ready"
-		) {
-			return;
-		}
-
-		const refreshKey = previewRefreshKey;
-		let cancelled = false;
-
-		const run = async () => {
-			void refreshKey;
-			setIsLoadingPreview(true);
-			setPreviewError(undefined);
-
-			try {
-				const result = await app?.callServerTool({
-					name: "preview_environment",
-					arguments: {
-						name: userEnv,
-						path: previewPath,
-					} satisfies PreviewEnvironmentInput,
-				});
-
-				if (result?.isError) {
-					const text = result.content?.find((block) => block.type === "text");
-					throw new Error(
-						text?.type === "text" ? text.text : "Failed to load preview",
-					);
-				}
-
-				const data = result?.structuredContent as
-					| PreviewEnvironmentOutput
-					| undefined;
-				if (!data?.previewUrl) {
-					throw new Error("Preview URL was not returned");
-				}
-
-				if (!cancelled) {
-					setPreviewUrl(data.previewUrl);
-				}
-			} catch (error) {
-				if (!cancelled) {
-					setPreviewError(
-						error instanceof Error ? error.message : "Failed to load preview",
-					);
-					setPreviewUrl(null);
-				}
-			} finally {
-				if (!cancelled) {
-					setIsLoadingPreview(false);
-				}
-			}
-		};
-
-		void run();
-
-		return () => {
-			cancelled = true;
-		};
-	}, [app, envStatus, previewPath, previewRefreshKey, userEnv, viewMode]);
-
-	useEffect(() => {
-		if (!userEnv || !selectedFile) {
-			return;
-		}
-
-		if (fileBuffers[selectedFile]?.loaded) {
-			return;
-		}
-
-		let cancelled = false;
-
-		const run = async () => {
-			setIsLoadingFile(true);
-			setFileError(undefined);
-
-			try {
-				const result = await app?.callServerTool({
-					name: "read_file",
-					arguments: {
-						env: userEnv,
-						filepath: selectedFile,
-					},
-				});
-				if (result?.isError) {
-					const text = result.content?.find((block) => block.type === "text");
-					throw new Error(
-						text?.type === "text" ? text.text : "Failed to read file",
-					);
-				}
-
-				if (cancelled) {
-					return;
-				}
-
-				const data = result?.structuredContent as ReadFileOutput | undefined;
-				const content = data?.content ?? "";
-				setFileBuffers((prev) => ({
-					...prev,
-					[selectedFile]: {
-						savedContent: content,
-						editorValue: prev[selectedFile]?.editorValue ?? content,
-						loaded: true,
-					},
-				}));
-			} catch (error) {
-				if (!cancelled) {
-					setFileError(
-						error instanceof Error ? error.message : "Failed to read file",
-					);
-				}
-			} finally {
-				if (!cancelled) {
-					setIsLoadingFile(false);
-				}
-			}
-		};
-
-		run();
-
-		return () => {
-			cancelled = true;
-		};
-	}, [app, fileBuffers, userEnv, selectedFile]);
-
-	useEffect(() => {
-		if (!app) {
-			return;
-		}
-
-		const parts = [];
-		if (site) {
-			parts.push(`Current site: **${site}**`);
-		}
-		parts.push(`Environment: **${userEnv}**`);
-		if (selectedFile) {
-			parts.push(`Selected file: **${selectedFile}**`);
-		}
-
-		app
-			.updateModelContext({
-				content:
-					parts.length > 0 ? [{ type: "text", text: parts.join("\n\n") }] : [],
-			})
-			.catch(() => {});
-
-		return () => {
-			app.updateModelContext({ content: [] }).catch(() => {});
-		};
-	}, [app, userEnv, selectedFile, site]);
-
-	// Listen for element clicks from the visual editor injected into the preview iframe
-	useEffect(() => {
-		if (viewMode !== "visual") {
-			setVisualEditorElement(null);
-			setVisualEditorInput("");
-			return;
-		}
-
-		const handler = (event: MessageEvent) => {
-			if (event.data?.type !== "visual-editor::element-clicked") return;
-			setVisualEditorElement(event.data.payload as VisualEditorPayload);
-			setVisualEditorInput("");
-		};
-
-		window.addEventListener("message", handler);
-		return () => window.removeEventListener("message", handler);
-	}, [viewMode]);
-
-	// Auto-focus the prompt input when an element is selected
-	useEffect(() => {
-		if (visualEditorElement) {
-			setTimeout(() => visualEditorInputRef.current?.focus(), 50);
-		}
-	}, [visualEditorElement]);
-
-	const handleVisualEditorSend = useCallback(async () => {
-		if (!visualEditorElement || !visualEditorInput.trim() || !app) return;
-		const p = visualEditorElement;
-
-		setIsSendingVisual(true);
-
-		// Fetch fresh pages list to find the exact page block for the current preview path
-		let matchedPage: PageInfo | null = null;
-		try {
-			const result = await app.callServerTool({
-				name: "get_pages",
-				arguments: { env: userEnv },
-			});
-			if (!result?.isError) {
-				const data = result.structuredContent as GetPagesOutput | undefined;
-				const allPages = data?.pages ?? [];
-				const normalize = (s: string) => s.replace(/\/+$/, "") || "/";
-				matchedPage =
-					allPages.find((pg) => normalize(pg.path) === normalize(p.path)) ??
-					null;
-				console.log("matchedPage", matchedPage);
-				setPages(allPages);
-				setPagesLoaded(true);
-			}
-		} catch {
-			// Non-fatal — continue without page ID
-		} finally {
-			setIsSendingVisual(false);
-		}
-
-		const lines = [
-			`The user selected an element on the live preview and asked: **"${visualEditorInput.trim()}"**`,
-			"",
-			`For text content, understand which page the user is referring to and apply the change to the correct page at .deco/blocks folder.`,
-			`For code and CSS changes, understand which component the user is referring to and apply changes to the correct component.`,
-			"",
-		];
-
-		if (matchedPage) {
-			lines.push(
-				`**Page:** filepath \`.deco/blocks/${matchedPage.key}.json\``,
-				"",
-				`If the content is not inside the page, note that the page can have Global Compoments inside, the content can be there.`,
-			);
-		} else {
-			lines.push(`**Page path:** \`${p.path}\``, "");
-		}
-
-		if (p.manifestKey) {
-			lines.push(
-				`**Section source file:** \`${p.manifestKey.replace("site/", "")}\``,
-				"",
-			);
-		}
-
-		const selector = [
-			`<${p.tag}`,
-			p.classes ? ` class="${p.classes}"` : "",
-			">",
-		].join("");
-		lines.push(`**Clicked element:** \`${selector}\``);
-		if (p.parents) lines.push(`**DOM breadcrumb:** ${p.parents} > ${p.tag}`);
-		if (p.text) lines.push(`**Text content:** "${p.text}"`);
-		if (p.componentName) lines.push(`**Component name:** ${p.componentName}`);
-		lines.push("", "**HTML snippet:**", "```html", p.html, "```");
-		lines.push("", `Site: **${site}** — Environment: **${userEnv}**`);
-		lines.push(
-			"",
-			"Please read the source file, locate the element, and apply the requested change.",
-		);
-
-		app.sendMessage({
-			role: "user",
-			content: [{ type: "text", text: lines.join("\n") }],
-		});
-
-		setVisualEditorElement(null);
-		setVisualEditorInput("");
-	}, [app, visualEditorElement, visualEditorInput, site, userEnv]);
-
-	// Close the pages dropdown when clicking outside the URL bar container
-	useEffect(() => {
-		if (!pagesOpen) return;
-		const handler = (e: PointerEvent) => {
-			if (!pagesContainerRef.current?.contains(e.target as Node)) {
-				setPagesOpen(false);
-			}
-		};
-		document.addEventListener("pointerdown", handler);
-		return () => document.removeEventListener("pointerdown", handler);
-	}, [pagesOpen]);
-
-	const fetchPages = useCallback(async () => {
-		if (!app || !userEnv || pagesLoaded || pagesLoading) return;
-		setPagesLoading(true);
-		try {
-			const result = await app.callServerTool({
-				name: "get_pages",
-				arguments: { env: userEnv },
-			});
-			if (!result?.isError) {
-				const data = result?.structuredContent as GetPagesOutput | undefined;
-				setPages(data?.pages ?? []);
-				setPagesLoaded(true);
-			}
-		} catch {
-			// silently fail — user can still type a path manually
-		} finally {
-			setPagesLoading(false);
-		}
-	}, [app, userEnv, pagesLoaded, pagesLoading]);
-
-	const filteredPages = useMemo(() => {
-		const term = previewPathInput.trim();
-		if (!term || term === "/") return pages;
-		return pages.filter(
-			(p) =>
-				p.path.toLowerCase().includes(term.toLowerCase()) ||
-				p.name.toLowerCase().includes(term.toLowerCase()),
-		);
-	}, [pages, previewPathInput]);
-
-	const filteredFiles = useMemo(() => {
-		if (!search.trim()) {
-			return files;
-		}
-
-		const term = search.toLowerCase();
-		return files.filter((file) => file.toLowerCase().includes(term));
-	}, [files, search]);
-
-	const tree = useMemo(() => buildFileTree(filteredFiles), [filteredFiles]);
-	const flatNodes = useMemo(
-		() => flattenTree(tree, expandedDirectories),
-		[expandedDirectories, tree],
-	);
-
 	const expandAncestors = useCallback((filepath: string) => {
 		setExpandedDirectories((prev) => {
 			const next = new Set(prev);
-			for (const directory of getAncestorDirectories(filepath)) {
-				next.add(directory);
-			}
+			for (const dir of getAncestorDirectories(filepath)) next.add(dir);
 			return next;
 		});
 	}, []);
 
 	const confirmLoseChanges = useCallback(() => {
-		if (!hasUnsavedFiles) {
-			return true;
-		}
-
+		if (!hasUnsavedFiles) return true;
 		return window.confirm(
 			"You have unsaved changes. Do you want to discard them and continue?",
 		);
@@ -1080,25 +763,16 @@ function FileExplorerWorkspace({
 	const handleCloseTab = useCallback(
 		(filepath: string) => {
 			const normalized = normalizePath(filepath);
-
-			if (selectedFile === normalized && !confirmLoseChanges()) {
-				return;
-			}
-
+			if (selectedFile === normalized && !confirmLoseChanges()) return;
 			setOpenFiles((prev) => {
-				const next = prev.filter((path) => path !== normalized);
-
+				const next = prev.filter((p) => p !== normalized);
 				if (selectedFile === normalized) {
 					const closedIndex = prev.indexOf(normalized);
 					const fallback =
 						next[closedIndex] ?? next[closedIndex - 1] ?? next[0] ?? null;
 					setSelectedFile(fallback);
-
-					if (!fallback) {
-						setFileError(undefined);
-					}
+					if (!fallback) setFileError(undefined);
 				}
-
 				return next;
 			});
 		},
@@ -1110,7 +784,6 @@ function FileExplorerWorkspace({
 			setPreviewRefreshKey((prev) => prev + 1);
 			return;
 		}
-
 		await loadFiles({ preserveSelection: true });
 	};
 
@@ -1124,10 +797,7 @@ function FileExplorerWorkspace({
 	};
 
 	const handleOpenPreviewInNewTab = () => {
-		if (!envUrl) {
-			return;
-		}
-
+		if (!envUrl) return;
 		const nextPath = normalizePath(previewPathInput);
 		const sep = nextPath.includes("?") ? "&" : "?";
 		const url = `${envUrl}${nextPath.startsWith("/") ? "" : "/"}${nextPath}${sep}__cb=${crypto.randomUUID()}`;
@@ -1136,25 +806,22 @@ function FileExplorerWorkspace({
 
 	const handleEditorWillMount = useCallback<
 		NonNullable<ComponentProps<typeof Editor>["beforeMount"]>
-	>((monaco) => {
-		monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
+	>((m) => {
+		m.languages.typescript.typescriptDefaults.setCompilerOptions({
 			allowNonTsExtensions: true,
-			jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
-			target: monaco.languages.typescript.ScriptTarget.ESNext,
+			jsx: m.languages.typescript.JsxEmit.ReactJSX,
+			target: m.languages.typescript.ScriptTarget.ESNext,
 		});
-		monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+		m.languages.typescript.javascriptDefaults.setCompilerOptions({
 			allowNonTsExtensions: true,
-			jsx: monaco.languages.typescript.JsxEmit.ReactJSX,
-			target: monaco.languages.typescript.ScriptTarget.ESNext,
+			jsx: m.languages.typescript.JsxEmit.ReactJSX,
+			target: m.languages.typescript.ScriptTarget.ESNext,
 		});
 	}, []);
 
 	const handleEditorChange = useCallback(
 		(value: string | undefined) => {
-			if (!selectedFile) {
-				return;
-			}
-
+			if (!selectedFile) return;
 			setFileBuffers((prev) => ({
 				...prev,
 				[selectedFile]: {
@@ -1170,32 +837,22 @@ function FileExplorerWorkspace({
 	const formatActiveDocument = useCallback(async () => {
 		const editor = editorRef.current;
 		const action = editor?.getAction("editor.action.formatDocument");
-
-		if (!action) {
-			return;
-		}
-
+		if (!action) return;
 		try {
 			await action.run();
 		} catch {
-			// Monaco doesn't provide formatters for every language. Save should still work.
+			// Monaco doesn't have a formatter for every language
 		}
 	}, []);
 
 	const handleSave = useCallback(
 		async (filepath = selectedFile) => {
-			if (!userEnv || !filepath) {
-				return;
-			}
-
+			if (!userEnv || !filepath) return;
 			const normalizedFilepath = normalizePath(filepath);
 			setIsSaving(true);
 			setFileError(undefined);
-
 			try {
-				if (normalizedFilepath === selectedFile) {
-					await formatActiveDocument();
-				}
+				if (normalizedFilepath === selectedFile) await formatActiveDocument();
 				const nextValue =
 					normalizedFilepath === selectedFile
 						? (editorRef.current?.getValue() ??
@@ -1204,24 +861,16 @@ function FileExplorerWorkspace({
 						: (fileBuffers[normalizedFilepath]?.editorValue ?? "");
 				const result = await app?.callServerTool({
 					name: "write_file",
-					arguments: {
-						env: userEnv,
-						filepath: normalizedFilepath,
-						content: nextValue,
-					},
+					arguments: { env: userEnv, filepath: normalizedFilepath, content: nextValue },
 				});
 				if (result?.isError) {
-					const text = result.content?.find((block) => block.type === "text");
+					const text = result.content?.find((b) => b.type === "text");
 					throw new Error(
 						text?.type === "text" ? text.text : "Failed to save file",
 					);
 				}
-
 				const data = result?.structuredContent as WriteFileOutput | undefined;
-				if (!data?.success) {
-					throw new Error("Save was not accepted by the backend");
-				}
-
+				if (!data?.success) throw new Error("Save was not accepted by the backend");
 				setFileBuffers((prev) => ({
 					...prev,
 					[normalizedFilepath]: {
@@ -1234,9 +883,7 @@ function FileExplorerWorkspace({
 				await loadFiles({
 					preserveSelection: true,
 					nextSelection:
-						normalizedFilepath === selectedFile
-							? normalizedFilepath
-							: undefined,
+						normalizedFilepath === selectedFile ? normalizedFilepath : undefined,
 				});
 			} catch (error) {
 				setFileError(
@@ -1261,51 +908,38 @@ function FileExplorerWorkspace({
 		saveActiveFileRef.current = () => handleSave(selectedFileRef.current);
 	}, [handleSave]);
 
-	const handleEditorDidMount: OnMount = useCallback((editor, monaco) => {
+	const handleEditorDidMount: OnMount = useCallback((editor, m) => {
 		editorRef.current = editor;
-		editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+		editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => {
 			void saveActiveFileRef.current?.();
 		});
 	}, []);
 
 	const handleDelete = async (filepath = selectedFile) => {
-		if (!userEnv || !filepath) {
-			return;
-		}
-
+		if (!userEnv || !filepath) return;
 		const normalizedFilepath = normalizePath(filepath);
 		const confirmed = window.confirm(
 			`Delete ${normalizedFilepath}? This cannot be undone.`,
 		);
-		if (!confirmed) {
-			return;
-		}
+		if (!confirmed) return;
 
 		setIsDeleting(true);
 		setFileError(undefined);
-
 		try {
 			const result = await app?.callServerTool({
 				name: "delete_file",
-				arguments: {
-					env: userEnv,
-					filepath: normalizedFilepath,
-				},
+				arguments: { env: userEnv, filepath: normalizedFilepath },
 			});
 			if (result?.isError) {
-				const text = result.content?.find((block) => block.type === "text");
+				const text = result.content?.find((b) => b.type === "text");
 				throw new Error(
 					text?.type === "text" ? text.text : "Failed to delete file",
 				);
 			}
-
 			const nextSelectedFile =
 				selectedFile === normalizedFilepath ? null : selectedFile;
-
 			setSelectedFile(nextSelectedFile);
-			setOpenFiles((prev) =>
-				prev.filter((path) => path !== normalizedFilepath),
-			);
+			setOpenFiles((prev) => prev.filter((p) => p !== normalizedFilepath));
 			setFileBuffers((prev) => {
 				const next = { ...prev };
 				delete next[normalizedFilepath];
@@ -1326,32 +960,24 @@ function FileExplorerWorkspace({
 
 	const handleCreateFile = async (event: FormEvent) => {
 		event.preventDefault();
-
 		const filepath = normalizePath(newFilePath);
 		if (filepath === "/") {
 			setCreateError("Enter a valid file path.");
 			return;
 		}
-
 		setIsCreating(true);
 		setCreateError(undefined);
-
 		try {
 			const result = await app?.callServerTool({
 				name: "write_file",
-				arguments: {
-					env: userEnv,
-					filepath,
-					content: "",
-				},
+				arguments: { env: userEnv, filepath, content: "" },
 			});
 			if (result?.isError) {
-				const text = result.content?.find((block) => block.type === "text");
+				const text = result.content?.find((b) => b.type === "text");
 				throw new Error(
 					text?.type === "text" ? text.text : "Failed to create file",
 				);
 			}
-
 			expandAncestors(filepath);
 			setCreateDialogOpen(false);
 			setNewFilePath("");
@@ -1365,6 +991,100 @@ function FileExplorerWorkspace({
 		}
 	};
 
+	const fetchPages = useCallback(async () => {
+		if (!app || !userEnv || pagesLoaded || pagesLoading) return;
+		setPagesLoading(true);
+		try {
+			const result = await app.callServerTool({
+				name: "get_pages",
+				arguments: { env: userEnv },
+			});
+			if (!result?.isError) {
+				const data = result?.structuredContent as GetPagesOutput | undefined;
+				setPages(data?.pages ?? []);
+				setPagesLoaded(true);
+			}
+		} catch {
+			// silently fail
+		} finally {
+			setPagesLoading(false);
+		}
+	}, [app, userEnv, pagesLoaded, pagesLoading]);
+
+	const handleVisualEditorSend = useCallback(async () => {
+		if (!visualEditorElement || !visualEditorInput.trim() || !app) return;
+		const p = visualEditorElement;
+		setIsSendingVisual(true);
+
+		let matchedPage = null;
+		try {
+			const result = await app.callServerTool({
+				name: "get_pages",
+				arguments: { env: userEnv },
+			});
+			if (!result?.isError) {
+				const data = result.structuredContent as GetPagesOutput | undefined;
+				const allPages = data?.pages ?? [];
+				const normalize = (s: string) => s.replace(/\/+$/, "") || "/";
+				matchedPage =
+					allPages.find((pg) => normalize(pg.path) === normalize(p.path)) ??
+					null;
+				setPages(allPages);
+				setPagesLoaded(true);
+			}
+		} catch {
+			// non-fatal
+		} finally {
+			setIsSendingVisual(false);
+		}
+
+		const lines = [
+			`The user selected an element on the live preview and asked: **"${visualEditorInput.trim()}"**`,
+			"",
+			`For text content, understand which page the user is referring to and apply the change to the correct page at .deco/blocks folder.`,
+			`For code and CSS changes, understand which component the user is referring to and apply changes to the correct component.`,
+			"",
+		];
+
+		if (matchedPage) {
+			lines.push(
+				`**Page:** filepath \`.deco/blocks/${(matchedPage as PageInfo).key}.json\``,
+				"",
+				`If the content is not inside the page, note that the page can have Global Components inside, the content can be there.`,
+			);
+		} else {
+			lines.push(`**Page path:** \`${p.path}\``, "");
+		}
+
+		if (p.manifestKey)
+			lines.push(
+				`**Section source file:** \`${p.manifestKey.replace("site/", "")}\``,
+				"",
+			);
+
+		const selector = [`<${p.tag}`, p.classes ? ` class="${p.classes}"` : "", ">"].join("");
+		lines.push(`**Clicked element:** \`${selector}\``);
+		if (p.parents) lines.push(`**DOM breadcrumb:** ${p.parents} > ${p.tag}`);
+		if (p.text) lines.push(`**Text content:** "${p.text}"`);
+		if (p.componentName) lines.push(`**Component name:** ${p.componentName}`);
+		lines.push("", "**HTML snippet:**", "```html", p.html, "```");
+		lines.push("", `Site: **${site}** — Environment: **${userEnv}**`);
+		lines.push(
+			"",
+			"Please read the source file, locate the element, and apply the requested change.",
+		);
+
+		app.sendMessage({
+			role: "user",
+			content: [{ type: "text", text: lines.join("\n") }],
+		});
+
+		setVisualEditorElement(null);
+		setVisualEditorInput("");
+	}, [app, visualEditorElement, visualEditorInput, site, userEnv]);
+
+	// ── render ───────────────────────────────────────────────────────────────────
+
 	return (
 		<div className="h-dvh overflow-hidden">
 			<div className="flex h-full min-h-0 flex-col gap-4">
@@ -1373,7 +1093,6 @@ function FileExplorerWorkspace({
 						{listError}
 					</div>
 				)}
-
 				{fileError && (
 					<div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
 						{fileError}
@@ -1382,7 +1101,9 @@ function FileExplorerWorkspace({
 
 				<div className="min-h-0 flex-1 overflow-hidden rounded-lg border bg-card">
 					<div className="flex h-full min-h-0 flex-col">
+						{/* ── toolbar ── */}
 						<div className="flex items-center justify-between gap-3 border-b px-3 py-2">
+							{/* View mode switcher */}
 							<div className="flex shrink-0 items-center rounded-lg border bg-muted/40">
 								<button
 									type="button"
@@ -1426,6 +1147,8 @@ function FileExplorerWorkspace({
 									<FileCode2 className="h-3.5 w-3.5" />
 								</button>
 							</div>
+
+							{/* URL bar */}
 							<div
 								ref={pagesContainerRef}
 								className="relative min-w-0 flex-1 max-w-xl"
@@ -1493,8 +1216,7 @@ function FileExplorerWorkspace({
 												<RefreshCw
 													className={cn(
 														"h-3.5 w-3.5",
-														(isRefreshing || isLoadingPreview) &&
-															"animate-spin",
+														(isRefreshing || isLoadingPreview) && "animate-spin",
 													)}
 												/>
 											</button>
@@ -1545,17 +1267,23 @@ function FileExplorerWorkspace({
 									</div>
 								)}
 							</div>
+
+							{/* Publish button */}
 							<div className="shrink-0">
 								<Button
 									type="button"
 									className="h-9 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-all hover:opacity-95 hover:shadow-md"
+									onClick={() => setPublishDialogOpen(true)}
+									disabled={envStatus !== "ready"}
 								>
 									Publish
 								</Button>
 							</div>
 						</div>
 
+						{/* ── main content ── */}
 						<div className="flex min-h-0 flex-1">
+							{/* File tree sidebar */}
 							{viewMode === "code" ? (
 								<div className="w-80 shrink-0 border-r">
 									<div className="flex h-full min-h-0 flex-col">
@@ -1588,9 +1316,7 @@ function FileExplorerWorkspace({
 																<File className="size-5" />
 															</EmptyMedia>
 															<EmptyTitle>
-																{search
-																	? "No matching files"
-																	: "No files found"}
+																{search ? "No matching files" : "No files found"}
 															</EmptyTitle>
 															<EmptyDescription>
 																{search
@@ -1603,9 +1329,7 @@ function FileExplorerWorkspace({
 													<div>
 														{flatNodes.map(({ node, depth }) => {
 															const isDirectory = node.kind === "directory";
-															const isExpanded = expandedDirectories.has(
-																node.path,
-															);
+															const isExpanded = expandedDirectories.has(node.path);
 															const isSelected = selectedFile === node.path;
 															const canSaveFile =
 																!isDirectory &&
@@ -1614,10 +1338,7 @@ function FileExplorerWorkspace({
 																!isDeleting &&
 																isPathDirty(node.path);
 															const canDeleteFile =
-																!isDirectory &&
-																!isReadonly &&
-																!isDeleting &&
-																!isSaving;
+																!isDirectory && !isReadonly && !isDeleting && !isSaving;
 
 															const rowButton = (
 																<button
@@ -1625,30 +1346,23 @@ function FileExplorerWorkspace({
 																	key={node.path}
 																	className={cn(
 																		"flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm transition-colors hover:bg-accent",
-																		isSelected &&
-																			"bg-accent text-accent-foreground",
+																		isSelected && "bg-accent text-accent-foreground",
 																	)}
 																	style={{ paddingLeft: `${depth * 12 + 8}px` }}
 																	onClick={() => {
 																		if (isDirectory) {
 																			setExpandedDirectories((prev) => {
 																				const next = new Set(prev);
-																				if (next.has(node.path)) {
-																					next.delete(node.path);
-																				} else {
-																					next.add(node.path);
-																				}
+																				if (next.has(node.path)) next.delete(node.path);
+																				else next.add(node.path);
 																				return next;
 																			});
 																			return;
 																		}
-
 																		handleSelectFile(node.path);
 																	}}
 																	onContextMenu={() => {
-																		if (!isDirectory) {
-																			handleSelectFile(node.path);
-																		}
+																		if (!isDirectory) handleSelectFile(node.path);
 																	}}
 																	title={node.path}
 																>
@@ -1689,9 +1403,7 @@ function FileExplorerWorkspace({
 																	<ContextMenuContent className="w-44">
 																		<ContextMenuItem
 																			disabled={!canSaveFile}
-																			onSelect={() =>
-																				void handleSave(node.path)
-																			}
+																			onSelect={() => void handleSave(node.path)}
 																		>
 																			<Save className="h-4 w-4" />
 																			Save
@@ -1699,9 +1411,7 @@ function FileExplorerWorkspace({
 																		<ContextMenuItem
 																			variant="destructive"
 																			disabled={!canDeleteFile}
-																			onSelect={() =>
-																				void handleDelete(node.path)
-																			}
+																			onSelect={() => void handleDelete(node.path)}
 																		>
 																			<Trash2 className="h-4 w-4" />
 																			Delete
@@ -1718,10 +1428,12 @@ function FileExplorerWorkspace({
 								</div>
 							) : null}
 
+							{/* Editor / preview area */}
 							<div className="min-w-0 flex-1">
 								<div className="flex h-full min-h-0 flex-col">
 									{viewMode === "code" ? (
 										<>
+											{/* Tabs */}
 											<div className="flex items-center justify-between gap-3 border-b h-[45px]">
 												<div className="min-w-0 flex-1 overflow-x-auto">
 													<div className="flex min-w-max items-end px-2 pt-2">
@@ -1734,10 +1446,7 @@ function FileExplorerWorkspace({
 																const isActive = selectedFile === filepath;
 																const isTabDirty = isPathDirty(filepath);
 																const canSaveTab =
-																	!isReadonly &&
-																	!isSaving &&
-																	!isDeleting &&
-																	isTabDirty;
+																	!isReadonly && !isSaving && !isDeleting && isTabDirty;
 																const canDeleteTab =
 																	!isReadonly && !isDeleting && !isSaving;
 
@@ -1755,9 +1464,7 @@ function FileExplorerWorkspace({
 																			className="flex max-w-40 items-center gap-1.5 truncate text-left"
 																			title={filepath}
 																			onClick={() => handleSelectFile(filepath)}
-																			onContextMenu={() =>
-																				handleSelectFile(filepath)
-																			}
+																			onContextMenu={() => handleSelectFile(filepath)}
 																		>
 																			<span className="truncate">
 																				{getBasename(filepath)}
@@ -1782,15 +1489,11 @@ function FileExplorerWorkspace({
 
 																return (
 																	<ContextMenu key={filepath}>
-																		<ContextMenuTrigger asChild>
-																			{tab}
-																		</ContextMenuTrigger>
+																		<ContextMenuTrigger asChild>{tab}</ContextMenuTrigger>
 																		<ContextMenuContent className="w-44">
 																			<ContextMenuItem
 																				disabled={!canSaveTab}
-																				onSelect={() =>
-																					void handleSave(filepath)
-																				}
+																				onSelect={() => void handleSave(filepath)}
 																			>
 																				<Save className="h-4 w-4" />
 																				Save
@@ -1798,9 +1501,7 @@ function FileExplorerWorkspace({
 																			<ContextMenuItem
 																				variant="destructive"
 																				disabled={!canDeleteTab}
-																				onSelect={() =>
-																					void handleDelete(filepath)
-																				}
+																				onSelect={() => void handleDelete(filepath)}
 																			>
 																				<Trash2 className="h-4 w-4" />
 																				Delete
@@ -1814,6 +1515,7 @@ function FileExplorerWorkspace({
 												</div>
 											</div>
 
+											{/* Editor */}
 											<div className="min-h-0 flex-1 overflow-hidden">
 												{!selectedFile ? (
 													<Empty className="h-full rounded-none border-none">
@@ -1823,8 +1525,7 @@ function FileExplorerWorkspace({
 															</EmptyMedia>
 															<EmptyTitle>Select a file</EmptyTitle>
 															<EmptyDescription>
-																Choose a file from the sidebar to inspect or
-																edit it.
+																Choose a file from the sidebar to inspect or edit it.
 															</EmptyDescription>
 														</EmptyHeader>
 													</Empty>
@@ -1866,22 +1567,19 @@ function FileExplorerWorkspace({
 											</div>
 										</>
 									) : (
+										/* Preview / visual editor */
 										<div className="min-h-0 flex-1 overflow-hidden bg-muted/10">
 											{envStatus === "warming-up" ? (
 												<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background/80">
 													<div className="flex flex-col items-center gap-3 text-muted-foreground">
 														<Loader2 className="h-5 w-5 animate-spin" />
-														<span className="text-sm">
-															Starting your Live Preview…
-														</span>
+														<span className="text-sm">Starting your Live Preview…</span>
 													</div>
 												</div>
 											) : previewError ? (
 												<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background p-6">
 													<div className="max-w-md text-center">
-														<p className="text-sm font-medium">
-															Preview failed
-														</p>
+														<p className="text-sm font-medium">Preview failed</p>
 														<p className="mt-2 text-sm text-muted-foreground">
 															{previewError}
 														</p>
@@ -1901,20 +1599,18 @@ function FileExplorerWorkspace({
 															<div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
 																<div className="flex items-center gap-3 text-muted-foreground">
 																	<Loader2 className="h-4 w-4 animate-spin" />
-																	<span className="text-sm">
-																		Loading preview...
-																	</span>
+																	<span className="text-sm">Loading preview...</span>
 																</div>
 															</div>
 														)}
-														{viewMode === "visual" &&
-															previewUrl &&
-															!visualEditorElement && (
-																<div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 rounded-full border border-violet-400/40 bg-violet-500/90 px-3 py-1 text-xs font-medium text-white shadow-md backdrop-blur-sm pointer-events-none select-none">
-																	<MousePointer2 className="h-3 w-3" />
-																	Click any element to ask the AI
-																</div>
-															)}
+
+														{viewMode === "visual" && previewUrl && !visualEditorElement && (
+															<div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 rounded-full border border-violet-400/40 bg-violet-500/90 px-3 py-1 text-xs font-medium text-white shadow-md backdrop-blur-sm pointer-events-none select-none">
+																<MousePointer2 className="h-3 w-3" />
+																Click any element to ask the AI
+															</div>
+														)}
+
 														{viewMode === "visual" &&
 															visualEditorElement &&
 															(() => {
@@ -1967,8 +1663,7 @@ function FileExplorerWorkspace({
 																			<button
 																				type="submit"
 																				disabled={
-																					!visualEditorInput.trim() ||
-																					isSendingVisual
+																					!visualEditorInput.trim() || isSendingVisual
 																				}
 																				className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-30"
 																				title="Send"
@@ -1998,6 +1693,7 @@ function FileExplorerWorkspace({
 																	</div>
 																);
 															})()}
+
 														{previewUrl ? (
 															<iframe
 																key={previewUrl}
@@ -2007,21 +1703,17 @@ function FileExplorerWorkspace({
 																className="h-full w-full border-0"
 																onLoad={() => {
 																	if (viewMode !== "visual") return;
-																	const win =
-																		previewIframeRef.current?.contentWindow;
+																	const win = previewIframeRef.current?.contentWindow;
 																	if (!win) return;
 																	try {
-																		const script =
-																			win.document.createElement("script");
+																		const script = win.document.createElement("script");
 																		script.textContent = `(${visualEditorScript.toString()})()`;
 																		win.document.head.appendChild(script);
 																	} catch {
 																		win.postMessage(
 																			{
 																				type: "editor::inject",
-																				args: {
-																					script: `(${visualEditorScript.toString()})()`,
-																				},
+																				args: { script: `(${visualEditorScript.toString()})()` },
 																			},
 																			"*",
 																		);
@@ -2041,12 +1733,11 @@ function FileExplorerWorkspace({
 				</div>
 			</div>
 
+			{/* ── create file dialog ── */}
 			<Dialog
 				open={createDialogOpen}
 				onOpenChange={(open) => {
-					if (!isCreating) {
-						setCreateDialogOpen(open);
-					}
+					if (!isCreating) setCreateDialogOpen(open);
 				}}
 			>
 				<DialogContent className="max-w-md">
@@ -2087,9 +1778,22 @@ function FileExplorerWorkspace({
 					</form>
 				</DialogContent>
 			</Dialog>
+
+			{/* ── publish dialog ── */}
+			<PublishDialog
+				open={publishDialogOpen}
+				onOpenChange={setPublishDialogOpen}
+				userEnv={userEnv}
+				envUrl={envUrl}
+				editorTheme={editorTheme}
+				gitStatus={gitStatus}
+				onGitStatusChange={setGitStatus}
+			/>
 		</div>
 	);
 }
+
+// ─── page entry point ─────────────────────────────────────────────────────────
 
 export default function FileExplorerPage() {
 	const state = useMcpState<FileExplorerInput, FileExplorerOutput>();
@@ -2119,17 +1823,9 @@ export default function FileExplorerPage() {
 		);
 	}
 
-	if (state.status === "error") {
-		return <ErrorView error={state.error} />;
-	}
-
-	if (state.status === "tool-cancelled") {
-		return <CancelledView />;
-	}
-
-	if (state.status === "tool-input") {
-		return <Spinner label="Opening file explorer..." />;
-	}
+	if (state.status === "error") return <ErrorView error={state.error} />;
+	if (state.status === "tool-cancelled") return <CancelledView />;
+	if (state.status === "tool-input") return <Spinner label="Opening file explorer..." />;
 
 	const { site, userEnv, userEnvUrl, productionUrl } = state.toolResult ?? {
 		site: "",
