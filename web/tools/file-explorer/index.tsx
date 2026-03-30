@@ -302,11 +302,13 @@ function FileExplorerWorkspace({
 	userEnv,
 	userEnvUrl,
 	productionUrl,
+	defaultViewMode,
 }: {
 	site: string;
 	userEnv: string;
 	userEnvUrl: string | null;
 	productionUrl: string;
+	defaultViewMode: string;
 }) {
 	const app = useMcpApp();
 
@@ -354,7 +356,7 @@ function FileExplorerWorkspace({
 			? "vs-dark"
 			: "vs",
 	);
-	const [viewMode, setViewMode] = useState<ViewMode>("preview");
+	const [viewMode, setViewMode] = useState<ViewMode>(defaultViewMode as ViewMode);
 	const [previewViewport, setPreviewViewport] =
 		useState<PreviewViewport>("desktop");
 	const [previewPathInput, setPreviewPathInput] = useState("/");
@@ -1827,7 +1829,7 @@ export default function FileExplorerPage() {
 	if (state.status === "tool-cancelled") return <CancelledView />;
 	if (state.status === "tool-input") return <Spinner label="Opening file explorer..." />;
 
-	const { site, userEnv, userEnvUrl, productionUrl } = state.toolResult ?? {
+	const { site, userEnv, userEnvUrl, productionUrl, defaultViewMode } = state.toolResult ?? {
 		site: "",
 		userEnv: "",
 		userEnvUrl: null,
@@ -1840,6 +1842,7 @@ export default function FileExplorerPage() {
 			userEnv={userEnv}
 			userEnvUrl={userEnvUrl}
 			productionUrl={productionUrl}
+			defaultViewMode={defaultViewMode ?? "preview"}
 		/>
 	);
 }
