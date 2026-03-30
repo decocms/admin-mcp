@@ -91,6 +91,19 @@ export const gitDiffResultSchema = z.object({
 });
 export type GitDiffResult = z.infer<typeof gitDiffResultSchema>;
 
+const daemonGitDiffSchema = z.object({
+	from: z.string().nullish(),
+	to: z.string().nullish(),
+});
+
+function collectChangedPaths(status: GitStatus): string[] {
+	const fromFiles = status.files
+		.map((file) => file.path)
+		.filter((path) => typeof path === "string" && path.length > 0);
+
+	return [...new Set(fromFiles)];
+}
+
 export const gitDiffTool = (cfEnv: Env) =>
 	createTool({
 		id: "git_diff",
@@ -106,11 +119,32 @@ export const gitDiffTool = (cfEnv: Env) =>
 		},
 		execute: async ({ context }) => {
 			const { site, apiKey } = getConfig(cfEnv);
-			return callAdmin(
-				"deco-sites/admin/loaders/releases/git/diff.ts",
+			const status = (await callAdmin(
+				"deco-sites/admin/loaders/releases/git/status.ts",
 				{ site, env: context.env },
 				apiKey,
-			) as Promise<GitDiffResult>;
+			)) as GitStatus;
+
+			const paths = collectChangedPaths(status);
+			const diffEntries = await Promise.all(
+				paths.map(async (path) => {
+					const rawDiff = await callAdmin(
+						"deco-sites/admin/loaders/daemon/git/diff.ts",
+						{ site, env: context.env, path },
+						apiKey,
+					);
+					const parsed = daemonGitDiffSchema.parse(rawDiff);
+					const diff = {
+						from: parsed.from ?? null,
+						to: parsed.to ?? null,
+					};
+					return [path, diff] as const;
+				}),
+			);
+
+			return {
+				diffs: Object.fromEntries(diffEntries),
+			} as GitDiffResult;
 		},
 	});
 
