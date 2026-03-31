@@ -37,6 +37,7 @@ interface PublishDialogProps {
 	onOpenChange: (open: boolean) => void;
 	userEnv: string;
 	envUrl: string | null;
+	showPreviewAction: boolean;
 	editorTheme: "vs" | "vs-dark";
 	gitStatus: GitStatus | null;
 	onGitStatusChange: (status: GitStatus | null) => void;
@@ -49,6 +50,7 @@ export function PublishDialog({
 	onOpenChange,
 	userEnv,
 	envUrl,
+	showPreviewAction,
 	editorTheme,
 	gitStatus,
 	onGitStatusChange,
@@ -421,21 +423,23 @@ export function PublishDialog({
 
 					{/* Action rows */}
 					<div className="shrink-0 border-t">
-						<button
-							type="button"
-							className="flex w-full items-center justify-between px-6 py-3.5 text-sm transition-colors hover:bg-muted/50 disabled:opacity-50"
-							onClick={() => {
-								if (envUrl)
-									window.open(envUrl, "_blank", "noopener,noreferrer");
-							}}
-							disabled={!envUrl}
-						>
-							<span className="flex items-center gap-3">
-								<Eye className="h-4 w-4 text-muted-foreground" />
-								Visit preview
-							</span>
-							<ArrowRight className="h-4 w-4 text-muted-foreground" />
-						</button>
+						{showPreviewAction ? (
+							<button
+								type="button"
+								className="flex w-full items-center justify-between px-6 py-3.5 text-sm transition-colors hover:bg-muted/50 disabled:opacity-50"
+								onClick={() => {
+									if (envUrl)
+										window.open(envUrl, "_blank", "noopener,noreferrer");
+								}}
+								disabled={!envUrl}
+							>
+								<span className="flex items-center gap-3">
+									<Eye className="h-4 w-4 text-muted-foreground" />
+									Visit preview
+								</span>
+								<ArrowRight className="h-4 w-4 text-muted-foreground" />
+							</button>
+						) : null}
 						<button
 							type="button"
 							className="flex w-full cursor-not-allowed items-center justify-between px-6 py-3.5 text-sm opacity-50"

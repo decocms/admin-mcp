@@ -78,7 +78,7 @@ export const fileExplorerOutputSchema = z.object({
 	userEnvUrl: z.string().nullable(),
 	productionUrl: z.string(),
 	path: z.string(),
-	defaultViewMode: z.string(),
+	isPreviewSupported: z.boolean(),
 });
 export type FileExplorerOutput = z.infer<typeof fileExplorerOutputSchema>;
 
@@ -112,8 +112,6 @@ export const fileExplorerTool = (env: Env) =>
 			const all = Array.isArray(environmentsData)
 				? environmentsData
 				: (environmentsData.environments ?? []);
-
-			console.log("all", all);
 
 			const sandboxEnvs = all.filter(
 				(item) => item.platform === "sandbox",
@@ -150,7 +148,7 @@ export const fileExplorerTool = (env: Env) =>
 				userEnvUrl: userEnvEntry?.url ?? null,
 				productionUrl,
 				path: context.path ?? "/",
-				defaultViewMode: status === 200 ? "preview" : "code",
+				isPreviewSupported: status === 200,
 			};
 		},
 	});

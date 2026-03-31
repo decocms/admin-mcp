@@ -257,10 +257,21 @@ export const previewEnvironmentOutputSchema = z.object({
 	environment: environmentSchema,
 	site: z.string(),
 	path: z.string(),
+	httpStatus: z.number().optional(),
+	httpStatusText: z.string().optional(),
+	reachable: z.boolean().default(true),
+	error: z.string().optional(),
 });
 export type PreviewEnvironmentOutput = z.infer<
 	typeof previewEnvironmentOutputSchema
 >;
+
+const PREVIEW_ERROR_MARKERS = [
+	"error while starting worker",
+	"worker failed to start",
+	"application error",
+	"internal server error",
+];
 
 export const previewEnvironmentTool = (env: Env) =>
 	createTool({
@@ -285,6 +296,66 @@ export const previewEnvironmentTool = (env: Env) =>
 			const path = context.path ?? "/";
 			const sep = path.includes("?") ? "&" : "?";
 			const previewUrl = `${environment.url}${path.startsWith("/") ? "" : "/"}${path}${sep}__cb=${crypto.randomUUID()}`;
-			return { previewUrl, environment, site, path };
+			try {
+				const response = await fetch(previewUrl, {
+					method: "GET",
+					redirect: "follow",
+				});
+				if (!response.ok) {
+					return {
+						previewUrl,
+						environment,
+						site,
+						path,
+						httpStatus: response.status,
+						httpStatusText: response.statusText,
+						reachable: false,
+						error: `Preview URL returned HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`,
+					};
+				}
+
+				const contentType = response.headers.get("content-type") ?? "";
+				if (contentType.includes("text/html")) {
+					const body = (await response.text()).toLowerCase();
+					const marker = PREVIEW_ERROR_MARKERS.find((value) =>
+						body.includes(value),
+					);
+					if (marker) {
+						return {
+							previewUrl,
+							environment,
+							site,
+							path,
+							httpStatus: response.status,
+							httpStatusText: response.statusText,
+							reachable: false,
+							error:
+								"Preview returned an error page while starting the environment.",
+						};
+					}
+				}
+
+				return {
+					previewUrl,
+					environment,
+					site,
+					path,
+					httpStatus: response.status,
+					httpStatusText: response.statusText,
+					reachable: true,
+				};
+			} catch (error) {
+				return {
+					previewUrl,
+					environment,
+					site,
+					path,
+					reachable: false,
+					error:
+						error instanceof Error
+							? error.message
+							: "Failed to reach preview URL",
+				};
+			}
 		},
 	});
