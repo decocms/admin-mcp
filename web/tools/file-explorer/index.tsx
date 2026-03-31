@@ -1,6 +1,7 @@
 import Editor, { loader } from "@monaco-editor/react";
 import type { OnMount } from "@monaco-editor/react";
 import {
+	AlertTriangle,
 	ChevronDown,
 	ChevronRight,
 	ExternalLink,
@@ -165,6 +166,26 @@ function CancelledView() {
 	);
 }
 
+function PreviewErrorFallback() {
+	return (
+		<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background p-6">
+			<Card className="w-full max-w-lg border-muted bg-muted/30">
+				<CardHeader className="pb-1">
+					<CardTitle className="text-base text-foreground/80">
+						Preview not available for this Stack
+					</CardTitle>
+				</CardHeader>
+				<CardContent className="pt-0">
+					<p className="text-sm text-muted-foreground">
+						It is normal for some repositories to not have a preview URL or live
+						application route available.
+					</p>
+				</CardContent>
+			</Card>
+		</div>
+	);
+}
+
 // ─── visual editor script ─────────────────────────────────────────────────────
 
 function visualEditorScript() {
@@ -295,6 +316,17 @@ function visualEditorScript() {
 	);
 }
 
+type CodeSelectionPrompt = {
+	filepath: string;
+	startLine: number;
+	endLine: number;
+	selectedText: string;
+	position: {
+		left: number;
+		top: number;
+	};
+};
+
 // ─── main workspace ───────────────────────────────────────────────────────────
 
 function FileExplorerWorkspace({
@@ -302,13 +334,13 @@ function FileExplorerWorkspace({
 	userEnv,
 	userEnvUrl,
 	productionUrl,
-	defaultViewMode,
+	isPreviewSupported,
 }: {
 	site: string;
 	userEnv: string;
 	userEnvUrl: string | null;
 	productionUrl: string;
-	defaultViewMode: string;
+	isPreviewSupported: boolean;
 }) {
 	const app = useMcpApp();
 
@@ -349,14 +381,20 @@ function FileExplorerWorkspace({
 	const [visualEditorElement, setVisualEditorElement] =
 		useState<VisualEditorPayload | null>(null);
 	const [visualEditorInput, setVisualEditorInput] = useState("");
+	const [codePromptSelection, setCodePromptSelection] =
+		useState<CodeSelectionPrompt | null>(null);
+	const [codePromptInput, setCodePromptInput] = useState("");
 	const [isSendingVisual, setIsSendingVisual] = useState(false);
+	const [isSendingCodePrompt, setIsSendingCodePrompt] = useState(false);
 	const [editorTheme, setEditorTheme] = useState<"vs" | "vs-dark">(() =>
 		typeof document !== "undefined" &&
 		document.documentElement.classList.contains("dark")
 			? "vs-dark"
 			: "vs",
 	);
-	const [viewMode, setViewMode] = useState<ViewMode>(defaultViewMode as ViewMode);
+	const [viewMode, setViewMode] = useState<ViewMode>(
+		isPreviewSupported ? "preview" : "code",
+	);
 	const [previewViewport, setPreviewViewport] =
 		useState<PreviewViewport>("desktop");
 	const [previewPathInput, setPreviewPathInput] = useState("/");
@@ -373,6 +411,7 @@ function FileExplorerWorkspace({
 	const pagesContainerRef = useRef<HTMLDivElement>(null);
 	const previewIframeRef = useRef<HTMLIFrameElement>(null);
 	const visualEditorInputRef = useRef<HTMLInputElement>(null);
+	const codePromptInputRef = useRef<HTMLInputElement>(null);
 
 	// ── computed ────────────────────────────────────────────────────────────────
 	const isReadonly = false;
@@ -470,6 +509,19 @@ function FileExplorerWorkspace({
 		}
 	}, [visualEditorElement]);
 
+	useEffect(() => {
+		if (codePromptSelection) {
+			setTimeout(() => codePromptInputRef.current?.focus(), 50);
+		}
+	}, [codePromptSelection]);
+
+	useEffect(() => {
+		if (viewMode !== "code") {
+			setCodePromptSelection(null);
+			setCodePromptInput("");
+		}
+	}, [viewMode]);
+
 	// Load git status when env is ready
 	const loadGitStatus = useCallback(async () => {
 		if (!app || !userEnv) return;
@@ -549,9 +601,7 @@ function FileExplorerWorkspace({
 				onEnvReady(f);
 			} else {
 				setEnvStatus("waiting");
-				setPreviewUrl(
-					`${productionUrl}${productionUrl.endsWith("/") ? "" : "/"}?__cb=${crypto.randomUUID()}`,
-				);
+				setPreviewUrl(null);
 				schedulePoll();
 			}
 		});
@@ -578,6 +628,7 @@ function FileExplorerWorkspace({
 			void refreshKey;
 			setIsLoadingPreview(true);
 			setPreviewError(undefined);
+			setPreviewUrl(null);
 			try {
 				const result = await app?.callServerTool({
 					name: "preview_environment",
@@ -596,6 +647,16 @@ function FileExplorerWorkspace({
 					| PreviewEnvironmentOutput
 					| undefined;
 				if (!data?.previewUrl) throw new Error("Preview URL was not returned");
+				if (data.reachable === false) {
+					const status =
+						typeof data.httpStatus === "number"
+							? ` (HTTP ${data.httpStatus}${data.httpStatusText ? ` ${data.httpStatusText}` : ""})`
+							: "";
+					throw new Error(
+						data.error ??
+							`Failed to load preview for "${previewPath}".${status}`,
+					);
+				}
 				if (!cancelled) setPreviewUrl(data.previewUrl);
 			} catch (error) {
 				if (!cancelled) {
@@ -915,7 +976,92 @@ function FileExplorerWorkspace({
 		editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => {
 			void saveActiveFileRef.current?.();
 		});
+		editor.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyK, () => {
+			const selection = editor.getSelection();
+			const model = editor.getModel();
+			const filepath = selectedFileRef.current;
+			if (!selection || !model || !filepath) return;
+
+			const hasSelection = !selection.isEmpty();
+			const lineNumber = selection.startLineNumber;
+			const lineRange = new m.Range(
+				lineNumber,
+				1,
+				lineNumber,
+				model.getLineMaxColumn(lineNumber),
+			);
+			const range = hasSelection ? selection : lineRange;
+			const selectedText = model.getValueInRange(range).trim();
+			if (!selectedText) return;
+
+			const layout = editor.getLayoutInfo();
+			const visiblePosition = editor.getScrolledVisiblePosition(range.getEndPosition());
+			const popupWidth = 320;
+			const padding = 12;
+			const fallbackLeft = Math.max(
+				padding,
+				Math.min(layout.width / 2 - popupWidth / 2, layout.width - popupWidth - padding),
+			);
+			const left = visiblePosition
+				? Math.max(
+						padding,
+						Math.min(
+							visiblePosition.left - popupWidth / 2,
+							layout.width - popupWidth - padding,
+						),
+					)
+				: fallbackLeft;
+			const top = visiblePosition
+				? Math.max(
+						padding,
+						Math.min(visiblePosition.top + visiblePosition.height + 8, layout.height - 48),
+					)
+				: 16;
+
+			setCodePromptSelection({
+				filepath,
+				startLine: range.startLineNumber,
+				endLine: range.endLineNumber,
+				selectedText,
+				position: { left, top },
+			});
+			setCodePromptInput("");
+		});
 	}, []);
+
+	const handleCodePromptSend = useCallback(async () => {
+		if (!app || !codePromptSelection || !codePromptInput.trim()) return;
+		setIsSendingCodePrompt(true);
+		try {
+			const language = getLanguageFromPath(codePromptSelection.filepath) || "text";
+			const lines = [
+				`The user selected code and asked: **"${codePromptInput.trim()}"**`,
+				"",
+				`**File:** \`${codePromptSelection.filepath}\``,
+				`**Selected lines:** \`${codePromptSelection.startLine}-${codePromptSelection.endLine}\``,
+				"",
+				"**Selected code:**",
+				`~~~${language}`,
+				codePromptSelection.selectedText,
+				"~~~",
+				"",
+				`Site: **${site}** - Environment: **${userEnv}**`,
+				"",
+				"Please apply the requested change using this code context.",
+				"",
+				"Check the file before the change to ensure the code is correct."
+			];
+
+			app.sendMessage({
+				role: "user",
+				content: [{ type: "text", text: lines.join("\n") }],
+			});
+			setCodePromptSelection(null);
+			setCodePromptInput("");
+		} finally {
+			setIsSendingCodePrompt(false);
+		}
+	}, [app, codePromptSelection, codePromptInput, site, userEnv]);
 
 	const handleDelete = async (filepath = selectedFile) => {
 		if (!userEnv || !filepath) return;
@@ -1539,32 +1685,98 @@ function FileExplorerWorkspace({
 														</div>
 													</div>
 												) : (
-													<Editor
-														path={selectedFile}
-														language={getLanguageFromPath(selectedFile)}
-														value={currentFileBuffer?.editorValue ?? ""}
-														theme={editorTheme}
-														beforeMount={handleEditorWillMount}
-														onMount={handleEditorDidMount}
-														onChange={handleEditorChange}
-														options={{
-															automaticLayout: true,
-															fontFamily:
-																'ui-monospace, "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", monospace',
-															fontLigatures: true,
-															fontSize: 13,
-															lineHeight: 22,
-															minimap: { enabled: false },
-															padding: { top: 16, bottom: 16 },
-															quickSuggestions: true,
-															readOnly: isReadonly,
-															renderLineHighlight: "gutter",
-															scrollBeyondLastLine: false,
-															smoothScrolling: true,
-															tabSize: 2,
-															wordWrap: "on",
-														}}
-													/>
+													<div className="relative h-full">
+														<Editor
+															path={selectedFile}
+															language={getLanguageFromPath(selectedFile)}
+															value={currentFileBuffer?.editorValue ?? ""}
+															theme={editorTheme}
+															beforeMount={handleEditorWillMount}
+															onMount={handleEditorDidMount}
+															onChange={handleEditorChange}
+															options={{
+																automaticLayout: true,
+																fontFamily:
+																	'ui-monospace, "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", monospace',
+																fontLigatures: true,
+																fontSize: 13,
+																lineHeight: 22,
+																minimap: { enabled: false },
+																padding: { top: 16, bottom: 16 },
+																quickSuggestions: true,
+																readOnly: isReadonly,
+																renderLineHighlight: "gutter",
+																scrollBeyondLastLine: false,
+																smoothScrolling: true,
+																tabSize: 2,
+																wordWrap: "on",
+															}}
+														/>
+														{viewMode === "code" && codePromptSelection && (
+															<div
+																className="absolute z-20 pointer-events-none"
+																style={{
+																	left: `${codePromptSelection.position.left}px`,
+																	top: `${codePromptSelection.position.top}px`,
+																	width: "320px",
+																}}
+															>
+																<form
+																	className="pointer-events-auto flex w-full items-center gap-1.5 rounded-full border border-border bg-background/95 px-3 py-1.5 shadow-xl backdrop-blur-sm"
+																	onSubmit={(e) => {
+																		e.preventDefault();
+																		void handleCodePromptSend();
+																	}}
+																>
+																	<input
+																		ref={codePromptInputRef}
+																		type="text"
+																		value={codePromptInput}
+																		onChange={(e) =>
+																			setCodePromptInput(e.target.value)
+																		}
+																		onKeyDown={(e) => {
+																			if (e.key === "Escape") {
+																				setCodePromptSelection(null);
+																				setCodePromptInput("");
+																			}
+																		}}
+																		placeholder="Ask the AI..."
+																		className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+																	/>
+																	<button
+																		type="submit"
+																		disabled={
+																			!codePromptInput.trim() || isSendingCodePrompt
+																		}
+																		className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-30"
+																		title="Send"
+																	>
+																		{isSendingCodePrompt ? (
+																			<Loader2 className="h-3 w-3 animate-spin" />
+																		) : (
+																			<svg
+																				width="10"
+																				height="10"
+																				viewBox="0 0 10 10"
+																				fill="none"
+																				aria-hidden="true"
+																			>
+																				<title>Send</title>
+																				<path
+																					d="M5 9V1M1 5l4-4 4 4"
+																					stroke="currentColor"
+																					strokeWidth="1.5"
+																					strokeLinecap="round"
+																					strokeLinejoin="round"
+																				/>
+																			</svg>
+																		)}
+																	</button>
+																</form>
+															</div>
+														)}
+													</div>
 												)}
 											</div>
 										</>
@@ -1578,15 +1790,17 @@ function FileExplorerWorkspace({
 														<span className="text-sm">Starting your Live Preview…</span>
 													</div>
 												</div>
-											) : previewError ? (
-												<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background p-6">
-													<div className="max-w-md text-center">
-														<p className="text-sm font-medium">Preview failed</p>
-														<p className="mt-2 text-sm text-muted-foreground">
-															{previewError}
-														</p>
+											) : envStatus === "waiting" ? (
+												<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background/80">
+													<div className="flex flex-col items-center gap-3 text-muted-foreground">
+														<Loader2 className="h-5 w-5 animate-spin" />
+														<span className="text-sm">
+															Preview is starting. This can take a moment...
+														</span>
 													</div>
 												</div>
+											) : previewError ? (
+												<PreviewErrorFallback />
 											) : (
 												<div className="flex h-full items-center justify-center overflow-auto bg-background">
 													<div
@@ -1787,6 +2001,7 @@ function FileExplorerWorkspace({
 				onOpenChange={setPublishDialogOpen}
 				userEnv={userEnv}
 				envUrl={envUrl}
+				showPreviewAction={isPreviewSupported}
 				editorTheme={editorTheme}
 				gitStatus={gitStatus}
 				onGitStatusChange={setGitStatus}
@@ -1829,11 +2044,12 @@ export default function FileExplorerPage() {
 	if (state.status === "tool-cancelled") return <CancelledView />;
 	if (state.status === "tool-input") return <Spinner label="Opening file explorer..." />;
 
-	const { site, userEnv, userEnvUrl, productionUrl, defaultViewMode } = state.toolResult ?? {
+	const { site, userEnv, userEnvUrl, productionUrl, isPreviewSupported } = state.toolResult ?? {
 		site: "",
 		userEnv: "",
 		userEnvUrl: null,
 		productionUrl: "",
+		isPreviewSupported: true,
 	};
 
 	return (
@@ -1842,7 +2058,7 @@ export default function FileExplorerPage() {
 			userEnv={userEnv}
 			userEnvUrl={userEnvUrl}
 			productionUrl={productionUrl}
-			defaultViewMode={defaultViewMode ?? "preview"}
+			isPreviewSupported={isPreviewSupported}
 		/>
 	);
 }
