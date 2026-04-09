@@ -94,9 +94,7 @@ export function PublishDialog({
 			.then(([statusResult, diffResult]) => {
 				if (cancelled) return;
 				if (statusResult && !statusResult.isError) {
-					const data = statusResult.structuredContent as
-						| GitStatus
-						| undefined;
+					const data = statusResult.structuredContent as GitStatus | undefined;
 					if (data) onGitStatusChange(data);
 				}
 				if (diffResult && !diffResult.isError) {
@@ -157,9 +155,7 @@ export function PublishDialog({
 				arguments: { env: userEnv },
 			});
 			if (!statusResult?.isError) {
-				const data = statusResult?.structuredContent as
-					| GitStatus
-					| undefined;
+				const data = statusResult?.structuredContent as GitStatus | undefined;
 				onGitStatusChange(data ?? null);
 			}
 		} catch (error) {
@@ -204,9 +200,7 @@ export function PublishDialog({
 				arguments: { env: userEnv },
 			});
 			if (!statusResult?.isError) {
-				const data = statusResult?.structuredContent as
-					| GitStatus
-					| undefined;
+				const data = statusResult?.structuredContent as GitStatus | undefined;
 				onGitStatusChange(data ?? null);
 			}
 		} catch (error) {
@@ -481,9 +475,7 @@ export function PublishDialog({
 									Object.keys(gitDiff.diffs).length === 0
 								}
 							>
-								{isPublishing && (
-									<Loader2 className="h-4 w-4 animate-spin" />
-								)}
+								{isPublishing && <Loader2 className="h-4 w-4 animate-spin" />}
 								Publish
 							</Button>
 						</div>

@@ -145,7 +145,9 @@ function ErrorView({ error }: { error?: string }) {
 					<CardTitle className="text-destructive text-base">Error</CardTitle>
 				</CardHeader>
 				<CardContent>
-					<p className="text-sm text-muted-foreground">{error ?? "Unknown error"}</p>
+					<p className="text-sm text-muted-foreground">
+						{error ?? "Unknown error"}
+					</p>
 				</CardContent>
 			</Card>
 		</div>
@@ -189,7 +191,8 @@ function PreviewErrorFallback() {
 // ─── visual editor script ─────────────────────────────────────────────────────
 
 function visualEditorScript() {
-	if ((window as unknown as Record<string, unknown>).__visualEditorActive) return;
+	if ((window as unknown as Record<string, unknown>).__visualEditorActive)
+		return;
 	(window as unknown as Record<string, unknown>).__visualEditorActive = true;
 
 	const cursorStyle = document.createElement("style");
@@ -349,7 +352,9 @@ function FileExplorerWorkspace({
 	const [files, setFiles] = useState<string[]>([]);
 	const [search, setSearch] = useState("");
 	const [openFiles, setOpenFiles] = useState<string[]>([]);
-	const [fileBuffers, setFileBuffers] = useState<Record<string, FileBuffer>>({});
+	const [fileBuffers, setFileBuffers] = useState<Record<string, FileBuffer>>(
+		{},
+	);
 	const [selectedFile, setSelectedFile] = useState<string | null>(null);
 	const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(
 		() => new Set(["/"]),
@@ -417,8 +422,9 @@ function FileExplorerWorkspace({
 	const isReadonly = false;
 	const envUrl = userEnvUrl;
 
-
-	const currentFileBuffer = selectedFile ? fileBuffers[selectedFile] : undefined;
+	const currentFileBuffer = selectedFile
+		? fileBuffers[selectedFile]
+		: undefined;
 
 	const isPathDirty = useCallback(
 		(filepath: string) => {
@@ -480,7 +486,8 @@ function FileExplorerWorkspace({
 		if (selectedFile) parts.push(`Selected file: **${selectedFile}**`);
 		app
 			.updateModelContext({
-				content: parts.length > 0 ? [{ type: "text", text: parts.join("\n\n") }] : [],
+				content:
+					parts.length > 0 ? [{ type: "text", text: parts.join("\n\n") }] : [],
 			})
 			.catch(() => {});
 		return () => {
@@ -924,7 +931,11 @@ function FileExplorerWorkspace({
 						: (fileBuffers[normalizedFilepath]?.editorValue ?? "");
 				const result = await app?.callServerTool({
 					name: "write_file",
-					arguments: { env: userEnv, filepath: normalizedFilepath, content: nextValue },
+					arguments: {
+						env: userEnv,
+						filepath: normalizedFilepath,
+						content: nextValue,
+					},
 				});
 				if (result?.isError) {
 					const text = result.content?.find((b) => b.type === "text");
@@ -933,7 +944,8 @@ function FileExplorerWorkspace({
 					);
 				}
 				const data = result?.structuredContent as WriteFileOutput | undefined;
-				if (!data?.success) throw new Error("Save was not accepted by the backend");
+				if (!data?.success)
+					throw new Error("Save was not accepted by the backend");
 				setFileBuffers((prev) => ({
 					...prev,
 					[normalizedFilepath]: {
@@ -946,7 +958,9 @@ function FileExplorerWorkspace({
 				await loadFiles({
 					preserveSelection: true,
 					nextSelection:
-						normalizedFilepath === selectedFile ? normalizedFilepath : undefined,
+						normalizedFilepath === selectedFile
+							? normalizedFilepath
+							: undefined,
 				});
 			} catch (error) {
 				setFileError(
@@ -995,12 +1009,17 @@ function FileExplorerWorkspace({
 			if (!selectedText) return;
 
 			const layout = editor.getLayoutInfo();
-			const visiblePosition = editor.getScrolledVisiblePosition(range.getEndPosition());
+			const visiblePosition = editor.getScrolledVisiblePosition(
+				range.getEndPosition(),
+			);
 			const popupWidth = 320;
 			const padding = 12;
 			const fallbackLeft = Math.max(
 				padding,
-				Math.min(layout.width / 2 - popupWidth / 2, layout.width - popupWidth - padding),
+				Math.min(
+					layout.width / 2 - popupWidth / 2,
+					layout.width - popupWidth - padding,
+				),
 			);
 			const left = visiblePosition
 				? Math.max(
@@ -1014,7 +1033,10 @@ function FileExplorerWorkspace({
 			const top = visiblePosition
 				? Math.max(
 						padding,
-						Math.min(visiblePosition.top + visiblePosition.height + 8, layout.height - 48),
+						Math.min(
+							visiblePosition.top + visiblePosition.height + 8,
+							layout.height - 48,
+						),
 					)
 				: 16;
 
@@ -1033,7 +1055,8 @@ function FileExplorerWorkspace({
 		if (!app || !codePromptSelection || !codePromptInput.trim()) return;
 		setIsSendingCodePrompt(true);
 		try {
-			const language = getLanguageFromPath(codePromptSelection.filepath) || "text";
+			const language =
+				getLanguageFromPath(codePromptSelection.filepath) || "text";
 			const lines = [
 				`The user selected code and asked: **"${codePromptInput.trim()}"**`,
 				"",
@@ -1049,7 +1072,7 @@ function FileExplorerWorkspace({
 				"",
 				"Please apply the requested change using this code context.",
 				"",
-				"Check the file before the change to ensure the code is correct."
+				"Check the file before the change to ensure the code is correct.",
 			];
 
 			app.sendMessage({
@@ -1210,7 +1233,11 @@ function FileExplorerWorkspace({
 				"",
 			);
 
-		const selector = [`<${p.tag}`, p.classes ? ` class="${p.classes}"` : "", ">"].join("");
+		const selector = [
+			`<${p.tag}`,
+			p.classes ? ` class="${p.classes}"` : "",
+			">",
+		].join("");
 		lines.push(`**Clicked element:** \`${selector}\``);
 		if (p.parents) lines.push(`**DOM breadcrumb:** ${p.parents} > ${p.tag}`);
 		if (p.text) lines.push(`**Text content:** "${p.text}"`);
@@ -1364,7 +1391,8 @@ function FileExplorerWorkspace({
 												<RefreshCw
 													className={cn(
 														"h-3.5 w-3.5",
-														(isRefreshing || isLoadingPreview) && "animate-spin",
+														(isRefreshing || isLoadingPreview) &&
+															"animate-spin",
 													)}
 												/>
 											</button>
@@ -1464,7 +1492,9 @@ function FileExplorerWorkspace({
 																<File className="size-5" />
 															</EmptyMedia>
 															<EmptyTitle>
-																{search ? "No matching files" : "No files found"}
+																{search
+																	? "No matching files"
+																	: "No files found"}
 															</EmptyTitle>
 															<EmptyDescription>
 																{search
@@ -1477,7 +1507,9 @@ function FileExplorerWorkspace({
 													<div>
 														{flatNodes.map(({ node, depth }) => {
 															const isDirectory = node.kind === "directory";
-															const isExpanded = expandedDirectories.has(node.path);
+															const isExpanded = expandedDirectories.has(
+																node.path,
+															);
 															const isSelected = selectedFile === node.path;
 															const canSaveFile =
 																!isDirectory &&
@@ -1486,7 +1518,10 @@ function FileExplorerWorkspace({
 																!isDeleting &&
 																isPathDirty(node.path);
 															const canDeleteFile =
-																!isDirectory && !isReadonly && !isDeleting && !isSaving;
+																!isDirectory &&
+																!isReadonly &&
+																!isDeleting &&
+																!isSaving;
 
 															const rowButton = (
 																<button
@@ -1494,14 +1529,16 @@ function FileExplorerWorkspace({
 																	key={node.path}
 																	className={cn(
 																		"flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-sm transition-colors hover:bg-accent",
-																		isSelected && "bg-accent text-accent-foreground",
+																		isSelected &&
+																			"bg-accent text-accent-foreground",
 																	)}
 																	style={{ paddingLeft: `${depth * 12 + 8}px` }}
 																	onClick={() => {
 																		if (isDirectory) {
 																			setExpandedDirectories((prev) => {
 																				const next = new Set(prev);
-																				if (next.has(node.path)) next.delete(node.path);
+																				if (next.has(node.path))
+																					next.delete(node.path);
 																				else next.add(node.path);
 																				return next;
 																			});
@@ -1510,7 +1547,8 @@ function FileExplorerWorkspace({
 																		handleSelectFile(node.path);
 																	}}
 																	onContextMenu={() => {
-																		if (!isDirectory) handleSelectFile(node.path);
+																		if (!isDirectory)
+																			handleSelectFile(node.path);
 																	}}
 																	title={node.path}
 																>
@@ -1551,7 +1589,9 @@ function FileExplorerWorkspace({
 																	<ContextMenuContent className="w-44">
 																		<ContextMenuItem
 																			disabled={!canSaveFile}
-																			onSelect={() => void handleSave(node.path)}
+																			onSelect={() =>
+																				void handleSave(node.path)
+																			}
 																		>
 																			<Save className="h-4 w-4" />
 																			Save
@@ -1559,7 +1599,9 @@ function FileExplorerWorkspace({
 																		<ContextMenuItem
 																			variant="destructive"
 																			disabled={!canDeleteFile}
-																			onSelect={() => void handleDelete(node.path)}
+																			onSelect={() =>
+																				void handleDelete(node.path)
+																			}
 																		>
 																			<Trash2 className="h-4 w-4" />
 																			Delete
@@ -1594,7 +1636,10 @@ function FileExplorerWorkspace({
 																const isActive = selectedFile === filepath;
 																const isTabDirty = isPathDirty(filepath);
 																const canSaveTab =
-																	!isReadonly && !isSaving && !isDeleting && isTabDirty;
+																	!isReadonly &&
+																	!isSaving &&
+																	!isDeleting &&
+																	isTabDirty;
 																const canDeleteTab =
 																	!isReadonly && !isDeleting && !isSaving;
 
@@ -1612,7 +1657,9 @@ function FileExplorerWorkspace({
 																			className="flex max-w-40 items-center gap-1.5 truncate text-left"
 																			title={filepath}
 																			onClick={() => handleSelectFile(filepath)}
-																			onContextMenu={() => handleSelectFile(filepath)}
+																			onContextMenu={() =>
+																				handleSelectFile(filepath)
+																			}
 																		>
 																			<span className="truncate">
 																				{getBasename(filepath)}
@@ -1637,11 +1684,15 @@ function FileExplorerWorkspace({
 
 																return (
 																	<ContextMenu key={filepath}>
-																		<ContextMenuTrigger asChild>{tab}</ContextMenuTrigger>
+																		<ContextMenuTrigger asChild>
+																			{tab}
+																		</ContextMenuTrigger>
 																		<ContextMenuContent className="w-44">
 																			<ContextMenuItem
 																				disabled={!canSaveTab}
-																				onSelect={() => void handleSave(filepath)}
+																				onSelect={() =>
+																					void handleSave(filepath)
+																				}
 																			>
 																				<Save className="h-4 w-4" />
 																				Save
@@ -1649,7 +1700,9 @@ function FileExplorerWorkspace({
 																			<ContextMenuItem
 																				variant="destructive"
 																				disabled={!canDeleteTab}
-																				onSelect={() => void handleDelete(filepath)}
+																				onSelect={() =>
+																					void handleDelete(filepath)
+																				}
 																			>
 																				<Trash2 className="h-4 w-4" />
 																				Delete
@@ -1673,7 +1726,8 @@ function FileExplorerWorkspace({
 															</EmptyMedia>
 															<EmptyTitle>Select a file</EmptyTitle>
 															<EmptyDescription>
-																Choose a file from the sidebar to inspect or edit it.
+																Choose a file from the sidebar to inspect or
+																edit it.
 															</EmptyDescription>
 														</EmptyHeader>
 													</Empty>
@@ -1747,7 +1801,8 @@ function FileExplorerWorkspace({
 																	<button
 																		type="submit"
 																		disabled={
-																			!codePromptInput.trim() || isSendingCodePrompt
+																			!codePromptInput.trim() ||
+																			isSendingCodePrompt
 																		}
 																		className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-30"
 																		title="Send"
@@ -1787,7 +1842,9 @@ function FileExplorerWorkspace({
 												<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background/80">
 													<div className="flex flex-col items-center gap-3 text-muted-foreground">
 														<Loader2 className="h-5 w-5 animate-spin" />
-														<span className="text-sm">Starting your Live Preview…</span>
+														<span className="text-sm">
+															Starting your Live Preview…
+														</span>
 													</div>
 												</div>
 											) : envStatus === "waiting" ? (
@@ -1815,17 +1872,21 @@ function FileExplorerWorkspace({
 															<div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
 																<div className="flex items-center gap-3 text-muted-foreground">
 																	<Loader2 className="h-4 w-4 animate-spin" />
-																	<span className="text-sm">Loading preview...</span>
+																	<span className="text-sm">
+																		Loading preview...
+																	</span>
 																</div>
 															</div>
 														)}
 
-														{viewMode === "visual" && previewUrl && !visualEditorElement && (
-															<div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 rounded-full border border-violet-400/40 bg-violet-500/90 px-3 py-1 text-xs font-medium text-white shadow-md backdrop-blur-sm pointer-events-none select-none">
-																<MousePointer2 className="h-3 w-3" />
-																Click any element to ask the AI
-															</div>
-														)}
+														{viewMode === "visual" &&
+															previewUrl &&
+															!visualEditorElement && (
+																<div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 rounded-full border border-violet-400/40 bg-violet-500/90 px-3 py-1 text-xs font-medium text-white shadow-md backdrop-blur-sm pointer-events-none select-none">
+																	<MousePointer2 className="h-3 w-3" />
+																	Click any element to ask the AI
+																</div>
+															)}
 
 														{viewMode === "visual" &&
 															visualEditorElement &&
@@ -1879,7 +1940,8 @@ function FileExplorerWorkspace({
 																			<button
 																				type="submit"
 																				disabled={
-																					!visualEditorInput.trim() || isSendingVisual
+																					!visualEditorInput.trim() ||
+																					isSendingVisual
 																				}
 																				className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-30"
 																				title="Send"
@@ -1919,17 +1981,21 @@ function FileExplorerWorkspace({
 																className="h-full w-full border-0"
 																onLoad={() => {
 																	if (viewMode !== "visual") return;
-																	const win = previewIframeRef.current?.contentWindow;
+																	const win =
+																		previewIframeRef.current?.contentWindow;
 																	if (!win) return;
 																	try {
-																		const script = win.document.createElement("script");
+																		const script =
+																			win.document.createElement("script");
 																		script.textContent = `(${visualEditorScript.toString()})()`;
 																		win.document.head.appendChild(script);
 																	} catch {
 																		win.postMessage(
 																			{
 																				type: "editor::inject",
-																				args: { script: `(${visualEditorScript.toString()})()` },
+																				args: {
+																					script: `(${visualEditorScript.toString()})()`,
+																				},
 																			},
 																			"*",
 																		);
@@ -2042,15 +2108,17 @@ export default function FileExplorerPage() {
 
 	if (state.status === "error") return <ErrorView error={state.error} />;
 	if (state.status === "tool-cancelled") return <CancelledView />;
-	if (state.status === "tool-input") return <Spinner label="Opening file explorer..." />;
+	if (state.status === "tool-input")
+		return <Spinner label="Opening file explorer..." />;
 
-	const { site, userEnv, userEnvUrl, productionUrl, isPreviewSupported } = state.toolResult ?? {
-		site: "",
-		userEnv: "",
-		userEnvUrl: null,
-		productionUrl: "",
-		isPreviewSupported: true,
-	};
+	const { site, userEnv, userEnvUrl, productionUrl, isPreviewSupported } =
+		state.toolResult ?? {
+			site: "",
+			userEnv: "",
+			userEnvUrl: null,
+			productionUrl: "",
+			isPreviewSupported: true,
+		};
 
 	return (
 		<FileExplorerWorkspace
