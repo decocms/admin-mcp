@@ -17,7 +17,9 @@
 		"fmt": "biome format --write .",
 		"lint": "biome lint --write .",
 		"dev:worktree": "bun run scripts/dev-worktree.ts",
-		"dev:conductor": "WORKTREE_SLUG=$CONDUCTOR_WORKSPACE_NAME bun run dev:worktree"
+		"dev:conductor": "WORKTREE_SLUG=$CONDUCTOR_WORKSPACE_NAME bun run dev:worktree",
+		"submodules:update": "git submodule update --remote --merge",
+		"submodules:init": "git submodule update --init --recursive"
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.2.0",
