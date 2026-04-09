@@ -1,7 +1,6 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
 import { ADMIN_BASE_URL, getConfig } from "../lib/admin.ts";
-import type { Env } from "../types/env.ts";
 
 export const ASSETS_RESOURCE_URI = "ui://mcp-app/assets";
 
@@ -55,59 +54,58 @@ export const assetsOutputSchema = z.object({
 
 export type AssetsOutput = z.infer<typeof assetsOutputSchema>;
 
-export const assetsTool = (env: Env) =>
-	createTool({
-		id: "fetch_assets",
-		description:
-			"Fetch media assets (images, videos, documents, fonts) for the configured deco.cx site. Returns a paginated gallery of all uploaded assets with URLs, labels, and MIME types. Supports optional search by filename.",
-		inputSchema: assetsInputSchema,
-		outputSchema: assetsOutputSchema,
-		_meta: { ui: { resourceUri: ASSETS_RESOURCE_URI } },
-		annotations: {
-			readOnlyHint: true,
-			destructiveHint: false,
-			idempotentHint: true,
-			openWorldHint: true,
-		},
-		execute: async ({ context }) => {
-			console.log("context", context);
-			const { term, limit = 42, offset = 0 } = context;
-			const { site: sitename, apiKey } = getConfig(env);
+export const assetsTool = createTool({
+	id: "fetch_assets",
+	description:
+		"Fetch media assets (images, videos, documents, fonts) for the configured deco.cx site. Returns a paginated gallery of all uploaded assets with URLs, labels, and MIME types. Supports optional search by filename.",
+	inputSchema: assetsInputSchema,
+	outputSchema: assetsOutputSchema,
+	_meta: { ui: { resourceUri: ASSETS_RESOURCE_URI } },
+	annotations: {
+		readOnlyHint: true,
+		destructiveHint: false,
+		idempotentHint: true,
+		openWorldHint: true,
+	},
+	execute: async ({ context }, ctx) => {
+		console.log("context", context);
+		const { term, limit = 42, offset = 0 } = context;
+		const { site: sitename, apiKey } = getConfig(ctx);
 
-			console.log("limit", limit);
+		console.log("limit", limit);
 
-			const response = await fetch(
-				`${ADMIN_BASE_URL}/live/invoke/deco-sites/admin/loaders/sites/assets.ts`,
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						"x-api-key": apiKey,
-					},
-					body: JSON.stringify({
-						sitename,
-						filters: { offset, limit },
-						...(term ? { term } : {}),
-					}),
+		const response = await fetch(
+			`${ADMIN_BASE_URL}/live/invoke/deco-sites/admin/loaders/sites/assets.ts`,
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"x-api-key": apiKey,
 				},
+				body: JSON.stringify({
+					sitename,
+					filters: { offset, limit },
+					...(term ? { term } : {}),
+				}),
+			},
+		);
+
+		if (!response.ok) {
+			throw new Error(
+				`Failed to fetch assets: ${response.status} ${response.statusText}`,
 			);
+		}
 
-			if (!response.ok) {
-				throw new Error(
-					`Failed to fetch assets: ${response.status} ${response.statusText}`,
-				);
-			}
+		const data = await response.json();
+		const assets: Asset[] = data.assets ?? [];
 
-			const data = await response.json();
-			const assets: Asset[] = data.assets ?? [];
-
-			return {
-				assets,
-				sitename,
-				total: assets.length,
-			};
-		},
-	});
+		return {
+			assets,
+			sitename,
+			total: assets.length,
+		};
+	},
+});
 
 // ─── upload_asset ─────────────────────────────────────────────────────────────
 
@@ -156,88 +154,87 @@ function filenameFromUrl(url: string): string {
 	}
 }
 
-export const uploadAssetTool = (env: Env) =>
-	createTool({
-		id: "upload_asset",
-		description:
-			"Upload a media asset for the configured deco.cx site. Accepts either a public URL (the server downloads it) or base64-encoded file content. Returns the uploaded asset with its CDN URL.",
-		inputSchema: uploadAssetInputSchema,
-		outputSchema: uploadAssetOutputSchema,
-		annotations: {
-			readOnlyHint: false,
-			destructiveHint: false,
-			idempotentHint: false,
-			openWorldHint: true,
-		},
-		execute: async ({ context }) => {
-			const { url, data, mimeType, filename } = context;
-			const { site: sitename, apiKey } = getConfig(env);
+export const uploadAssetTool = createTool({
+	id: "upload_asset",
+	description:
+		"Upload a media asset for the configured deco.cx site. Accepts either a public URL (the server downloads it) or base64-encoded file content. Returns the uploaded asset with its CDN URL.",
+	inputSchema: uploadAssetInputSchema,
+	outputSchema: uploadAssetOutputSchema,
+	annotations: {
+		readOnlyHint: false,
+		destructiveHint: false,
+		idempotentHint: false,
+		openWorldHint: true,
+	},
+	execute: async ({ context }, ctx) => {
+		const { url, data, mimeType, filename } = context;
+		const { site: sitename, apiKey } = getConfig(ctx);
 
-			if (!url && !data) {
-				throw new Error("Either url or data must be provided.");
+		if (!url && !data) {
+			throw new Error("Either url or data must be provided.");
+		}
+
+		let fileBlob: Blob;
+		let contentType: string;
+		let name: string;
+
+		if (data) {
+			const binary = atob(data);
+			const bytes = new Uint8Array(binary.length);
+			for (let i = 0; i < binary.length; i++) {
+				bytes[i] = binary.charCodeAt(i);
 			}
-
-			let fileBlob: Blob;
-			let contentType: string;
-			let name: string;
-
-			if (data) {
-				const binary = atob(data);
-				const bytes = new Uint8Array(binary.length);
-				for (let i = 0; i < binary.length; i++) {
-					bytes[i] = binary.charCodeAt(i);
-				}
-				contentType = mimeType ?? "application/octet-stream";
-				name = filename ?? "asset";
-				fileBlob = new Blob([bytes], { type: contentType });
-			} else {
-				const resolvedUrl = url as string;
-				const fetchResponse = await fetch(resolvedUrl);
-				if (!fetchResponse.ok) {
-					throw new Error(
-						`Failed to fetch file from URL: ${fetchResponse.status} ${fetchResponse.statusText}`,
-					);
-				}
-				fileBlob = await fetchResponse.blob();
-				contentType =
-					fetchResponse.headers.get("content-type") ??
-					fileBlob.type ??
-					"application/octet-stream";
-				name = filename ?? filenameFromUrl(resolvedUrl);
+			contentType = mimeType ?? "application/octet-stream";
+			name = filename ?? "asset";
+			fileBlob = new Blob([bytes], { type: contentType });
+		} else {
+			const resolvedUrl = url as string;
+			const fetchResponse = await fetch(resolvedUrl);
+			if (!fetchResponse.ok) {
+				throw new Error(
+					`Failed to fetch file from URL: ${fetchResponse.status} ${fetchResponse.statusText}`,
+				);
 			}
+			fileBlob = await fetchResponse.blob();
+			contentType =
+				fetchResponse.headers.get("content-type") ??
+				fileBlob.type ??
+				"application/octet-stream";
+			name = filename ?? filenameFromUrl(resolvedUrl);
+		}
 
-			const form = new FormData();
-			form.append("sitename", sitename);
-			form.append(
-				"file",
-				new File([fileBlob], name, { type: contentType }),
-				name,
-			);
+		const form = new FormData();
+		form.append("sitename", sitename);
+		form.append(
+			"file",
+			new File([fileBlob], name, { type: contentType }),
+			name,
+		);
 
-			const uploadResponse = await fetch(
-				`${ADMIN_BASE_URL}/live/invoke/deco-sites/admin/actions/assets/upload.ts`,
-				{
-					method: "POST",
-					headers: { "x-api-key": apiKey },
-					body: form,
-				},
-			);
+		const uploadResponse = await fetch(
+			`${ADMIN_BASE_URL}/live/invoke/deco-sites/admin/actions/assets/upload.ts`,
+			{
+				method: "POST",
+				headers: { "x-api-key": apiKey },
+				body: form,
+			},
+		);
 
-			if (!uploadResponse.ok) {
-				const text = await uploadResponse
-					.text()
-					.catch(() => uploadResponse.statusText);
-				throw new Error(`Upload failed: ${uploadResponse.status} — ${text}`);
-			}
+		if (!uploadResponse.ok) {
+			const text = await uploadResponse
+				.text()
+				.catch(() => uploadResponse.statusText);
+			throw new Error(`Upload failed: ${uploadResponse.status} — ${text}`);
+		}
 
-			const asset = await uploadResponse.json();
+		const asset = await uploadResponse.json();
 
-			return {
-				asset,
-				message: `Successfully uploaded "${name}" to ${sitename}. CDN URL: ${asset.publicUrl}`,
-			};
-		},
-	});
+		return {
+			asset,
+			message: `Successfully uploaded "${name}" to ${sitename}. CDN URL: ${asset.publicUrl}`,
+		};
+	},
+});
 
 // ─── delete_asset ─────────────────────────────────────────────────────────────
 
@@ -256,47 +253,46 @@ export const deleteAssetOutputSchema = z.object({
 
 export type DeleteAssetOutput = z.infer<typeof deleteAssetOutputSchema>;
 
-export const deleteAssetTool = (env: Env) =>
-	createTool({
-		id: "delete_asset",
-		description:
-			"Permanently delete a media asset by its ID from the configured deco.cx site. This is irreversible — the file is removed from storage and the database index.",
-		inputSchema: deleteAssetInputSchema,
-		outputSchema: deleteAssetOutputSchema,
-		annotations: {
-			readOnlyHint: false,
-			destructiveHint: true,
-			idempotentHint: false,
-			openWorldHint: false,
-		},
-		execute: async ({ context }) => {
-			const { id } = context;
-			const { site: sitename, apiKey } = getConfig(env);
+export const deleteAssetTool = createTool({
+	id: "delete_asset",
+	description:
+		"Permanently delete a media asset by its ID from the configured deco.cx site. This is irreversible — the file is removed from storage and the database index.",
+	inputSchema: deleteAssetInputSchema,
+	outputSchema: deleteAssetOutputSchema,
+	annotations: {
+		readOnlyHint: false,
+		destructiveHint: true,
+		idempotentHint: false,
+		openWorldHint: false,
+	},
+	execute: async ({ context }, ctx) => {
+		const { id } = context;
+		const { site: sitename, apiKey } = getConfig(ctx);
 
-			const response = await fetch(
-				`${ADMIN_BASE_URL}/live/invoke/deco-sites/admin/actions/assets/remove_asset.ts`,
-				{
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-						"x-api-key": apiKey,
-					},
-					body: JSON.stringify({ sitename, id }),
+		const response = await fetch(
+			`${ADMIN_BASE_URL}/live/invoke/deco-sites/admin/actions/assets/remove_asset.ts`,
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"x-api-key": apiKey,
 				},
+				body: JSON.stringify({ sitename, id }),
+			},
+		);
+
+		if (!response.ok) {
+			const text = await response.text().catch(() => response.statusText);
+			throw new Error(
+				`Failed to delete asset ${id}: ${response.status} ${text}`,
 			);
+		}
 
-			if (!response.ok) {
-				const text = await response.text().catch(() => response.statusText);
-				throw new Error(
-					`Failed to delete asset ${id}: ${response.status} ${text}`,
-				);
-			}
-
-			return {
-				deleted: true,
-				id,
-				sitename,
-				message: `Asset ${id} deleted successfully from ${sitename}.`,
-			};
-		},
-	});
+		return {
+			deleted: true,
+			id,
+			sitename,
+			message: `Asset ${id} deleted successfully from ${sitename}.`,
+		};
+	},
+});

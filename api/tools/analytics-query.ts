@@ -1,7 +1,6 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
 import { callAdmin, getConfig } from "../lib/admin.ts";
-import type { Env } from "../types/env.ts";
 
 const ANALYTICS_QUERY_LOADER = "deco-sites/admin/loaders/analytics/query.ts";
 
@@ -94,28 +93,27 @@ const analyticsOptionsSchema = z.object({
  * analytics_query – run the site analytics query (Plausible / OneDollarStats).
  * Uses the same loader as the admin analytics UI; options match QueryOptionsObject.
  */
-export const analyticsQueryTool = (env: Env) =>
-	createTool({
-		id: "analytics_query",
-		description:
-			"Query site analytics (Plausible or OneDollarStats). Pass hostname and options (date_range, metrics, optional dimensions, filters, order_by, include, pagination). Site from MCP context.",
-		inputSchema: z.object({
-			hostname: z.string().describe("Site hostname (e.g. www.example.com)"),
-			options: analyticsOptionsSchema,
-		}),
-		outputSchema: z.object({ data: z.unknown() }),
-		annotations: { readOnlyHint: true, destructiveHint: false },
-		execute: async ({ context }) => {
-			const { apiKey, site } = getConfig(env);
-			const data = await callAdmin(
-				ANALYTICS_QUERY_LOADER,
-				{
-					sitename: site,
-					hostname: context.hostname,
-					options: context.options,
-				},
-				apiKey,
-			).catch(() => null);
-			return { data };
-		},
-	});
+export const analyticsQueryTool = createTool({
+	id: "analytics_query",
+	description:
+		"Query site analytics (Plausible or OneDollarStats). Pass hostname and options (date_range, metrics, optional dimensions, filters, order_by, include, pagination). Site from MCP context.",
+	inputSchema: z.object({
+		hostname: z.string().describe("Site hostname (e.g. www.example.com)"),
+		options: analyticsOptionsSchema,
+	}),
+	outputSchema: z.object({ data: z.unknown() }),
+	annotations: { readOnlyHint: true, destructiveHint: false },
+	execute: async ({ context }, ctx) => {
+		const { apiKey, site } = getConfig(ctx);
+		const data = await callAdmin(
+			ANALYTICS_QUERY_LOADER,
+			{
+				sitename: site,
+				hostname: context.hostname,
+				options: context.options,
+			},
+			apiKey,
+		).catch(() => null);
+		return { data };
+	},
+});

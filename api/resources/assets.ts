@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createPublicResource } from "@decocms/runtime/tools";
 import { ASSETS_RESOURCE_URI } from "../tools/assets.ts";
-import type { Env } from "../types/env.ts";
 
 const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 
@@ -12,25 +11,24 @@ function getDistPath(): string {
 	return join(projectRoot, "dist", "client", "index.html");
 }
 
-export const assetsAppResource = (_env: Env) =>
-	createPublicResource({
-		uri: ASSETS_RESOURCE_URI,
-		name: "Assets UI",
-		description: "Interactive media asset gallery for deco.cx sites",
-		mimeType: RESOURCE_MIME_TYPE,
-		read: async () => {
-			const html = await readFile(getDistPath(), "utf-8");
-			return {
-				uri: ASSETS_RESOURCE_URI,
-				mimeType: RESOURCE_MIME_TYPE,
-				text: html,
-				_meta: {
-					ui: {
-						csp: {
-							connectDomains: ["https://admin.deco.cx"],
-						},
+export const assetsAppResource = createPublicResource({
+	uri: ASSETS_RESOURCE_URI,
+	name: "Assets UI",
+	description: "Interactive media asset gallery for deco.cx sites",
+	mimeType: RESOURCE_MIME_TYPE,
+	read: async () => {
+		const html = await readFile(getDistPath(), "utf-8");
+		return {
+			uri: ASSETS_RESOURCE_URI,
+			mimeType: RESOURCE_MIME_TYPE,
+			text: html,
+			_meta: {
+				ui: {
+					csp: {
+						connectDomains: ["https://admin.deco.cx"],
 					},
 				},
-			};
-		},
-	});
+			},
+		};
+	},
+});

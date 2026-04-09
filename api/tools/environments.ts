@@ -1,7 +1,6 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
 import { callAdmin, getConfig } from "../lib/admin.ts";
-import type { Env } from "../types/env.ts";
 
 export const ENVIRONMENTS_RESOURCE_URI = "ui://mcp-app/environments";
 
@@ -37,34 +36,33 @@ export type ListEnvironmentsOutput = z.infer<
 	typeof listEnvironmentsOutputSchema
 >;
 
-export const listEnvironmentsTool = (env: Env) =>
-	createTool({
-		id: "list_environments",
-		description:
-			"List all sandbox environments (platform=sandbox) for the configured deco.cx site. Returns each environment's name, URL, branch/commit, and metadata.",
-		inputSchema: listEnvironmentsInputSchema,
-		outputSchema: listEnvironmentsOutputSchema,
-		_meta: { ui: { resourceUri: ENVIRONMENTS_RESOURCE_URI } },
-		annotations: {
-			readOnlyHint: true,
-			destructiveHint: false,
-			idempotentHint: true,
-			openWorldHint: true,
-		},
-		execute: async () => {
-			const { site, apiKey } = getConfig(env);
-			const data = (await callAdmin(
-				"deco-sites/admin/loaders/environments/list.ts",
-				{ sitename: site },
-				apiKey,
-			)) as AdminEnvironment[] | { environments: AdminEnvironment[] };
-			const all = Array.isArray(data)
-				? data
-				: ((data as { environments: AdminEnvironment[] }).environments ?? []);
-			const environments = all.filter((e) => e.platform === "sandbox");
-			return { environments, site };
-		},
-	});
+export const listEnvironmentsTool = createTool({
+	id: "list_environments",
+	description:
+		"List all sandbox environments (platform=sandbox) for the configured deco.cx site. Returns each environment's name, URL, branch/commit, and metadata.",
+	inputSchema: listEnvironmentsInputSchema,
+	outputSchema: listEnvironmentsOutputSchema,
+	_meta: { ui: { resourceUri: ENVIRONMENTS_RESOURCE_URI } },
+	annotations: {
+		readOnlyHint: true,
+		destructiveHint: false,
+		idempotentHint: true,
+		openWorldHint: true,
+	},
+	execute: async (_input, ctx) => {
+		const { site, apiKey } = getConfig(ctx);
+		const data = (await callAdmin(
+			"deco-sites/admin/loaders/environments/list.ts",
+			{ sitename: site },
+			apiKey,
+		)) as AdminEnvironment[] | { environments: AdminEnvironment[] };
+		const all = Array.isArray(data)
+			? data
+			: ((data as { environments: AdminEnvironment[] }).environments ?? []);
+		const environments = all.filter((e) => e.platform === "sandbox");
+		return { environments, site };
+	},
+});
 
 // ─── get_environment ──────────────────────────────────────────────────────────
 
@@ -80,30 +78,29 @@ export const getEnvironmentOutputSchema = z.object({
 });
 export type GetEnvironmentOutput = z.infer<typeof getEnvironmentOutputSchema>;
 
-export const getEnvironmentTool = (env: Env) =>
-	createTool({
-		id: "get_environment",
-		description:
-			"Get details of a specific environment by name, including its URL, platform, git branch/commit, and a ready-to-use preview URL.",
-		inputSchema: getEnvironmentInputSchema,
-		outputSchema: getEnvironmentOutputSchema,
-		annotations: {
-			readOnlyHint: true,
-			destructiveHint: false,
-			idempotentHint: true,
-			openWorldHint: true,
-		},
-		execute: async ({ context }) => {
-			const { site, apiKey } = getConfig(env);
-			const environment = (await callAdmin(
-				"deco-sites/admin/loaders/environments/get.ts",
-				{ site, name: context.name },
-				apiKey,
-			)) as AdminEnvironment;
-			const previewUrl = `${environment.url}?__cb=${crypto.randomUUID()}`;
-			return { environment, site, previewUrl };
-		},
-	});
+export const getEnvironmentTool = createTool({
+	id: "get_environment",
+	description:
+		"Get details of a specific environment by name, including its URL, platform, git branch/commit, and a ready-to-use preview URL.",
+	inputSchema: getEnvironmentInputSchema,
+	outputSchema: getEnvironmentOutputSchema,
+	annotations: {
+		readOnlyHint: true,
+		destructiveHint: false,
+		idempotentHint: true,
+		openWorldHint: true,
+	},
+	execute: async ({ context }, ctx) => {
+		const { site, apiKey } = getConfig(ctx);
+		const environment = (await callAdmin(
+			"deco-sites/admin/loaders/environments/get.ts",
+			{ site, name: context.name },
+			apiKey,
+		)) as AdminEnvironment;
+		const previewUrl = `${environment.url}?__cb=${crypto.randomUUID()}`;
+		return { environment, site, previewUrl };
+	},
+});
 
 // ─── create_environment ───────────────────────────────────────────────────────
 
@@ -152,44 +149,43 @@ export type CreateEnvironmentOutput = z.infer<
 	typeof createEnvironmentOutputSchema
 >;
 
-export const createEnvironmentTool = (env: Env) =>
-	createTool({
-		id: "create_environment",
-		description:
-			"Create a new environment for the configured deco.cx site. Provisions a Kubernetes deployment and returns the environment URL once ready (takes 1–3 minutes for deco platform).",
-		inputSchema: createEnvironmentInputSchema,
-		outputSchema: createEnvironmentOutputSchema,
-		annotations: {
-			readOnlyHint: false,
-			destructiveHint: false,
-			idempotentHint: false,
-			openWorldHint: true,
-		},
-		execute: async ({ context }) => {
-			const { site, apiKey } = getConfig(env);
-			const environment = (await callAdmin(
-				"deco-sites/admin/actions/environments/create.ts",
-				{
-					site,
-					name: context.name,
-					...(context.savedKeyId ? { savedKeyId: context.savedKeyId } : {}),
-					...(context.anthropicApiKey
-						? { anthropicApiKey: context.anthropicApiKey }
-						: {}),
-					...(context.branch ? { options: { branch: context.branch } } : {}),
-					...(context.platform ? { platform: context.platform } : {}),
-				},
-				apiKey,
-			)) as AdminEnvironment;
-			const previewUrl = `${environment.url}?__cb=${crypto.randomUUID()}`;
-			return {
-				environment,
+export const createEnvironmentTool = createTool({
+	id: "create_environment",
+	description:
+		"Create a new environment for the configured deco.cx site. Provisions a Kubernetes deployment and returns the environment URL once ready (takes 1–3 minutes for deco platform).",
+	inputSchema: createEnvironmentInputSchema,
+	outputSchema: createEnvironmentOutputSchema,
+	annotations: {
+		readOnlyHint: false,
+		destructiveHint: false,
+		idempotentHint: false,
+		openWorldHint: true,
+	},
+	execute: async ({ context }, ctx) => {
+		const { site, apiKey } = getConfig(ctx);
+		const environment = (await callAdmin(
+			"deco-sites/admin/actions/environments/create.ts",
+			{
 				site,
-				previewUrl,
-				message: `Environment "${context.name}" created at ${environment.url}`,
-			};
-		},
-	});
+				name: context.name,
+				...(context.savedKeyId ? { savedKeyId: context.savedKeyId } : {}),
+				...(context.anthropicApiKey
+					? { anthropicApiKey: context.anthropicApiKey }
+					: {}),
+				...(context.branch ? { options: { branch: context.branch } } : {}),
+				...(context.platform ? { platform: context.platform } : {}),
+			},
+			apiKey,
+		)) as AdminEnvironment;
+		const previewUrl = `${environment.url}?__cb=${crypto.randomUUID()}`;
+		return {
+			environment,
+			site,
+			previewUrl,
+			message: `Environment "${context.name}" created at ${environment.url}`,
+		};
+	},
+});
 
 // ─── delete_environment ───────────────────────────────────────────────────────
 
@@ -210,34 +206,33 @@ export type DeleteEnvironmentOutput = z.infer<
 	typeof deleteEnvironmentOutputSchema
 >;
 
-export const deleteEnvironmentTool = (env: Env) =>
-	createTool({
-		id: "delete_environment",
-		description:
-			"Permanently delete a sandbox environment by name. This is irreversible — the environment and all associated resources will be removed.",
-		inputSchema: deleteEnvironmentInputSchema,
-		outputSchema: deleteEnvironmentOutputSchema,
-		annotations: {
-			readOnlyHint: false,
-			destructiveHint: true,
-			idempotentHint: false,
-			openWorldHint: true,
-		},
-		execute: async ({ context }) => {
-			const { site, apiKey } = getConfig(env);
-			await callAdmin(
-				"deco-sites/admin/actions/environments/delete.ts",
-				{ site, name: context.name },
-				apiKey,
-			);
-			return {
-				deleted: true,
-				name: context.name,
-				site,
-				message: `Environment "${context.name}" deleted successfully from ${site}.`,
-			};
-		},
-	});
+export const deleteEnvironmentTool = createTool({
+	id: "delete_environment",
+	description:
+		"Permanently delete a sandbox environment by name. This is irreversible — the environment and all associated resources will be removed.",
+	inputSchema: deleteEnvironmentInputSchema,
+	outputSchema: deleteEnvironmentOutputSchema,
+	annotations: {
+		readOnlyHint: false,
+		destructiveHint: true,
+		idempotentHint: false,
+		openWorldHint: true,
+	},
+	execute: async ({ context }, ctx) => {
+		const { site, apiKey } = getConfig(ctx);
+		await callAdmin(
+			"deco-sites/admin/actions/environments/delete.ts",
+			{ site, name: context.name },
+			apiKey,
+		);
+		return {
+			deleted: true,
+			name: context.name,
+			site,
+			message: `Environment "${context.name}" deleted successfully from ${site}.`,
+		};
+	},
+});
 
 // ─── preview_environment ──────────────────────────────────────────────────────
 
@@ -273,35 +268,53 @@ const PREVIEW_ERROR_MARKERS = [
 	"internal server error",
 ];
 
-export const previewEnvironmentTool = (env: Env) =>
-	createTool({
-		id: "preview_environment",
-		description:
-			"Get a live preview URL for a specific path in an environment. Includes a cache-busting parameter so the latest version is always served.",
-		inputSchema: previewEnvironmentInputSchema,
-		outputSchema: previewEnvironmentOutputSchema,
-		annotations: {
-			readOnlyHint: true,
-			destructiveHint: false,
-			idempotentHint: false,
-			openWorldHint: true,
-		},
-		execute: async ({ context }) => {
-			const { site, apiKey } = getConfig(env);
-			const environment = (await callAdmin(
-				"deco-sites/admin/loaders/environments/get.ts",
-				{ site, name: context.name },
-				apiKey,
-			)) as AdminEnvironment;
-			const path = context.path ?? "/";
-			const sep = path.includes("?") ? "&" : "?";
-			const previewUrl = `${environment.url}${path.startsWith("/") ? "" : "/"}${path}${sep}__cb=${crypto.randomUUID()}`;
-			try {
-				const response = await fetch(previewUrl, {
-					method: "GET",
-					redirect: "follow",
-				});
-				if (!response.ok) {
+export const previewEnvironmentTool = createTool({
+	id: "preview_environment",
+	description:
+		"Get a live preview URL for a specific path in an environment. Includes a cache-busting parameter so the latest version is always served.",
+	inputSchema: previewEnvironmentInputSchema,
+	outputSchema: previewEnvironmentOutputSchema,
+	annotations: {
+		readOnlyHint: true,
+		destructiveHint: false,
+		idempotentHint: false,
+		openWorldHint: true,
+	},
+	execute: async ({ context }, ctx) => {
+		const { site, apiKey } = getConfig(ctx);
+		const environment = (await callAdmin(
+			"deco-sites/admin/loaders/environments/get.ts",
+			{ site, name: context.name },
+			apiKey,
+		)) as AdminEnvironment;
+		const path = context.path ?? "/";
+		const sep = path.includes("?") ? "&" : "?";
+		const previewUrl = `${environment.url}${path.startsWith("/") ? "" : "/"}${path}${sep}__cb=${crypto.randomUUID()}`;
+		try {
+			const response = await fetch(previewUrl, {
+				method: "GET",
+				redirect: "follow",
+			});
+			if (!response.ok) {
+				return {
+					previewUrl,
+					environment,
+					site,
+					path,
+					httpStatus: response.status,
+					httpStatusText: response.statusText,
+					reachable: false,
+					error: `Preview URL returned HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`,
+				};
+			}
+
+			const contentType = response.headers.get("content-type") ?? "";
+			if (contentType.includes("text/html")) {
+				const body = (await response.text()).toLowerCase();
+				const marker = PREVIEW_ERROR_MARKERS.find((value) =>
+					body.includes(value),
+				);
+				if (marker) {
 					return {
 						previewUrl,
 						environment,
@@ -310,52 +323,33 @@ export const previewEnvironmentTool = (env: Env) =>
 						httpStatus: response.status,
 						httpStatusText: response.statusText,
 						reachable: false,
-						error: `Preview URL returned HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ""}`,
+						error:
+							"Preview returned an error page while starting the environment.",
 					};
 				}
-
-				const contentType = response.headers.get("content-type") ?? "";
-				if (contentType.includes("text/html")) {
-					const body = (await response.text()).toLowerCase();
-					const marker = PREVIEW_ERROR_MARKERS.find((value) =>
-						body.includes(value),
-					);
-					if (marker) {
-						return {
-							previewUrl,
-							environment,
-							site,
-							path,
-							httpStatus: response.status,
-							httpStatusText: response.statusText,
-							reachable: false,
-							error:
-								"Preview returned an error page while starting the environment.",
-						};
-					}
-				}
-
-				return {
-					previewUrl,
-					environment,
-					site,
-					path,
-					httpStatus: response.status,
-					httpStatusText: response.statusText,
-					reachable: true,
-				};
-			} catch (error) {
-				return {
-					previewUrl,
-					environment,
-					site,
-					path,
-					reachable: false,
-					error:
-						error instanceof Error
-							? error.message
-							: "Failed to reach preview URL",
-				};
 			}
-		},
-	});
+
+			return {
+				previewUrl,
+				environment,
+				site,
+				path,
+				httpStatus: response.status,
+				httpStatusText: response.statusText,
+				reachable: true,
+			};
+		} catch (error) {
+			return {
+				previewUrl,
+				environment,
+				site,
+				path,
+				reachable: false,
+				error:
+					error instanceof Error
+						? error.message
+						: "Failed to reach preview URL",
+			};
+		}
+	},
+});

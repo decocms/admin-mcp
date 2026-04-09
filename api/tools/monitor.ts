@@ -1,7 +1,6 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
 import { callAdmin, getConfig } from "../lib/admin.ts";
-import type { Env } from "../types/env.ts";
 
 export const MONITOR_RESOURCE_URI = "ui://mcp-app/monitor";
 
@@ -99,227 +98,219 @@ function extractHostname(raw: string): string {
 
 // ─── 1. Entry-point tool ──────────────────────────────────────────────────────
 
-export const getMonitorDataTool = (env: Env) =>
-	createTool({
-		id: "get_monitor_data",
-		description:
-			"Open the performance monitoring dashboard for the configured deco.cx site. Resolves the site's primary production hostname and launches the interactive monitor UI.",
-		inputSchema: z.object({}),
-		outputSchema: z.object({
-			sitename: z.string(),
-			hostname: z.string(),
-		}),
-		_meta: { ui: { resourceUri: MONITOR_RESOURCE_URI } },
-		annotations: {
-			readOnlyHint: true,
-			destructiveHint: false,
-			idempotentHint: true,
-			openWorldHint: true,
-		},
-		execute: async () => {
-			const { apiKey, site } = getConfig(env);
+export const getMonitorDataTool = createTool({
+	id: "get_monitor_data",
+	description:
+		"Open the performance monitoring dashboard for the configured deco.cx site. Resolves the site's primary production hostname and launches the interactive monitor UI.",
+	inputSchema: z.object({}),
+	outputSchema: z.object({
+		sitename: z.string(),
+		hostname: z.string(),
+	}),
+	_meta: { ui: { resourceUri: MONITOR_RESOURCE_URI } },
+	annotations: {
+		readOnlyHint: true,
+		destructiveHint: false,
+		idempotentHint: true,
+		openWorldHint: true,
+	},
+	execute: async (_input, ctx) => {
+		const { apiKey, site } = getConfig(ctx);
 
-			type DomainEntry = { domain: string; production?: boolean };
-			const domains = await invoke<DomainEntry[]>(
-				"deco-sites/admin/loaders/sites/domains.ts",
-				{ sitename: site },
-				apiKey,
-			).catch(() => [] as DomainEntry[]);
+		type DomainEntry = { domain: string; production?: boolean };
+		const domains = await invoke<DomainEntry[]>(
+			"deco-sites/admin/loaders/sites/domains.ts",
+			{ sitename: site },
+			apiKey,
+		).catch(() => [] as DomainEntry[]);
 
-			const hostname = domains[0]?.domain
-				? extractHostname(domains[0].domain)
-				: "";
+		const hostname = domains[0]?.domain
+			? extractHostname(domains[0].domain)
+			: "";
 
-			return { sitename: site, hostname };
-		},
-	});
+		return { sitename: site, hostname };
+	},
+});
 
 // ─── 2. Summary ───────────────────────────────────────────────────────────────
 
-export const getMonitorSummaryTool = (env: Env) =>
-	createTool({
-		id: "get_monitor_summary",
-		description:
-			"Fetch aggregate summary stats for a site: total requests, bandwidth, cache hit ratio, average latency, and status code counts.",
-		inputSchema: monitorQuerySchema,
-		outputSchema: summaryOutputSchema.nullable(),
-		annotations: { readOnlyHint: true, destructiveHint: false },
-		execute: async ({ context }) => {
-			const { apiKey, site } = getConfig(env);
-			type Result = { data: SummaryData | null };
-			const res = await invoke<Result>(
-				"deco-sites/admin/loaders/monitor/summary.ts",
-				{ sitename: site, ...context, filters: context.filters ?? [] },
-				apiKey,
-			).catch(() => ({ data: null }));
-			return res.data;
-		},
-	});
+export const getMonitorSummaryTool = createTool({
+	id: "get_monitor_summary",
+	description:
+		"Fetch aggregate summary stats for a site: total requests, bandwidth, cache hit ratio, average latency, and status code counts.",
+	inputSchema: monitorQuerySchema,
+	outputSchema: summaryOutputSchema.nullable(),
+	annotations: { readOnlyHint: true, destructiveHint: false },
+	execute: async ({ context }, ctx) => {
+		const { apiKey, site } = getConfig(ctx);
+		type Result = { data: SummaryData | null };
+		const res = await invoke<Result>(
+			"deco-sites/admin/loaders/monitor/summary.ts",
+			{ sitename: site, ...context, filters: context.filters ?? [] },
+			apiKey,
+		).catch(() => ({ data: null }));
+		return res.data;
+	},
+});
 
 // ─── 3. Timeline ──────────────────────────────────────────────────────────────
 
-export const getMonitorTimelineTool = (env: Env) =>
-	createTool({
-		id: "get_monitor_timeline",
-		description:
-			"Fetch the requests & bandwidth usage timeline for a site over a date range.",
-		inputSchema: monitorQuerySchema,
-		outputSchema: z.object({ data: z.array(timelinePointSchema) }),
-		annotations: { readOnlyHint: true, destructiveHint: false },
-		execute: async ({ context }) => {
-			const { apiKey, site } = getConfig(env);
-			type Result = { data: TimelineDataPoint[] };
-			const res = await invoke<Result>(
-				"deco-sites/admin/loaders/monitor/usageTimeline.ts",
-				{ sitename: site, ...context, filters: context.filters ?? [] },
-				apiKey,
-			).catch(() => ({ data: [] }));
-			return { data: res.data ?? [] };
-		},
-	});
+export const getMonitorTimelineTool = createTool({
+	id: "get_monitor_timeline",
+	description:
+		"Fetch the requests & bandwidth usage timeline for a site over a date range.",
+	inputSchema: monitorQuerySchema,
+	outputSchema: z.object({ data: z.array(timelinePointSchema) }),
+	annotations: { readOnlyHint: true, destructiveHint: false },
+	execute: async ({ context }, ctx) => {
+		const { apiKey, site } = getConfig(ctx);
+		type Result = { data: TimelineDataPoint[] };
+		const res = await invoke<Result>(
+			"deco-sites/admin/loaders/monitor/usageTimeline.ts",
+			{ sitename: site, ...context, filters: context.filters ?? [] },
+			apiKey,
+		).catch(() => ({ data: [] }));
+		return { data: res.data ?? [] };
+	},
+});
 
 // ─── 4. Top Paths ─────────────────────────────────────────────────────────────
 
-export const getMonitorTopPathsTool = (env: Env) =>
-	createTool({
-		id: "get_monitor_top_paths",
-		description: "Fetch the top requested URLs for a site.",
-		inputSchema: monitorQuerySchema.extend({
-			groupByPath: z
-				.boolean()
-				.optional()
-				.describe("When true, ignores query strings"),
-			metric: z
-				.enum(["requests", "bandwidth"])
-				.optional()
-				.describe("Order by requests or bandwidth"),
-			limit: z.number().optional(),
-		}),
-		outputSchema: z.object({ data: z.array(pathDataSchema) }),
-		annotations: { readOnlyHint: true, destructiveHint: false },
-		execute: async ({ context }) => {
-			const { apiKey, site } = getConfig(env);
-			const {
-				groupByPath = true,
-				metric = "requests",
-				limit = 20,
-				...query
-			} = context;
-			type Result = { data: PathData[] };
-			const res = await invoke<Result>(
-				"deco-sites/admin/loaders/monitor/topPaths.ts",
-				{
-					sitename: site,
-					...query,
-					filters: query.filters ?? [],
-					groupByPath,
-					orderBy: metric,
-					limit,
-				},
-				apiKey,
-			).catch(() => ({ data: [] }));
-			return { data: res.data ?? [] };
-		},
-	});
+export const getMonitorTopPathsTool = createTool({
+	id: "get_monitor_top_paths",
+	description: "Fetch the top requested URLs for a site.",
+	inputSchema: monitorQuerySchema.extend({
+		groupByPath: z
+			.boolean()
+			.optional()
+			.describe("When true, ignores query strings"),
+		metric: z
+			.enum(["requests", "bandwidth"])
+			.optional()
+			.describe("Order by requests or bandwidth"),
+		limit: z.number().optional(),
+	}),
+	outputSchema: z.object({ data: z.array(pathDataSchema) }),
+	annotations: { readOnlyHint: true, destructiveHint: false },
+	execute: async ({ context }, ctx) => {
+		const { apiKey, site } = getConfig(ctx);
+		const {
+			groupByPath = true,
+			metric = "requests",
+			limit = 20,
+			...query
+		} = context;
+		type Result = { data: PathData[] };
+		const res = await invoke<Result>(
+			"deco-sites/admin/loaders/monitor/topPaths.ts",
+			{
+				sitename: site,
+				...query,
+				filters: query.filters ?? [],
+				groupByPath,
+				orderBy: metric,
+				limit,
+			},
+			apiKey,
+		).catch(() => ({ data: [] }));
+		return { data: res.data ?? [] };
+	},
+});
 
 // ─── 5. Top Countries ────────────────────────────────────────────────────────
 
-export const getMonitorTopCountriesTool = (env: Env) =>
-	createTool({
-		id: "get_monitor_top_countries",
-		description: "Fetch the geographic distribution of traffic for a site.",
-		inputSchema: monitorQuerySchema.extend({
-			limit: z.number().optional(),
-		}),
-		outputSchema: z.object({
-			data: z.array(countryDataSchema),
-			total_requests: z.number(),
-		}),
-		annotations: { readOnlyHint: true, destructiveHint: false },
-		execute: async ({ context }) => {
-			const { apiKey, site } = getConfig(env);
-			const { limit = 20, ...query } = context;
-			type Result = { data: CountryData[]; total_requests: number };
-			const res = await invoke<Result>(
-				"deco-sites/admin/loaders/monitor/topCountries.ts",
-				{ sitename: site, ...query, filters: query.filters ?? [], limit },
-				apiKey,
-			).catch(() => ({ data: [], total_requests: 0 }));
-			return { data: res.data ?? [], total_requests: res.total_requests ?? 0 };
-		},
-	});
+export const getMonitorTopCountriesTool = createTool({
+	id: "get_monitor_top_countries",
+	description: "Fetch the geographic distribution of traffic for a site.",
+	inputSchema: monitorQuerySchema.extend({
+		limit: z.number().optional(),
+	}),
+	outputSchema: z.object({
+		data: z.array(countryDataSchema),
+		total_requests: z.number(),
+	}),
+	annotations: { readOnlyHint: true, destructiveHint: false },
+	execute: async ({ context }, ctx) => {
+		const { apiKey, site } = getConfig(ctx);
+		const { limit = 20, ...query } = context;
+		type Result = { data: CountryData[]; total_requests: number };
+		const res = await invoke<Result>(
+			"deco-sites/admin/loaders/monitor/topCountries.ts",
+			{ sitename: site, ...query, filters: query.filters ?? [], limit },
+			apiKey,
+		).catch(() => ({ data: [], total_requests: 0 }));
+		return { data: res.data ?? [], total_requests: res.total_requests ?? 0 };
+	},
+});
 
 // ─── 6. Cache Status ─────────────────────────────────────────────────────────
 
-export const getMonitorCacheStatusTool = (env: Env) =>
-	createTool({
-		id: "get_monitor_cache_status",
-		description:
-			"Fetch the cache status distribution (hit/miss/bypass/…) for a site.",
-		inputSchema: monitorQuerySchema,
-		outputSchema: z.object({ data: z.array(cacheStatusDataSchema) }),
-		annotations: { readOnlyHint: true, destructiveHint: false },
-		execute: async ({ context }) => {
-			const { apiKey, site } = getConfig(env);
-			type Result = { data: CacheStatusData[] };
-			const res = await invoke<Result>(
-				"deco-sites/admin/loaders/monitor/cacheStatus.ts",
-				{ sitename: site, ...context, filters: context.filters ?? [] },
-				apiKey,
-			).catch(() => ({ data: [] }));
-			return { data: res.data ?? [] };
-		},
-	});
+export const getMonitorCacheStatusTool = createTool({
+	id: "get_monitor_cache_status",
+	description:
+		"Fetch the cache status distribution (hit/miss/bypass/…) for a site.",
+	inputSchema: monitorQuerySchema,
+	outputSchema: z.object({ data: z.array(cacheStatusDataSchema) }),
+	annotations: { readOnlyHint: true, destructiveHint: false },
+	execute: async ({ context }, ctx) => {
+		const { apiKey, site } = getConfig(ctx);
+		type Result = { data: CacheStatusData[] };
+		const res = await invoke<Result>(
+			"deco-sites/admin/loaders/monitor/cacheStatus.ts",
+			{ sitename: site, ...context, filters: context.filters ?? [] },
+			apiKey,
+		).catch(() => ({ data: [] }));
+		return { data: res.data ?? [] };
+	},
+});
 
 // ─── 7. Status Codes ─────────────────────────────────────────────────────────
 
-export const getMonitorStatusCodesTool = (env: Env) =>
-	createTool({
-		id: "get_monitor_status_codes",
-		description: "Fetch the HTTP response status code distribution for a site.",
-		inputSchema: monitorQuerySchema,
-		outputSchema: z.object({ data: z.array(statusCodeDataSchema) }),
-		annotations: { readOnlyHint: true, destructiveHint: false },
-		execute: async ({ context }) => {
-			const { apiKey, site } = getConfig(env);
-			type Result = { data: StatusCodeData[] };
-			const res = await invoke<Result>(
-				"deco-sites/admin/loaders/monitor/statusCodes.ts",
-				{ sitename: site, ...context, filters: context.filters ?? [] },
-				apiKey,
-			).catch(() => ({ data: [] }));
-			return { data: res.data ?? [] };
-		},
-	});
+export const getMonitorStatusCodesTool = createTool({
+	id: "get_monitor_status_codes",
+	description: "Fetch the HTTP response status code distribution for a site.",
+	inputSchema: monitorQuerySchema,
+	outputSchema: z.object({ data: z.array(statusCodeDataSchema) }),
+	annotations: { readOnlyHint: true, destructiveHint: false },
+	execute: async ({ context }, ctx) => {
+		const { apiKey, site } = getConfig(ctx);
+		type Result = { data: StatusCodeData[] };
+		const res = await invoke<Result>(
+			"deco-sites/admin/loaders/monitor/statusCodes.ts",
+			{ sitename: site, ...context, filters: context.filters ?? [] },
+			apiKey,
+		).catch(() => ({ data: [] }));
+		return { data: res.data ?? [] };
+	},
+});
 
 // ─── 8. Analytics proxy ───────────────────────────────────────────────────────
 
-export const getAnalyticsDataTool = (env: Env) =>
-	createTool({
-		id: "get_analytics_data",
-		description:
-			"Proxy analytics requests to the OneDollarStats backend for a site. Used by the Analytics tab of the monitor UI.",
-		inputSchema: z.object({
-			hostname: z.string().describe("Site hostname"),
-			body: z.unknown().describe("Request body forwarded to the analytics API"),
-		}),
-		// Wrap in a concrete object so the runtime always serialises it into structuredContent
-		outputSchema: z.object({ data: z.unknown() }),
-		annotations: { readOnlyHint: true, destructiveHint: false },
-		execute: async ({ context }) => {
-			console.log("get_analytics_data");
-			const { apiKey, site } = getConfig(env);
-			const data = await invoke<unknown>(
-				"deco-sites/admin/loaders/onedollarstats/proxy.ts",
-				{
-					body: {
-						body: context.body,
-					},
-					hostname: context.hostname,
-					sitename: site,
+export const getAnalyticsDataTool = createTool({
+	id: "get_analytics_data",
+	description:
+		"Proxy analytics requests to the OneDollarStats backend for a site. Used by the Analytics tab of the monitor UI.",
+	inputSchema: z.object({
+		hostname: z.string().describe("Site hostname"),
+		body: z.unknown().describe("Request body forwarded to the analytics API"),
+	}),
+	// Wrap in a concrete object so the runtime always serialises it into structuredContent
+	outputSchema: z.object({ data: z.unknown() }),
+	annotations: { readOnlyHint: true, destructiveHint: false },
+	execute: async ({ context }, ctx) => {
+		console.log("get_analytics_data");
+		const { apiKey, site } = getConfig(ctx);
+		const data = await invoke<unknown>(
+			"deco-sites/admin/loaders/onedollarstats/proxy.ts",
+			{
+				body: {
+					body: context.body,
 				},
-				apiKey,
-			).catch(() => null);
-			return { data };
-		},
-	});
+				hostname: context.hostname,
+				sitename: site,
+			},
+			apiKey,
+		).catch(() => null);
+		return { data };
+	},
+});

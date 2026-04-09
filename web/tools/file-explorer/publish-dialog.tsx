@@ -77,6 +77,7 @@ export function PublishDialog({
 
 	// ─── load on open ───────────────────────────────────────────────────────────
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally re-run only when dialog opens
 	useEffect(() => {
 		if (!open || !app || !userEnv) return;
 
@@ -94,9 +95,7 @@ export function PublishDialog({
 			.then(([statusResult, diffResult]) => {
 				if (cancelled) return;
 				if (statusResult && !statusResult.isError) {
-					const data = statusResult.structuredContent as
-						| GitStatus
-						| undefined;
+					const data = statusResult.structuredContent as GitStatus | undefined;
 					if (data) onGitStatusChange(data);
 				}
 				if (diffResult && !diffResult.isError) {
@@ -116,7 +115,6 @@ export function PublishDialog({
 		return () => {
 			cancelled = true;
 		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [open]);
 
 	const handleOpenChange = (nextOpen: boolean) => {
@@ -157,9 +155,7 @@ export function PublishDialog({
 				arguments: { env: userEnv },
 			});
 			if (!statusResult?.isError) {
-				const data = statusResult?.structuredContent as
-					| GitStatus
-					| undefined;
+				const data = statusResult?.structuredContent as GitStatus | undefined;
 				onGitStatusChange(data ?? null);
 			}
 		} catch (error) {
@@ -204,9 +200,7 @@ export function PublishDialog({
 				arguments: { env: userEnv },
 			});
 			if (!statusResult?.isError) {
-				const data = statusResult?.structuredContent as
-					| GitStatus
-					| undefined;
+				const data = statusResult?.structuredContent as GitStatus | undefined;
 				onGitStatusChange(data ?? null);
 			}
 		} catch (error) {
@@ -258,8 +252,14 @@ export function PublishDialog({
 							<>
 								<TabsContent value="description" className="mt-0 px-6 py-5">
 									<div className="space-y-2">
-										<label className="text-sm font-medium">Description</label>
+										<label
+											htmlFor="publish-description"
+											className="text-sm font-medium"
+										>
+											Description
+										</label>
 										<Textarea
+											id="publish-description"
 											value={publishMessage}
 											onChange={(e) => setPublishMessage(e.target.value)}
 											placeholder="Describe the changes being published…"
@@ -481,9 +481,7 @@ export function PublishDialog({
 									Object.keys(gitDiff.diffs).length === 0
 								}
 							>
-								{isPublishing && (
-									<Loader2 className="h-4 w-4 animate-spin" />
-								)}
+								{isPublishing && <Loader2 className="h-4 w-4 animate-spin" />}
 								Publish
 							</Button>
 						</div>
