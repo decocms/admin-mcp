@@ -7,7 +7,12 @@
 	},
 	"files": {
 		"ignoreUnknown": true,
-		"includes": ["**", "!**/styles.css", "!**/globals.css"]
+		"includes": [
+			"**",
+			"!**/styles.css",
+			"!**/globals.css",
+			"!storefront-skills/**"
+		]
 	},
 	"formatter": {
 		"enabled": true,
@@ -20,6 +25,9 @@
 			"correctness": {
 				"useImportExtensions": "error",
 				"useHookAtTopLevel": "error"
+			},
+			"suspicious": {
+				"useBiomeIgnoreFolder": "off"
 			}
 		}
 	},
