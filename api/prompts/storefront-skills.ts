@@ -2,7 +2,6 @@ import type { Dirent } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, extname, join, relative } from "node:path";
 import { createPublicPrompt } from "@decocms/runtime/tools";
-import type { Env } from "../types/env.ts";
 
 const DEFAULT_SKILLS_PATH = join(import.meta.dir, "../../storefront-skills");
 
@@ -37,7 +36,11 @@ async function collectLocalFiles(dir: string): Promise<string[]> {
 			const fullPath = join(currentDir, entry.name);
 			if (entry.isDirectory()) {
 				await walk(fullPath);
-			} else if (entry.isFile() && extname(entry.name) === ".md" && entry.name !== "README.md") {
+			} else if (
+				entry.isFile() &&
+				extname(entry.name) === ".md" &&
+				entry.name !== "README.md"
+			) {
 				if (hasSkillMd && entry.name !== "SKILL.md") continue;
 				results.push(fullPath);
 			}
@@ -64,16 +67,15 @@ async function fetchFromLocal(dir: string): Promise<FileEntry[]> {
 
 function skillLabel(filePath: string): string {
 	const file = basename(filePath);
-	const raw = file.toUpperCase() === "SKILL.MD"
-		? basename(filePath.replace(/[\\/][^\\/]+$/, "")) // parent folder
-		: basename(filePath, extname(filePath));           // file stem
+	const raw =
+		file.toUpperCase() === "SKILL.MD"
+			? basename(filePath.replace(/[\\/][^\\/]+$/, "")) // parent folder
+			: basename(filePath, extname(filePath)); // file stem
 	return raw.replace(/-/g, "-");
 }
 
 function pathToPromptName(filePath: string): string {
-	return (
-		skillLabel(filePath).replace(/\s+/g, "_").toLowerCase()
-	);
+	return skillLabel(filePath).replace(/\s+/g, "_").toLowerCase();
 }
 
 function pathToTitle(filePath: string): string {
@@ -95,14 +97,14 @@ function frontmatterDescription(content: string): string | undefined {
 // Prompts factory
 // ---------------------------------------------------------------------------
 
-export const storefrontSkillsPrompts = async (_env: Env) => {
+export const storefrontSkillsPrompts = async () => {
 	const skillsPath = process.env.STOREFRONT_SKILLS_PATH ?? DEFAULT_SKILLS_PATH;
 
 	const entries = await fetchFromLocal(skillsPath);
-	
 
 	return entries.map(({ path: filePath, content }) => {
-		const description = frontmatterDescription(content) ?? pathToDescription(filePath);
+		const description =
+			frontmatterDescription(content) ?? pathToDescription(filePath);
 		return createPublicPrompt({
 			name: pathToPromptName(filePath),
 			title: pathToTitle(filePath),

@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createPublicResource } from "@decocms/runtime/tools";
 import { MONITOR_RESOURCE_URI } from "../tools/monitor.ts";
-import type { Env } from "../types/env.ts";
 
 const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 
@@ -18,26 +17,25 @@ const ANALYTICS_RESOURCE_DOMAINS = [
 	"https://deco.lilstts.com",
 ];
 
-export const monitorAppResource = (_env: Env) =>
-	createPublicResource({
-		uri: MONITOR_RESOURCE_URI,
-		name: "Monitor UI",
-		description: "Performance monitoring dashboard for deco.cx sites",
-		mimeType: RESOURCE_MIME_TYPE,
-		read: async () => {
-			const html = await readFile(getDistPath(), "utf-8");
-			return {
-				uri: MONITOR_RESOURCE_URI,
-				mimeType: RESOURCE_MIME_TYPE,
-				text: html,
-				// Allow loading stonks scripts + analytics API from external origins
-				_meta: {
-					ui: {
-						csp: {
-							resourceDomains: ANALYTICS_RESOURCE_DOMAINS,
-						},
+export const monitorAppResource = createPublicResource({
+	uri: MONITOR_RESOURCE_URI,
+	name: "Monitor UI",
+	description: "Performance monitoring dashboard for deco.cx sites",
+	mimeType: RESOURCE_MIME_TYPE,
+	read: async () => {
+		const html = await readFile(getDistPath(), "utf-8");
+		return {
+			uri: MONITOR_RESOURCE_URI,
+			mimeType: RESOURCE_MIME_TYPE,
+			text: html,
+			// Allow loading stonks scripts + analytics API from external origins
+			_meta: {
+				ui: {
+					csp: {
+						resourceDomains: ANALYTICS_RESOURCE_DOMAINS,
 					},
 				},
-			};
-		},
-	});
+			},
+		};
+	},
+});

@@ -1,3 +1,5 @@
+import type { AppContext } from "@decocms/runtime/tools";
+import { createRuntimeContext } from "@decocms/runtime/tools";
 import type { Env } from "../types/env.ts";
 
 export const ADMIN_BASE_URL =
@@ -23,7 +25,12 @@ export async function callAdmin(
 	return res.json();
 }
 
-export function getConfig(env: Env) {
+export function getEnv(ctx?: AppContext): Env {
+	return createRuntimeContext(ctx).env as Env;
+}
+
+export function getConfig(ctx?: AppContext) {
+	const env = getEnv(ctx);
 	const state = env.MESH_REQUEST_CONTEXT?.state;
 	const apiKey = env.MESH_REQUEST_CONTEXT?.authorization;
 	const site = state?.SITE_NAME;

@@ -35,6 +35,11 @@ import {
 	getMonitorTopCountriesTool,
 	getMonitorTopPathsTool,
 } from "./monitor.ts";
+import {
+	createSandboxTaskTool,
+	killSandboxTaskTool,
+	listSandboxTasksTool,
+} from "./sandbox.ts";
 export const tools = [
 	analyticsQueryTool,
 	assetsTool,
@@ -67,4 +72,7 @@ export const tools = [
 	getMonitorCacheStatusTool,
 	getMonitorStatusCodesTool,
 	getAnalyticsDataTool,
+	createSandboxTaskTool,
+	listSandboxTasksTool,
+	killSandboxTaskTool,
 ];
