@@ -1,7 +1,6 @@
-import Editor, { loader } from "@monaco-editor/react";
 import type { OnMount } from "@monaco-editor/react";
+import Editor, { loader } from "@monaco-editor/react";
 import {
-	AlertTriangle,
 	ChevronDown,
 	ChevronRight,
 	ExternalLink,
@@ -87,9 +86,7 @@ import { PublishDialog } from "./publish-dialog.tsx";
 import type {
 	EnvStatus,
 	FileBuffer,
-	FlatNode,
 	PreviewViewport,
-	TreeNode,
 	ViewMode,
 	VisualEditorPayload,
 } from "./types.ts";
@@ -336,13 +333,11 @@ function FileExplorerWorkspace({
 	site,
 	userEnv,
 	userEnvUrl,
-	productionUrl,
 	isPreviewSupported,
 }: {
 	site: string;
 	userEnv: string;
 	userEnvUrl: string | null;
-	productionUrl: string;
 	isPreviewSupported: boolean;
 }) {
 	const app = useMcpApp();
@@ -618,7 +613,7 @@ function FileExplorerWorkspace({
 			if (pollTimer) clearTimeout(pollTimer);
 			toast.dismiss(WARMUP_TOAST_ID);
 		};
-	}, [app, userEnv, productionUrl]);
+	}, [app, userEnv]);
 
 	// Fetch preview URL
 	useEffect(() => {
@@ -2111,12 +2106,11 @@ export default function FileExplorerPage() {
 	if (state.status === "tool-input")
 		return <Spinner label="Opening file explorer..." />;
 
-	const { site, userEnv, userEnvUrl, productionUrl, isPreviewSupported } =
+	const { site, userEnv, userEnvUrl, isPreviewSupported } =
 		state.toolResult ?? {
 			site: "",
 			userEnv: "",
 			userEnvUrl: null,
-			productionUrl: "",
 			isPreviewSupported: true,
 		};
 
@@ -2125,7 +2119,6 @@ export default function FileExplorerPage() {
 			site={site}
 			userEnv={userEnv}
 			userEnvUrl={userEnvUrl}
-			productionUrl={productionUrl}
 			isPreviewSupported={isPreviewSupported}
 		/>
 	);

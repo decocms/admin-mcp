@@ -77,6 +77,7 @@ export function PublishDialog({
 
 	// ─── load on open ───────────────────────────────────────────────────────────
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: intentionally re-run only when dialog opens
 	useEffect(() => {
 		if (!open || !app || !userEnv) return;
 
@@ -114,7 +115,6 @@ export function PublishDialog({
 		return () => {
 			cancelled = true;
 		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [open]);
 
 	const handleOpenChange = (nextOpen: boolean) => {
@@ -252,8 +252,14 @@ export function PublishDialog({
 							<>
 								<TabsContent value="description" className="mt-0 px-6 py-5">
 									<div className="space-y-2">
-										<label className="text-sm font-medium">Description</label>
+										<label
+											htmlFor="publish-description"
+											className="text-sm font-medium"
+										>
+											Description
+										</label>
 										<Textarea
+											id="publish-description"
 											value={publishMessage}
 											onChange={(e) => setPublishMessage(e.target.value)}
 											placeholder="Describe the changes being published…"
