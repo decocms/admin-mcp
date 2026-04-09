@@ -1,4 +1,10 @@
 import { analyticsQueryTool } from "./analytics-query.ts";
+import { suggestCommitMessageTool } from "./commit-summary.ts";
+import {
+	listPullRequestsTool,
+	mergePullRequestTool,
+	openPullRequestTool,
+} from "./pull-requests.ts";
 import { assetsTool, deleteAssetTool, uploadAssetTool } from "./assets.ts";
 import {
 	createEnvironmentTool,
@@ -20,9 +26,11 @@ import {
 } from "./files.ts";
 import {
 	fsUnlinkTool,
+	gitCheckoutBranchTool,
 	gitDiffTool,
 	gitDiscardTool,
 	gitPublishTool,
+	gitRawTool,
 	gitStatusTool,
 } from "./git.ts";
 import {
@@ -63,6 +71,8 @@ export const tools = [
 	gitDiffTool,
 	gitPublishTool,
 	gitDiscardTool,
+	gitCheckoutBranchTool,
+	gitRawTool,
 	fsUnlinkTool,
 	getMonitorDataTool,
 	getMonitorSummaryTool,
@@ -72,7 +82,8 @@ export const tools = [
 	getMonitorCacheStatusTool,
 	getMonitorStatusCodesTool,
 	getAnalyticsDataTool,
-	createSandboxTaskTool,
-	listSandboxTasksTool,
-	killSandboxTaskTool,
+	listPullRequestsTool,
+	mergePullRequestTool,
+	openPullRequestTool,
+	suggestCommitMessageTool,
 ];
