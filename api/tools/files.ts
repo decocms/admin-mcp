@@ -20,7 +20,6 @@ async function getUserEnvName(apiKey: string): Promise<string> {
 		(payload?.user as Record<string, unknown> | undefined)?.id ??
 		payload?.sub ??
 		apiKey;
-	console.log("userId", userId);
 	const encoder = new TextEncoder();
 	const data = encoder.encode(String(userId));
 	const hashBuffer = await crypto.subtle.digest("SHA-256", data);
@@ -92,14 +91,13 @@ export const fileExplorerTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const env = getEnv(ctx);
 		const { site, apiKey } = getConfig(ctx);
 		const tokenToDecode = env.MESH_REQUEST_CONTEXT?.token;
 		const userEnvName = await getUserEnvName(tokenToDecode);
-		console.log("userEnvName", userEnvName);
 
 		const environmentsData = (await callAdmin(
 			"deco-sites/admin/loaders/environments/list.ts",
@@ -120,13 +118,11 @@ export const fileExplorerTool = createTool({
 
 		if (!userEnvEntry) {
 			try {
-				console.log("userEnvName", userEnvName);
 				const created = (await callAdmin(
 					"deco-sites/admin/actions/environments/create.ts",
 					{ site, name: userEnvName, platform: "sandbox" },
 					apiKey,
 				)) as z.infer<typeof environmentSchema>;
-				console.log("CREATED", created);
 				userEnvEntry = created;
 			} catch {
 				// Creation failed — frontend will keep polling until the env is ready
@@ -137,8 +133,6 @@ export const fileExplorerTool = createTool({
 
 		const response = await fetch(productionUrl);
 		const status = response.status;
-
-		console.log("status", status);
 
 		return {
 			site,
@@ -173,7 +167,7 @@ export const listFilesTool = createTool({
 		readOnlyHint: true,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -226,7 +220,7 @@ export const readFileTool = createTool({
 		readOnlyHint: true,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -239,8 +233,6 @@ export const readFileTool = createTool({
 			},
 			apiKey,
 		)) as ReadFileOutput;
-
-		console.log("result", result);
 
 		return result;
 	},
@@ -269,7 +261,7 @@ export const writeFileTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -319,7 +311,7 @@ export const deleteFileTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: true,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -380,7 +372,7 @@ export const grepFilesTool = createTool({
 		readOnlyHint: true,
 		destructiveHint: false,
 		idempotentHint: true,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -444,7 +436,7 @@ export const replaceInFileTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -509,7 +501,7 @@ export const updateJsonTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -564,7 +556,7 @@ export const getPagesTool = createTool({
 		readOnlyHint: true,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site } = getConfig(ctx);

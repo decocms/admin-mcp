@@ -112,7 +112,7 @@ export const getMonitorDataTool = createTool({
 		readOnlyHint: true,
 		destructiveHint: false,
 		idempotentHint: true,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async (_input, ctx) => {
 		const { apiKey, site } = getConfig(ctx);
@@ -298,7 +298,6 @@ export const getAnalyticsDataTool = createTool({
 	outputSchema: z.object({ data: z.unknown() }),
 	annotations: { readOnlyHint: true, destructiveHint: false },
 	execute: async ({ context }, ctx) => {
-		console.log("get_analytics_data");
 		const { apiKey, site } = getConfig(ctx);
 		const data = await invoke<unknown>(
 			"deco-sites/admin/loaders/onedollarstats/proxy.ts",

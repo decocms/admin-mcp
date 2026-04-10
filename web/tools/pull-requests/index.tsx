@@ -179,38 +179,42 @@ function PullRequestRow({
 				</div>
 			)}
 
-		{/* Actions */}
-		<div className="flex items-center gap-2 pl-7">
-			{mergeState === "merged" ? (
-				<span className="text-xs text-success font-medium">
-					Merged successfully
-				</span>
-			) : mergeState === "conflict" ? (
-				<>
-					<span className="flex items-center gap-1.5 text-xs text-warning font-medium">
-						<GitMergeIcon className="w-3.5 h-3.5 shrink-0" />
-						Conflito de merge — resolva os conflitos antes de fazer merge
+			{/* Actions */}
+			<div className="flex items-center gap-2 pl-7">
+				{mergeState === "merged" ? (
+					<span className="text-xs text-success font-medium">
+						Merged successfully
 					</span>
-					<a href={pr.html_url} target="_blank" rel="noreferrer">
-						<Button variant="outline" size="sm" className="h-7 text-xs gap-1.5">
-							<ExternalLink className="w-3 h-3" />
-							Abrir no GitHub
+				) : mergeState === "conflict" ? (
+					<>
+						<span className="flex items-center gap-1.5 text-xs text-warning font-medium">
+							<GitMergeIcon className="w-3.5 h-3.5 shrink-0" />
+							Conflito de merge — resolva os conflitos antes de fazer merge
+						</span>
+						<a href={pr.html_url} target="_blank" rel="noreferrer">
+							<Button
+								variant="outline"
+								size="sm"
+								className="h-7 text-xs gap-1.5"
+							>
+								<ExternalLink className="w-3 h-3" />
+								Abrir no GitHub
+							</Button>
+						</a>
+					</>
+				) : mergeState === "error" ? (
+					<>
+						<span className="text-xs text-destructive">{mergeError}</span>
+						<Button
+							variant="outline"
+							size="sm"
+							className="h-7 text-xs"
+							onClick={handleMergeCancel}
+						>
+							Dismiss
 						</Button>
-					</a>
-				</>
-			) : mergeState === "error" ? (
-				<>
-					<span className="text-xs text-destructive">{mergeError}</span>
-					<Button
-						variant="outline"
-						size="sm"
-						className="h-7 text-xs"
-						onClick={handleMergeCancel}
-					>
-						Dismiss
-					</Button>
-				</>
-			) : mergeState === "confirm" ? (
+					</>
+				) : mergeState === "confirm" ? (
 					<>
 						<span className="text-xs text-muted-foreground">
 							Merge #{pr.number}?
@@ -238,26 +242,26 @@ function PullRequestRow({
 						<span className="w-3.5 h-3.5 border-2 border-muted border-t-foreground/50 rounded-full animate-spin" />
 						<span className="text-xs text-muted-foreground">Merging…</span>
 					</>
-		) : (
-			<>
-				<Button
-						variant="outline"
-						size="sm"
-						className="h-7 text-xs gap-1.5"
-						onClick={handleMergeClick}
-						disabled={isDraft}
-					>
-						<GitMerge className="w-3 h-3" />
-						Merge
-					</Button>
-					<a href={pr.html_url} target="_blank" rel="noreferrer">
-						<Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5">
-							<ExternalLink className="w-3 h-3" />
-							Open in GitHub
+				) : (
+					<>
+						<Button
+							variant="outline"
+							size="sm"
+							className="h-7 text-xs gap-1.5"
+							onClick={handleMergeClick}
+							disabled={isDraft}
+						>
+							<GitMerge className="w-3 h-3" />
+							Merge
 						</Button>
-					</a>
-				</>
-			)}
+						<a href={pr.html_url} target="_blank" rel="noreferrer">
+							<Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5">
+								<ExternalLink className="w-3 h-3" />
+								Open in GitHub
+							</Button>
+						</a>
+					</>
+				)}
 			</div>
 		</div>
 	);
@@ -278,11 +282,12 @@ function PullRequestsList({
 	const [search, setSearch] = useState("");
 
 	const filtered = search.trim()
-		? pullRequests.filter((pr) =>
-				pr.title.toLowerCase().includes(search.toLowerCase()) ||
-				String(pr.number).includes(search) ||
-				(pr.user?.login ?? "").toLowerCase().includes(search.toLowerCase()) ||
-				(pr.head?.ref ?? "").toLowerCase().includes(search.toLowerCase()),
+		? pullRequests.filter(
+				(pr) =>
+					pr.title.toLowerCase().includes(search.toLowerCase()) ||
+					String(pr.number).includes(search) ||
+					(pr.user?.login ?? "").toLowerCase().includes(search.toLowerCase()) ||
+					(pr.head?.ref ?? "").toLowerCase().includes(search.toLowerCase()),
 			)
 		: pullRequests;
 
@@ -293,9 +298,7 @@ function PullRequestsList({
 		});
 		if (result?.isError) {
 			const text = result.content?.find((c) => c.type === "text");
-			throw new Error(
-				text?.type === "text" ? text.text : "Merge failed",
-			);
+			throw new Error(text?.type === "text" ? text.text : "Merge failed");
 		}
 		setPullRequests((prev) =>
 			prev.filter((pr) => pr.number !== pullRequestNumber),
@@ -363,7 +366,10 @@ function LoadingSkeleton() {
 			<div className="flex flex-col gap-2">
 				{Array.from({ length: 3 }).map((_, i) => (
 					// biome-ignore lint/suspicious/noArrayIndexKey: static loading skeleton
-					<div key={i} className="rounded-lg border border-border p-4 flex flex-col gap-2">
+					<div
+						key={i}
+						className="rounded-lg border border-border p-4 flex flex-col gap-2"
+					>
 						<div className="flex gap-3">
 							<div className="w-4 h-4 rounded bg-muted animate-pulse shrink-0" />
 							<div className="flex-1 flex flex-col gap-1.5">

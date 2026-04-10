@@ -65,14 +65,11 @@ export const assetsTool = createTool({
 		readOnlyHint: true,
 		destructiveHint: false,
 		idempotentHint: true,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
-		console.log("context", context);
 		const { term, limit = 42, offset = 0 } = context;
 		const { site: sitename, apiKey } = getConfig(ctx);
-
-		console.log("limit", limit);
 
 		const response = await fetch(
 			`${ADMIN_BASE_URL}/live/invoke/deco-sites/admin/loaders/sites/assets.ts`,
@@ -164,7 +161,7 @@ export const uploadAssetTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { url, data, mimeType, filename } = context;

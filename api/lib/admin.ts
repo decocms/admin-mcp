@@ -18,6 +18,7 @@ export async function callAdmin(
 		},
 		body: JSON.stringify(body),
 	});
+	console.log("res", res);
 	if (!res.ok) {
 		const text = await res.text().catch(() => res.statusText);
 		throw new Error(`Admin API error (${res.status}): ${text}`);

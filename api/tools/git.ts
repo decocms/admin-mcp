@@ -59,7 +59,7 @@ export const gitStatusTool = createTool({
 		readOnlyHint: true,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -112,7 +112,7 @@ export const gitDiffTool = createTool({
 		readOnlyHint: true,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -166,7 +166,7 @@ export const gitPublishTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -198,7 +198,7 @@ export const gitDiscardTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: true,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -242,7 +242,7 @@ export const gitCheckoutBranchTool = (cfEnv: Env) =>
 			readOnlyHint: false,
 			destructiveHint: false,
 			idempotentHint: false,
-			openWorldHint: true,
+			openWorldHint: false,
 		},
 		execute: async ({ context }) => {
 			const { site, apiKey } = getConfig(cfEnv);
@@ -282,7 +282,7 @@ export const gitRawTool = (cfEnv: Env) =>
 			readOnlyHint: false,
 			destructiveHint: false,
 			idempotentHint: false,
-			openWorldHint: true,
+			openWorldHint: false,
 		},
 		execute: async ({ context }) => {
 			const { site, apiKey } = getConfig(cfEnv);
@@ -312,7 +312,7 @@ export const fsUnlinkTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: true,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);

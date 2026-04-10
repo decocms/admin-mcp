@@ -21,9 +21,7 @@ export const suggestCommitMessageOutputSchema = z.object({
 	message: z.string().describe("Commit / publish message"),
 	title: z.string().describe("Pull request title"),
 	body: z.string().describe("Pull request body / description"),
-	branch: z
-		.string()
-		.describe("Suggested kebab-case branch name (no slashes)"),
+	branch: z.string().describe("Suggested kebab-case branch name (no slashes)"),
 });
 export type SuggestCommitMessageOutput = z.infer<
 	typeof suggestCommitMessageOutputSchema
@@ -56,16 +54,14 @@ function fallbackFromStatus(status: GitStatus): SuggestCommitMessageOutput {
 	return {
 		message,
 		title: message.charAt(0).toUpperCase() + message.slice(1),
-		body: `Changes to ${
-			[
-				...status.modified,
-				...status.created,
-				...status.deleted,
-				...status.not_added,
-			]
-				.slice(0, 5)
-				.join(", ")
-		}.`,
+		body: `Changes to ${[
+			...status.modified,
+			...status.created,
+			...status.deleted,
+			...status.not_added,
+		]
+			.slice(0, 5)
+			.join(", ")}.`,
 		branch: toKebab(label),
 	};
 }
@@ -78,8 +74,18 @@ function changedLines(
 	{ context = 2, maxLines = 40 } = {},
 ): string {
 	if (!from && !to) return "";
-	if (!from) return (to ?? "").split("\n").slice(0, maxLines).map((l) => `+ ${l}`).join("\n");
-	if (!to) return from.split("\n").slice(0, maxLines).map((l) => `- ${l}`).join("\n");
+	if (!from)
+		return (to ?? "")
+			.split("\n")
+			.slice(0, maxLines)
+			.map((l) => `+ ${l}`)
+			.join("\n");
+	if (!to)
+		return from
+			.split("\n")
+			.slice(0, maxLines)
+			.map((l) => `- ${l}`)
+			.join("\n");
 
 	// Cap input to avoid O(n²) on huge files
 	const a = from.split("\n").slice(0, 300);
@@ -222,80 +228,77 @@ async function callAdminCommitMetadata(
 // ─── tool ─────────────────────────────────────────────────────────────────────
 
 export const suggestCommitMessageTool = createTool({
-		id: "suggest_commit_message",
-		description:
-			"Use AI to suggest a commit message, PR title, PR body, and branch name based on the current changes in the environment.",
-		inputSchema: suggestCommitMessageInputSchema,
-		outputSchema: suggestCommitMessageOutputSchema,
-		annotations: {
-			readOnlyHint: true,
-			destructiveHint: false,
-			idempotentHint: false,
-			openWorldHint: true,
-		},
-		execute: async ({ context }, ctx) => {
-			const { site, apiKey } = getConfig(ctx);
+	id: "suggest_commit_message",
+	description:
+		"Use AI to suggest a commit message, PR title, PR body, and branch name based on the current changes in the environment.",
+	inputSchema: suggestCommitMessageInputSchema,
+	outputSchema: suggestCommitMessageOutputSchema,
+	annotations: {
+		readOnlyHint: true,
+		destructiveHint: false,
+		idempotentHint: false,
+		openWorldHint: false,
+	},
+	execute: async ({ context }, ctx) => {
+		const { site, apiKey } = getConfig(ctx);
 
-			const status = (await callAdmin(
-				"deco-sites/admin/loaders/releases/git/status.ts",
-				{ site, env: context.env },
-				apiKey,
-			)) as GitStatus;
+		const status = (await callAdmin(
+			"deco-sites/admin/loaders/releases/git/status.ts",
+			{ site, env: context.env },
+			apiKey,
+		)) as GitStatus;
 
-			const changedFiles = [
-				...status.modified,
-				...status.created,
-				...status.deleted,
-				...status.not_added,
-			];
+		const changedFiles = [
+			...status.modified,
+			...status.created,
+			...status.deleted,
+			...status.not_added,
+		];
 
-			if (changedFiles.length === 0) {
-				return {
-					message: "No changes",
-					title: "No changes",
-					body: "",
-					branch: "no-changes",
-				};
-			}
-
-			// Fetch actual diff content for richer AI context
-			const diffSummary = await fetchDiffSummary(
-				site,
-				context.env,
-				apiKey,
-				changedFiles,
-			);
-
-			const filesSummary = [
-				...status.modified.map((f) => `Modified: ${f}`),
-				...status.created.map((f) => `Added: ${f}`),
-				...status.deleted.map((f) => `Deleted: ${f}`),
-				...status.not_added.map((f) => `Added: ${f}`),
-			].join("\n");
-
-			const fullSummary = `${filesSummary}\n\nDiff snippets:\n${diffSummary}`;
-
-			console.log("fullSummary", fullSummary);
-
-			const adminBaseUrl =
-				process.env.DECO_ADMIN_URL ?? "http://localhost:4200";
-
-			const meta = await callAdminCommitMetadata(
-				adminBaseUrl,
-				site,
-				apiKey,
-				fullSummary,
-			).catch(() => null);
-
-			if (!meta) {
-				return fallbackFromStatus(status);
-			}
-
+		if (changedFiles.length === 0) {
 			return {
-				message: meta.title,
-				title: meta.title,
-				body: meta.body,
-				branch: toKebab(meta.branchName || meta.title),
+				message: "No changes",
+				title: "No changes",
+				body: "",
+				branch: "no-changes",
 			};
-		},
-	});
+		}
+
+		// Fetch actual diff content for richer AI context
+		const diffSummary = await fetchDiffSummary(
+			site,
+			context.env,
+			apiKey,
+			changedFiles,
+		);
+
+		const filesSummary = [
+			...status.modified.map((f) => `Modified: ${f}`),
+			...status.created.map((f) => `Added: ${f}`),
+			...status.deleted.map((f) => `Deleted: ${f}`),
+			...status.not_added.map((f) => `Added: ${f}`),
+		].join("\n");
+
+		const fullSummary = `${filesSummary}\n\nDiff snippets:\n${diffSummary}`;
+
+		const adminBaseUrl = process.env.DECO_ADMIN_URL ?? "http://localhost:4200";
+
+		const meta = await callAdminCommitMetadata(
+			adminBaseUrl,
+			site,
+			apiKey,
+			fullSummary,
+		).catch(() => null);
+
+		if (!meta) {
+			return fallbackFromStatus(status);
+		}
+
+		return {
+			message: meta.title,
+			title: meta.title,
+			body: meta.body,
+			branch: toKebab(meta.branchName || meta.title),
+		};
+	},
+});

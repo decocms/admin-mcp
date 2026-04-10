@@ -1,6 +1,11 @@
 import { analyticsQueryTool } from "./analytics-query.ts";
 import { suggestCommitMessageTool } from "./commit-summary.ts";
 import {
+	listReleasesTool,
+	promoteToProductionTool,
+	revertCommitTool,
+} from "./releases.ts";
+import {
 	listPullRequestsTool,
 	mergePullRequestTool,
 	openPullRequestTool,
@@ -86,4 +91,7 @@ export const tools = [
 	mergePullRequestTool,
 	openPullRequestTool,
 	suggestCommitMessageTool,
+	listReleasesTool,
+	promoteToProductionTool,
+	revertCommitTool,
 ];
