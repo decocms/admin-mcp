@@ -1,16 +1,6 @@
 import { analyticsQueryTool } from "./analytics-query.ts";
-import { suggestCommitMessageTool } from "./commit-summary.ts";
-import {
-	listReleasesTool,
-	promoteToProductionTool,
-	revertCommitTool,
-} from "./releases.ts";
-import {
-	listPullRequestsTool,
-	mergePullRequestTool,
-	openPullRequestTool,
-} from "./pull-requests.ts";
 import { assetsTool, deleteAssetTool, uploadAssetTool } from "./assets.ts";
+import { suggestCommitMessageTool } from "./commit-summary.ts";
 import {
 	createEnvironmentTool,
 	deleteEnvironmentTool,
@@ -49,10 +39,17 @@ import {
 	getMonitorTopPathsTool,
 } from "./monitor.ts";
 import {
-	createSandboxTaskTool,
-	killSandboxTaskTool,
-	listSandboxTasksTool,
-} from "./sandbox.ts";
+	listPullRequestsTool,
+	mergePullRequestTool,
+	openPullRequestTool,
+} from "./pull-requests.ts";
+import {
+	getProductionShaTool,
+	listReleasesTool,
+	promoteToProductionTool,
+	revertCommitTool,
+} from "./releases.ts";
+
 export const tools = [
 	analyticsQueryTool,
 	assetsTool,
@@ -94,4 +91,5 @@ export const tools = [
 	listReleasesTool,
 	promoteToProductionTool,
 	revertCommitTool,
+	getProductionShaTool,
 ];

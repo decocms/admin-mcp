@@ -19,6 +19,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
+import { Input } from "@/components/ui/input.tsx";
 import {
 	Tabs,
 	TabsContent,
@@ -28,8 +29,8 @@ import {
 import { Textarea } from "@/components/ui/textarea.tsx";
 import { useMcpApp } from "@/context.tsx";
 import { cn } from "@/lib/utils.ts";
-import type { GitDiffResult, GitStatus } from "../../../api/tools/git.ts";
 import type { SuggestCommitMessageOutput } from "../../../api/tools/commit-summary.ts";
+import type { GitDiffResult, GitStatus } from "../../../api/tools/git.ts";
 import { getLanguageFromPath } from "./utils.ts";
 
 // ─── types ────────────────────────────────────────────────────────────────────
@@ -63,7 +64,8 @@ export function PublishDialog({
 	const [isLoadingGitDiff, setIsLoadingGitDiff] = useState(false);
 	const [expandedDiffFile, setExpandedDiffFile] = useState<string | null>(null);
 	const [isPublishing, setIsPublishing] = useState(false);
-	const [publishMessage, setPublishMessage] = useState("");
+	const [publishTitle, setPublishTitle] = useState("");
+	const [publishBody, setPublishBody] = useState("");
 	const [publishError, setPublishError] = useState<string>();
 	const [isOpeningPR, setIsOpeningPR] = useState(false);
 	const [openedPR, setOpenedPR] = useState<{
@@ -99,7 +101,8 @@ export function PublishDialog({
 		setExpandedDiffFile(null);
 		setGitDiff(null);
 		setSuggestion(null);
-		setPublishMessage("");
+		setPublishTitle("");
+		setPublishBody("");
 
 		Promise.all([
 			app.callServerTool({ name: "git_status", arguments: { env: userEnv } }),
@@ -140,7 +143,8 @@ export function PublishDialog({
 						| undefined;
 					if (data) {
 						setSuggestion(data);
-						setPublishMessage((prev) => prev || data.message);
+						setPublishTitle((prev) => prev || data.title);
+						setPublishBody((prev) => prev || data.body);
 					}
 				}
 			})
@@ -170,11 +174,15 @@ export function PublishDialog({
 		setPublishError(undefined);
 
 		try {
+			const commitMessage = [publishTitle.trim(), publishBody.trim()]
+				.filter(Boolean)
+				.join("\n\n");
+
 			const result = await app.callServerTool({
 				name: "git_publish",
 				arguments: {
 					env: userEnv,
-					...(publishMessage ? { message: publishMessage } : {}),
+					...(commitMessage ? { message: commitMessage } : {}),
 				},
 			});
 			if (result?.isError) {
@@ -187,7 +195,8 @@ export function PublishDialog({
 			toast.success("Changes published successfully!");
 			onOpenChange(false);
 			setGitDiff(null);
-			setPublishMessage("");
+			setPublishTitle("");
+			setPublishBody("");
 
 			const statusResult = await app.callServerTool({
 				name: "git_status",
@@ -257,8 +266,8 @@ export function PublishDialog({
 		setOpenPRError(undefined);
 		try {
 			const prTitle =
-				publishMessage.trim() || suggestion?.title || `Changes from ${userEnv}`;
-			const prBody = publishMessage.trim() || suggestion?.body || undefined;
+				publishTitle.trim() || suggestion?.title || `Changes from ${userEnv}`;
+			const prBody = publishBody.trim() || suggestion?.body || undefined;
 			const prBranch =
 				suggestion?.branch ?? userEnv.toLowerCase().replace(/[^a-z0-9-]/g, "-");
 
@@ -332,9 +341,9 @@ export function PublishDialog({
 						) : (
 							<>
 								<TabsContent value="description" className="mt-0 px-6 py-5">
-									<div className="space-y-2">
+									<div className="space-y-4">
 										<div className="flex items-center justify-between">
-											<label className="text-sm font-medium">Description</label>
+											<p className="text-sm font-medium">Commit message</p>
 											<button
 												type="button"
 												className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
@@ -355,7 +364,8 @@ export function PublishDialog({
 																	| undefined;
 																if (data) {
 																	setSuggestion(data);
-																	setPublishMessage(data.message);
+																	setPublishTitle(data.title);
+																	setPublishBody(data.body);
 																}
 															}
 														})
@@ -371,18 +381,47 @@ export function PublishDialog({
 												{isGeneratingSuggestion ? "Generating…" : "Regenerate"}
 											</button>
 										</div>
-										<Textarea
-											value={publishMessage}
-											onChange={(e) => setPublishMessage(e.target.value)}
-											placeholder={
-												isGeneratingSuggestion
-													? "Generating AI description…"
-													: "Describe the changes being published…"
-											}
-											disabled={isPublishing}
-											rows={8}
-											className="resize-none"
-										/>
+										<div className="space-y-1.5">
+											<label
+												htmlFor="publish-title"
+												className="text-xs font-medium text-muted-foreground"
+											>
+												Title
+											</label>
+											<Input
+												id="publish-title"
+												value={publishTitle}
+												onChange={(e) => setPublishTitle(e.target.value)}
+												placeholder={
+													isGeneratingSuggestion
+														? "Generating…"
+														: "Commit title…"
+												}
+												disabled={isPublishing}
+												className="text-sm"
+											/>
+										</div>
+										<div className="space-y-1.5">
+											<label
+												htmlFor="publish-body"
+												className="text-xs font-medium text-muted-foreground"
+											>
+												Description
+											</label>
+											<Textarea
+												id="publish-body"
+												value={publishBody}
+												onChange={(e) => setPublishBody(e.target.value)}
+												placeholder={
+													isGeneratingSuggestion
+														? "Generating…"
+														: "Description (optional)…"
+												}
+												disabled={isPublishing}
+												rows={5}
+												className="resize-none text-sm"
+											/>
+										</div>
 										{suggestion?.branch && (
 											<p className="text-xs text-muted-foreground">
 												Branch:{" "}

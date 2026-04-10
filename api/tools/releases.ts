@@ -1,7 +1,7 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
 import { callAdmin, getConfig } from "../lib/admin.ts";
-import { environmentSchema } from "./environments.ts";
+import type { environmentSchema } from "./environments.ts";
 
 export const RELEASES_RESOURCE_URI = "ui://mcp-app/releases";
 
@@ -12,6 +12,12 @@ export const commitAuthorSchema = z.object({
 	email: z.string(),
 	timestamp: z.number(),
 	timezoneOffset: z.number().optional(),
+});
+
+export const commitAvatarSchema = z.object({
+	sha: z.string(),
+	avatarUrl: z.string().nullable(),
+	login: z.string().nullable(),
 });
 
 export const commitDataSchema = z.object({
@@ -25,6 +31,8 @@ export const commitDataSchema = z.object({
 export const releaseCommitSchema = z.object({
 	oid: z.string(),
 	commit: commitDataSchema,
+	avatarUrl: z.string().nullable().optional(),
+	login: z.string().nullable().optional(),
 });
 
 export type ReleaseCommit = z.infer<typeof releaseCommitSchema>;
@@ -67,34 +75,60 @@ export const listReleasesTool = createTool({
 		const { site, apiKey } = getConfig(ctx);
 		const depth = context.depth ?? 50;
 
-		const [logData, infoData] = await Promise.all([
+		const [logData, siteState, githubCommits] = await Promise.all([
 			callAdmin(
 				"deco-sites/admin/loaders/releases/git/log.ts",
 				{ site, depth, limit: depth },
 				apiKey,
 			) as Promise<{ commits: unknown[] }>,
+			callAdmin("kubernetes/loaders/siteState/get.ts", { site }, apiKey).catch(
+				() => null,
+			) as Promise<{
+				source?: { commitSha?: string };
+			} | null>,
 			callAdmin(
-				"deco-sites/admin/loaders/releases/git/info.ts",
-				{ sitename: site },
+				"deco-sites/admin/loaders/github/getCommits.ts",
+				{ site, per_page: depth },
 				apiKey,
-			).catch(() => null) as Promise<{ head?: string } | null>,
+			).catch(() => []) as Promise<
+				Array<{
+					sha: string;
+					author: { login: string; avatar_url: string } | null;
+				}>
+			>,
 		]);
+
+		// Build a SHA → avatar map for O(1) merge
+		const avatarBySha = new Map<
+			string,
+			{ avatarUrl: string | null; login: string | null }
+		>();
+		for (const c of githubCommits) {
+			avatarBySha.set(c.sha, {
+				avatarUrl: c.author?.avatar_url ?? null,
+				login: c.author?.login ?? null,
+			});
+		}
 
 		const commits = (logData?.commits ?? [])
 			.map((c) => {
 				try {
-					return releaseCommitSchema.parse(c);
+					const parsed = releaseCommitSchema.parse(c);
+					const avatar = avatarBySha.get(parsed.oid);
+					return {
+						...parsed,
+						avatarUrl: avatar?.avatarUrl ?? null,
+						login: avatar?.login ?? null,
+					};
 				} catch {
 					return null;
 				}
 			})
 			.filter(Boolean) as ReleaseCommit[];
 
-		return {
-			commits,
-			site,
-			productionSha: infoData?.head ?? undefined,
-		};
+		const productionSha = siteState?.source?.commitSha ?? undefined;
+
+		return { commits, site, productionSha };
 	},
 });
 
@@ -133,17 +167,66 @@ export const promoteToProductionTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
-		const resp = await callAdmin(
+
+		// Fire both deploy calls without awaiting — deployments are handled
+		// asynchronously by Kubernetes/GCP so there is no need to block the MCP
+		// response waiting for them to settle.
+		callAdmin(
+			"deco-sites/admin/actions/hosting/deploy.ts",
+			{ sitename: site, commitSha: context.commitSha },
+			apiKey,
+		).catch(() => null);
+
+		callAdmin(
 			"deco-sites/admin/actions/hosting/deploy.ts",
 			{ sitename: site, commitSha: context.commitSha, provider: "gcp" },
 			apiKey,
-		);
+		).catch(() => null);
 
-		console.log("resp", resp);
 		return {
 			success: true,
-			message: `Commit ${context.commitSha.slice(0, 7)} promoted to production successfully.`,
+			message: `Commit ${context.commitSha.slice(0, 7)} is being promoted to production.`,
 			commitSha: context.commitSha,
+			site,
+		};
+	},
+});
+
+// ─── get_production_sha ───────────────────────────────────────────────────────
+
+export const getProductionShaInputSchema = z.object({});
+export type GetProductionShaInput = z.infer<typeof getProductionShaInputSchema>;
+
+export const getProductionShaOutputSchema = z.object({
+	sha: z.string().nullable(),
+	site: z.string(),
+});
+export type GetProductionShaOutput = z.infer<
+	typeof getProductionShaOutputSchema
+>;
+
+export const getProductionShaTool = createTool({
+	id: "get_production_sha",
+	description:
+		"Returns the commit SHA currently deployed to production for the configured deco.cx site. Useful for polling after a promote action to detect when the deployment is live.",
+	inputSchema: getProductionShaInputSchema,
+	outputSchema: getProductionShaOutputSchema,
+	annotations: {
+		readOnlyHint: true,
+		destructiveHint: false,
+		idempotentHint: true,
+		openWorldHint: false,
+	},
+	execute: async (_args, ctx) => {
+		const { site, apiKey } = getConfig(ctx);
+		const siteState = (await callAdmin(
+			"kubernetes/loaders/siteState/get.ts",
+			{ site },
+			apiKey,
+		).catch(() => null)) as { source?: { commitSha?: string } } | null;
+
+		return {
+			sha: siteState?.source?.commitSha ?? null,
 			site,
 		};
 	},
@@ -201,7 +284,7 @@ export const revertCommitTool = createTool({
 			while (Date.now() < deadline) {
 				try {
 					const res = await fetch(created.url, { method: "GET" });
-					if (res.ok) break;
+					if (res.ok && res.status !== 409) break;
 				} catch {
 					// not reachable yet
 				}
@@ -212,28 +295,68 @@ export const revertCommitTool = createTool({
 		const env = created.name;
 
 		try {
-			// 2. Create and checkout a new branch in the env
+			// 2. Fetch just the target commit so it exists in the shallow clone
+			await callAdmin(
+				"deco-sites/admin/actions/releases/git/raw.ts",
+				{ site, env, args: ["fetch", "origin", context.commitSha] },
+				apiKey,
+			);
+
+			// 3. Create and checkout a new branch in the env
 			await callAdmin(
 				"deco-sites/admin/actions/releases/git/checkoutBranch.ts",
 				{ site, env, branchName },
 				apiKey,
 			);
 
-			// 3. Run git revert on the env's daemon
+			console.log("env", env);
+			console.log("commitSha", context.commitSha);
+
+			// 4. Stash any generated/dirty files so revert applies cleanly
 			await callAdmin(
 				"deco-sites/admin/actions/releases/git/raw.ts",
-				{ site, env, args: ["revert", context.commitSha, "--no-edit"] },
+				{ site, env, args: ["stash"] },
+				apiKey,
+			).catch(() => null);
+
+			// 5. Check if the commit is a merge commit (has multiple parents)
+			const parentsResult = (await callAdmin(
+				"deco-sites/admin/actions/releases/git/raw.ts",
+				{
+					site,
+					env,
+					args: ["log", "--pretty=%P", "-n", "1", context.commitSha],
+				},
+				apiKey,
+			).catch(() => ({ result: "" }))) as { result: string };
+
+			const parents = parentsResult.result.trim().split(/\s+/).filter(Boolean);
+			const isMergeCommit = parents.length > 1;
+
+			// 6. Run git revert — merge commits require -m 1 to pick the mainline parent
+			await callAdmin(
+				"deco-sites/admin/actions/releases/git/raw.ts",
+				{
+					site,
+					env,
+					args: [
+						"revert",
+						...(isMergeCommit ? ["-m", "1"] : []),
+						context.commitSha,
+						"--no-edit",
+					],
+				},
 				apiKey,
 			);
 
-			// 4. Push the revert branch
+			// 7. Push the revert branch
 			await callAdmin(
 				"deco-sites/admin/actions/releases/git/publish.ts",
 				{ site, env, message: prTitle },
 				apiKey,
 			);
 
-			// 5. Open a PR from the revert branch to main
+			// 8. Open a PR from the revert branch to main
 			const raw = (await callAdmin(
 				"deco-sites/admin/actions/github/createPullRequest.ts",
 				{ site, title: prTitle, body: prBody, head: branchName, base: "main" },
@@ -252,12 +375,6 @@ export const revertCommitTool = createTool({
 				site,
 			};
 		} finally {
-			// Clean up the temporary env regardless of success or failure
-			callAdmin(
-				"deco-sites/admin/actions/environments/delete.ts",
-				{ site, name: env },
-				apiKey,
-			).catch(() => null);
 		}
 	},
 });

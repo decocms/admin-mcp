@@ -7,9 +7,8 @@ import {
 	Rocket,
 	RotateCcw,
 	Search,
-	User,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
@@ -52,27 +51,114 @@ function formatDate(timestamp: number): string {
 	return new Date(timestamp * 1000).toLocaleString();
 }
 
+function AuthorAvatar({
+	name,
+	avatarUrl,
+	login,
+}: {
+	name: string;
+	avatarUrl?: string | null;
+	login?: string | null;
+}) {
+	const initials = name
+		.split(" ")
+		.map((p) => p[0])
+		.join("")
+		.slice(0, 2)
+		.toUpperCase();
+
+	const src =
+		avatarUrl ?? (login ? `https://github.com/${login}.png?size=32` : null);
+
+	if (src) {
+		return (
+			<img
+				src={src}
+				alt={name}
+				title={name}
+				className="w-4 h-4 rounded-full shrink-0 bg-muted"
+				onError={(e) => {
+					(e.currentTarget as HTMLImageElement).style.display = "none";
+				}}
+			/>
+		);
+	}
+
+	return (
+		<span
+			className="inline-flex w-4 h-4 rounded-full bg-muted items-center justify-center text-[9px] font-medium text-muted-foreground shrink-0"
+			title={name}
+		>
+			{initials}
+		</span>
+	);
+}
+
 // ─── PromoteDialog ────────────────────────────────────────────────────────────
 
-type ActionState = "idle" | "loading" | "done" | "error";
+type ActionState = "idle" | "loading" | "deploying" | "done" | "error";
+
+const POLL_INTERVAL_MS = 5_000;
+const POLL_TIMEOUT_MS = 5 * 60_000;
 
 function PromoteDialog({
 	commit,
 	site,
 	onClose,
+	onPromoted,
 }: {
 	commit: ReleaseCommit | null;
 	site: string;
 	onClose: () => void;
+	onPromoted?: (sha: string) => void;
 }) {
 	const app = useMcpApp();
 	const [state, setState] = useState<ActionState>("idle");
 	const [error, setError] = useState<string>();
+	const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+	useEffect(() => {
+		return () => {
+			if (pollRef.current) clearInterval(pollRef.current);
+		};
+	}, []);
 
 	if (!commit) return null;
 
 	const short = commit.oid.slice(0, 7);
 	const title = commit.commit.message.split("\n")[0];
+
+	const startPolling = (targetSha: string) => {
+		setState("deploying");
+		const deadline = Date.now() + POLL_TIMEOUT_MS;
+
+		pollRef.current = setInterval(async () => {
+			if (Date.now() > deadline) {
+				clearInterval(pollRef.current!);
+				pollRef.current = null;
+				setState("done");
+				onPromoted?.(targetSha);
+				return;
+			}
+			const result = await app?.callServerTool({
+				name: "get_production_sha",
+				arguments: {},
+			});
+			const text = result?.content?.find((c) => c.type === "text");
+			if (text?.type !== "text") return;
+			try {
+				const data = JSON.parse(text.text) as { sha?: string };
+				if (data.sha === targetSha) {
+					clearInterval(pollRef.current!);
+					pollRef.current = null;
+					setState("done");
+					onPromoted?.(targetSha);
+				}
+			} catch {
+				// parse error, keep polling
+			}
+		}, POLL_INTERVAL_MS);
+	};
 
 	const handlePromote = async () => {
 		setState("loading");
@@ -86,7 +172,7 @@ function PromoteDialog({
 				const text = result.content?.find((c) => c.type === "text");
 				throw new Error(text?.type === "text" ? text.text : "Promotion failed");
 			}
-			setState("done");
+			startPolling(commit.oid);
 		} catch (err) {
 			setError(err instanceof Error ? err.message : "Promotion failed");
 			setState("error");
@@ -94,6 +180,10 @@ function PromoteDialog({
 	};
 
 	const handleClose = () => {
+		if (pollRef.current) {
+			clearInterval(pollRef.current);
+			pollRef.current = null;
+		}
 		setState("idle");
 		setError(undefined);
 		onClose();
@@ -124,9 +214,16 @@ function PromoteDialog({
 					</p>
 				</div>
 
+				{state === "deploying" && (
+					<p className="text-sm text-muted-foreground flex items-center gap-2">
+						<span className="w-3.5 h-3.5 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin shrink-0" />
+						Deploying… checking every 5s until live.
+					</p>
+				)}
 				{state === "done" && (
-					<p className="text-sm text-green-600 font-medium">
-						✓ Promoted to production successfully.
+					<p className="text-sm text-green-600 font-medium flex items-center gap-1.5">
+						<CheckCircle2 className="w-4 h-4" />
+						Live in production.
 					</p>
 				)}
 				{state === "error" && (
@@ -141,7 +238,7 @@ function PromoteDialog({
 					>
 						{state === "done" ? "Close" : "Cancel"}
 					</Button>
-					{state !== "done" && (
+					{state !== "done" && state !== "deploying" && (
 						<Button
 							variant="default"
 							onClick={handlePromote}
@@ -297,9 +394,7 @@ function RevertDialog({
 									Creating PR…
 								</>
 							) : (
-								<>
-									Create Revert PR
-								</>
+								<>Create Revert PR</>
 							)}
 						</Button>
 					)}
@@ -355,8 +450,12 @@ function CommitRow({
 				<div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground">
 					<code className="font-mono">{short}</code>
 					<span>·</span>
-					<span className="flex items-center gap-1">
-						<User className="w-3 h-3" />
+					<span className="flex items-center gap-1.5">
+						<AuthorAvatar
+							name={commit.commit.author.name}
+							avatarUrl={commit.avatarUrl}
+							login={commit.login}
+						/>
 						{commit.commit.author.name}
 					</span>
 					<span>·</span>
@@ -406,13 +505,14 @@ function CommitRow({
 function ReleasesList({
 	commits,
 	site,
-	productionSha,
+	productionSha: initialProductionSha,
 }: {
 	commits: ReleaseCommit[];
 	site: string;
 	productionSha?: string;
 }) {
 	const [search, setSearch] = useState("");
+	const [productionSha, setProductionSha] = useState(initialProductionSha);
 	const [promoteTarget, setPromoteTarget] = useState<ReleaseCommit | null>(
 		null,
 	);
@@ -484,6 +584,10 @@ function ReleasesList({
 				commit={promoteTarget}
 				site={site}
 				onClose={() => setPromoteTarget(null)}
+				onPromoted={(sha) => {
+					setProductionSha(sha);
+					setPromoteTarget(null);
+				}}
 			/>
 			<RevertDialog
 				commit={revertTarget}

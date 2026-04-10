@@ -206,10 +206,6 @@ async function callAdminCommitMetadata(
 					role: "user",
 					content: `Generate commit metadata for these site changes:\n${filesSummary}`,
 				},
-				{
-					role: "assistant",
-					content: "I will analyze the changes and generate the metadata.",
-				},
 			],
 		}),
 	});
@@ -248,12 +244,16 @@ export const suggestCommitMessageTool = createTool({
 			apiKey,
 		)) as GitStatus;
 
+		console.log("status", status);
+
+		const isGeneratedFile = (f: string) => /^static\/.*\.css$/.test(f);
+
 		const changedFiles = [
 			...status.modified,
 			...status.created,
 			...status.deleted,
 			...status.not_added,
-		];
+		].filter((f) => !isGeneratedFile(f));
 
 		if (changedFiles.length === 0) {
 			return {
@@ -281,7 +281,7 @@ export const suggestCommitMessageTool = createTool({
 
 		const fullSummary = `${filesSummary}\n\nDiff snippets:\n${diffSummary}`;
 
-		const adminBaseUrl = process.env.DECO_ADMIN_URL ?? "http://localhost:4200";
+		const adminBaseUrl = process.env.DECO_ADMIN_URL ?? "https://admin.deco.cx";
 
 		const meta = await callAdminCommitMetadata(
 			adminBaseUrl,
