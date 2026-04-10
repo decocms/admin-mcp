@@ -66,7 +66,7 @@ export const listPullRequestsTool = createTool({
 		idempotentHint: true,
 		openWorldHint: false,
 	},
-	execute: async ({ context }, ctx) => {
+	execute: async (_input, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
 		const data = await callAdmin(
 			"deco-sites/admin/loaders/github/getPullRequests.ts",

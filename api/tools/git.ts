@@ -232,26 +232,26 @@ export type GitCheckoutBranchOutput = z.infer<
 >;
 
 export const gitCheckoutBranchTool = createTool({
-		id: "git_checkout_branch",
-		description:
-			"Create and check out a new git branch from the current state of a sandbox environment. Useful before opening a pull request so changes are pushed to a feature branch instead of main.",
-		inputSchema: gitCheckoutBranchInputSchema,
-		outputSchema: gitCheckoutBranchOutputSchema,
-		annotations: {
-			readOnlyHint: false,
-			destructiveHint: false,
-			idempotentHint: false,
-			openWorldHint: false,
-		},
-		execute: async ({ context }, ctx) => {
-			const { site, apiKey } = getConfig(ctx);
-			return callAdmin(
-				"deco-sites/admin/actions/releases/git/checkoutBranch.ts",
-				{ site, env: context.env, branchName: context.branchName },
-				apiKey,
-			) as Promise<GitCheckoutBranchOutput>;
-		},
-	});
+	id: "git_checkout_branch",
+	description:
+		"Create and check out a new git branch from the current state of a sandbox environment. Useful before opening a pull request so changes are pushed to a feature branch instead of main.",
+	inputSchema: gitCheckoutBranchInputSchema,
+	outputSchema: gitCheckoutBranchOutputSchema,
+	annotations: {
+		readOnlyHint: false,
+		destructiveHint: false,
+		idempotentHint: false,
+		openWorldHint: false,
+	},
+	execute: async ({ context }, ctx) => {
+		const { site, apiKey } = getConfig(ctx);
+		return callAdmin(
+			"deco-sites/admin/actions/releases/git/checkoutBranch.ts",
+			{ site, env: context.env, branchName: context.branchName },
+			apiKey,
+		) as Promise<GitCheckoutBranchOutput>;
+	},
+});
 
 // ─── git_raw ──────────────────────────────────────────────────────────────────
 
@@ -271,26 +271,26 @@ export const gitRawOutputSchema = z.object({
 export type GitRawOutput = z.infer<typeof gitRawOutputSchema>;
 
 export const gitRawTool = createTool({
-		id: "git_raw",
-		description:
-			"Run a safe git command on a sandbox environment. Allowed subcommands: checkout, branch, stash, tag, log, show, diff, merge, cherry-pick, format-patch, describe, shortlog, rev-parse, rev-list, ls-files, ls-tree, cat-file. Destructive flags (--force, --hard, --global, etc.) are blocked.",
-		inputSchema: gitRawInputSchema,
-		outputSchema: gitRawOutputSchema,
-		annotations: {
-			readOnlyHint: false,
-			destructiveHint: false,
-			idempotentHint: false,
-			openWorldHint: false,
-		},
-		execute: async ({ context }, ctx) => {
-			const { site, apiKey } = getConfig(ctx);
-			return callAdmin(
-				"deco-sites/admin/actions/releases/git/raw.ts",
-				{ site, env: context.env, args: context.args },
-				apiKey,
-			) as Promise<GitRawOutput>;
-		},
-	});
+	id: "git_raw",
+	description:
+		"Run a safe git command on a sandbox environment. Allowed subcommands: checkout, branch, stash, tag, log, show, diff, merge, cherry-pick, format-patch, describe, shortlog, rev-parse, rev-list, ls-files, ls-tree, cat-file. Destructive flags (--force, --hard, --global, etc.) are blocked.",
+	inputSchema: gitRawInputSchema,
+	outputSchema: gitRawOutputSchema,
+	annotations: {
+		readOnlyHint: false,
+		destructiveHint: false,
+		idempotentHint: false,
+		openWorldHint: false,
+	},
+	execute: async ({ context }, ctx) => {
+		const { site, apiKey } = getConfig(ctx);
+		return callAdmin(
+			"deco-sites/admin/actions/releases/git/raw.ts",
+			{ site, env: context.env, args: context.args },
+			apiKey,
+		) as Promise<GitRawOutput>;
+	},
+});
 
 // ─── fs_unlink ────────────────────────────────────────────────────────────────
 

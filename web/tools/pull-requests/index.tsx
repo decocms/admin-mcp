@@ -364,10 +364,9 @@ function LoadingSkeleton() {
 				<span className="text-sm">Fetching pull requests…</span>
 			</div>
 			<div className="flex flex-col gap-2">
-				{Array.from({ length: 3 }).map((_, i) => (
-					// biome-ignore lint/suspicious/noArrayIndexKey: static loading skeleton
+				{["skeleton-0", "skeleton-1", "skeleton-2"].map((key) => (
 					<div
-						key={i}
+						key={key}
 						className="rounded-lg border border-border p-4 flex flex-col gap-2"
 					>
 						<div className="flex gap-3">

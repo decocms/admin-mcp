@@ -1,5 +1,4 @@
 import {
-	AlertTriangle,
 	CheckCircle2,
 	Clock,
 	ExternalLink,
@@ -134,7 +133,8 @@ function PromoteDialog({
 
 		pollRef.current = setInterval(async () => {
 			if (Date.now() > deadline) {
-				clearInterval(pollRef.current!);
+				const id = pollRef.current;
+				if (id !== null) clearInterval(id);
 				pollRef.current = null;
 				setState("done");
 				onPromoted?.(targetSha);
@@ -149,7 +149,8 @@ function PromoteDialog({
 			try {
 				const data = JSON.parse(text.text) as { sha?: string };
 				if (data.sha === targetSha) {
-					clearInterval(pollRef.current!);
+					const id = pollRef.current;
+					if (id !== null) clearInterval(id);
 					pollRef.current = null;
 					setState("done");
 					onPromoted?.(targetSha);
