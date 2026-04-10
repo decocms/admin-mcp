@@ -231,8 +231,7 @@ export type GitCheckoutBranchOutput = z.infer<
 	typeof gitCheckoutBranchOutputSchema
 >;
 
-export const gitCheckoutBranchTool = (cfEnv: Env) =>
-	createTool({
+export const gitCheckoutBranchTool = createTool({
 		id: "git_checkout_branch",
 		description:
 			"Create and check out a new git branch from the current state of a sandbox environment. Useful before opening a pull request so changes are pushed to a feature branch instead of main.",
@@ -244,8 +243,8 @@ export const gitCheckoutBranchTool = (cfEnv: Env) =>
 			idempotentHint: false,
 			openWorldHint: false,
 		},
-		execute: async ({ context }) => {
-			const { site, apiKey } = getConfig(cfEnv);
+		execute: async ({ context }, ctx) => {
+			const { site, apiKey } = getConfig(ctx);
 			return callAdmin(
 				"deco-sites/admin/actions/releases/git/checkoutBranch.ts",
 				{ site, env: context.env, branchName: context.branchName },
@@ -271,8 +270,7 @@ export const gitRawOutputSchema = z.object({
 });
 export type GitRawOutput = z.infer<typeof gitRawOutputSchema>;
 
-export const gitRawTool = (cfEnv: Env) =>
-	createTool({
+export const gitRawTool = createTool({
 		id: "git_raw",
 		description:
 			"Run a safe git command on a sandbox environment. Allowed subcommands: checkout, branch, stash, tag, log, show, diff, merge, cherry-pick, format-patch, describe, shortlog, rev-parse, rev-list, ls-files, ls-tree, cat-file. Destructive flags (--force, --hard, --global, etc.) are blocked.",
@@ -284,8 +282,8 @@ export const gitRawTool = (cfEnv: Env) =>
 			idempotentHint: false,
 			openWorldHint: false,
 		},
-		execute: async ({ context }) => {
-			const { site, apiKey } = getConfig(cfEnv);
+		execute: async ({ context }, ctx) => {
+			const { site, apiKey } = getConfig(ctx);
 			return callAdmin(
 				"deco-sites/admin/actions/releases/git/raw.ts",
 				{ site, env: context.env, args: context.args },
