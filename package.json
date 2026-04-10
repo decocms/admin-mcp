@@ -6,6 +6,7 @@
 	"type": "module",
 	"scripts": {
 		"dev": "concurrently -k \"bun run dev:api\" \"bun run dev:web\"",
+		"dev:tunnel": "concurrently -k \"bun run dev\" \"ngrok http ${PORT:-3001}\"",
 		"dev:api": "bun run --hot api/main.ts",
 		"dev:web": "vite build --watch",
 		"build:web": "vite build",

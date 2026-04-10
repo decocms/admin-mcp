@@ -210,6 +210,88 @@ export const gitDiscardTool = createTool({
 	},
 });
 
+// ─── git_checkout_branch ──────────────────────────────────────────────────────
+
+export const gitCheckoutBranchInputSchema = z.object({
+	env: z.string().describe("Environment name"),
+	branchName: z
+		.string()
+		.describe(
+			"Name of the new branch to create and check out from the current state",
+		),
+});
+export type GitCheckoutBranchInput = z.infer<
+	typeof gitCheckoutBranchInputSchema
+>;
+
+export const gitCheckoutBranchOutputSchema = z.object({
+	branch: z.string(),
+});
+export type GitCheckoutBranchOutput = z.infer<
+	typeof gitCheckoutBranchOutputSchema
+>;
+
+export const gitCheckoutBranchTool = createTool({
+	id: "git_checkout_branch",
+	description:
+		"Create and check out a new git branch from the current state of a sandbox environment. Useful before opening a pull request so changes are pushed to a feature branch instead of main.",
+	inputSchema: gitCheckoutBranchInputSchema,
+	outputSchema: gitCheckoutBranchOutputSchema,
+	annotations: {
+		readOnlyHint: false,
+		destructiveHint: false,
+		idempotentHint: false,
+		openWorldHint: false,
+	},
+	execute: async ({ context }, ctx) => {
+		const { site, apiKey } = getConfig(ctx);
+		return callAdmin(
+			"deco-sites/admin/actions/releases/git/checkoutBranch.ts",
+			{ site, env: context.env, branchName: context.branchName },
+			apiKey,
+		) as Promise<GitCheckoutBranchOutput>;
+	},
+});
+
+// ─── git_raw ──────────────────────────────────────────────────────────────────
+
+export const gitRawInputSchema = z.object({
+	env: z.string().describe("Environment name"),
+	args: z
+		.array(z.string())
+		.describe(
+			"Git arguments to run (e.g. ['branch', '-a'] or ['log', '--oneline', '-5']). Only safe, non-destructive subcommands are allowed.",
+		),
+});
+export type GitRawInput = z.infer<typeof gitRawInputSchema>;
+
+export const gitRawOutputSchema = z.object({
+	result: z.string(),
+});
+export type GitRawOutput = z.infer<typeof gitRawOutputSchema>;
+
+export const gitRawTool = createTool({
+	id: "git_raw",
+	description:
+		"Run a safe git command on a sandbox environment. Allowed subcommands: checkout, branch, stash, tag, log, show, diff, merge, cherry-pick, format-patch, describe, shortlog, rev-parse, rev-list, ls-files, ls-tree, cat-file. Destructive flags (--force, --hard, --global, etc.) are blocked.",
+	inputSchema: gitRawInputSchema,
+	outputSchema: gitRawOutputSchema,
+	annotations: {
+		readOnlyHint: false,
+		destructiveHint: false,
+		idempotentHint: false,
+		openWorldHint: false,
+	},
+	execute: async ({ context }, ctx) => {
+		const { site, apiKey } = getConfig(ctx);
+		return callAdmin(
+			"deco-sites/admin/actions/releases/git/raw.ts",
+			{ site, env: context.env, args: context.args },
+			apiKey,
+		) as Promise<GitRawOutput>;
+	},
+});
+
 // ─── fs_unlink ────────────────────────────────────────────────────────────────
 
 export const fsUnlinkInputSchema = z.object({

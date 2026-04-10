@@ -7,6 +7,7 @@ import {
 	GitPullRequest,
 	Loader2,
 	MoreHorizontal,
+	Sparkles,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -18,6 +19,7 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
+import { Input } from "@/components/ui/input.tsx";
 import {
 	Tabs,
 	TabsContent,
@@ -27,6 +29,7 @@ import {
 import { Textarea } from "@/components/ui/textarea.tsx";
 import { useMcpApp } from "@/context.tsx";
 import { cn } from "@/lib/utils.ts";
+import type { SuggestCommitMessageOutput } from "../../../api/tools/commit-summary.ts";
 import type { GitDiffResult, GitStatus } from "../../../api/tools/git.ts";
 import { getLanguageFromPath } from "./utils.ts";
 
@@ -61,11 +64,21 @@ export function PublishDialog({
 	const [isLoadingGitDiff, setIsLoadingGitDiff] = useState(false);
 	const [expandedDiffFile, setExpandedDiffFile] = useState<string | null>(null);
 	const [isPublishing, setIsPublishing] = useState(false);
-	const [publishMessage, setPublishMessage] = useState("");
+	const [publishTitle, setPublishTitle] = useState("");
+	const [publishBody, setPublishBody] = useState("");
 	const [publishError, setPublishError] = useState<string>();
+	const [isOpeningPR, setIsOpeningPR] = useState(false);
+	const [openedPR, setOpenedPR] = useState<{
+		number: number;
+		html_url: string;
+	} | null>(null);
+	const [openPRError, setOpenPRError] = useState<string>();
 	const [discardConfirmFile, setDiscardConfirmFile] = useState<string | null>(
 		null,
 	);
+	const [suggestion, setSuggestion] =
+		useState<SuggestCommitMessageOutput | null>(null);
+	const [isGeneratingSuggestion, setIsGeneratingSuggestion] = useState(false);
 
 	const changesCount = gitStatus
 		? gitStatus.modified.length +
@@ -87,6 +100,9 @@ export function PublishDialog({
 		setPublishError(undefined);
 		setExpandedDiffFile(null);
 		setGitDiff(null);
+		setSuggestion(null);
+		setPublishTitle("");
+		setPublishBody("");
 
 		Promise.all([
 			app.callServerTool({ name: "git_status", arguments: { env: userEnv } }),
@@ -112,6 +128,33 @@ export function PublishDialog({
 				if (!cancelled) setIsLoadingGitDiff(false);
 			});
 
+		// Generate AI suggestion in parallel
+		setIsGeneratingSuggestion(true);
+		app
+			.callServerTool({
+				name: "suggest_commit_message",
+				arguments: { env: userEnv },
+			})
+			.then((result) => {
+				if (cancelled) return;
+				if (result && !result.isError) {
+					const data = result.structuredContent as
+						| SuggestCommitMessageOutput
+						| undefined;
+					if (data) {
+						setSuggestion(data);
+						setPublishTitle((prev) => prev || data.title);
+						setPublishBody((prev) => prev || data.body);
+					}
+				}
+			})
+			.catch(() => {
+				// ignore — suggestion is best-effort
+			})
+			.finally(() => {
+				if (!cancelled) setIsGeneratingSuggestion(false);
+			});
+
 		return () => {
 			cancelled = true;
 		};
@@ -131,11 +174,15 @@ export function PublishDialog({
 		setPublishError(undefined);
 
 		try {
+			const commitMessage = [publishTitle.trim(), publishBody.trim()]
+				.filter(Boolean)
+				.join("\n\n");
+
 			const result = await app.callServerTool({
 				name: "git_publish",
 				arguments: {
 					env: userEnv,
-					...(publishMessage ? { message: publishMessage } : {}),
+					...(commitMessage ? { message: commitMessage } : {}),
 				},
 			});
 			if (result?.isError) {
@@ -148,7 +195,8 @@ export function PublishDialog({
 			toast.success("Changes published successfully!");
 			onOpenChange(false);
 			setGitDiff(null);
-			setPublishMessage("");
+			setPublishTitle("");
+			setPublishBody("");
 
 			const statusResult = await app.callServerTool({
 				name: "git_status",
@@ -210,6 +258,48 @@ export function PublishDialog({
 		}
 	};
 
+	// ─── open pull request ───────────────────────────────────────────────────────
+
+	const handleOpenPR = async () => {
+		if (!app || !userEnv) return;
+		setIsOpeningPR(true);
+		setOpenPRError(undefined);
+		try {
+			const prTitle =
+				publishTitle.trim() || suggestion?.title || `Changes from ${userEnv}`;
+			const prBody = publishBody.trim() || suggestion?.body || undefined;
+			const prBranch =
+				suggestion?.branch ?? userEnv.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+
+			const result = await app.callServerTool({
+				name: "open_pull_request",
+				arguments: {
+					env: userEnv,
+					title: prTitle,
+					body: prBody,
+					branch: prBranch,
+					base: "main",
+				},
+			});
+			if (result?.isError) {
+				const text = result.content?.find((b) => b.type === "text");
+				throw new Error(
+					text?.type === "text" ? text.text : "Failed to open pull request",
+				);
+			}
+			const data = result?.structuredContent as
+				| { number: number; html_url: string }
+				| undefined;
+			if (data) setOpenedPR(data);
+		} catch (error) {
+			setOpenPRError(
+				error instanceof Error ? error.message : "Failed to open pull request",
+			);
+		} finally {
+			setIsOpeningPR(false);
+		}
+	};
+
 	// ─── render ─────────────────────────────────────────────────────────────────
 
 	const diffCount = gitDiff ? Object.keys(gitDiff.diffs).length : changesCount;
@@ -251,22 +341,93 @@ export function PublishDialog({
 						) : (
 							<>
 								<TabsContent value="description" className="mt-0 px-6 py-5">
-									<div className="space-y-2">
-										<label
-											htmlFor="publish-description"
-											className="text-sm font-medium"
-										>
-											Description
-										</label>
-										<Textarea
-											id="publish-description"
-											value={publishMessage}
-											onChange={(e) => setPublishMessage(e.target.value)}
-											placeholder="Describe the changes being published…"
-											disabled={isPublishing}
-											rows={8}
-											className="resize-none"
-										/>
+									<div className="space-y-4">
+										<div className="flex items-center justify-between">
+											<p className="text-sm font-medium">Commit message</p>
+											<button
+												type="button"
+												className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
+												disabled={isGeneratingSuggestion || isPublishing}
+												onClick={() => {
+													if (!app || !userEnv) return;
+													setSuggestion(null);
+													setIsGeneratingSuggestion(true);
+													app
+														.callServerTool({
+															name: "suggest_commit_message",
+															arguments: { env: userEnv },
+														})
+														.then((result) => {
+															if (result && !result.isError) {
+																const data = result.structuredContent as
+																	| SuggestCommitMessageOutput
+																	| undefined;
+																if (data) {
+																	setSuggestion(data);
+																	setPublishTitle(data.title);
+																	setPublishBody(data.body);
+																}
+															}
+														})
+														.catch(() => {})
+														.finally(() => setIsGeneratingSuggestion(false));
+												}}
+											>
+												{isGeneratingSuggestion ? (
+													<Loader2 className="h-3 w-3 animate-spin" />
+												) : (
+													<Sparkles className="h-3 w-3" />
+												)}
+												{isGeneratingSuggestion ? "Generating…" : "Regenerate"}
+											</button>
+										</div>
+										<div className="space-y-1.5">
+											<label
+												htmlFor="publish-title"
+												className="text-xs font-medium text-muted-foreground"
+											>
+												Title
+											</label>
+											<Input
+												id="publish-title"
+												value={publishTitle}
+												onChange={(e) => setPublishTitle(e.target.value)}
+												placeholder={
+													isGeneratingSuggestion
+														? "Generating…"
+														: "Commit title…"
+												}
+												disabled={isPublishing}
+												className="text-sm"
+											/>
+										</div>
+										<div className="space-y-1.5">
+											<label
+												htmlFor="publish-body"
+												className="text-xs font-medium text-muted-foreground"
+											>
+												Description
+											</label>
+											<Textarea
+												id="publish-body"
+												value={publishBody}
+												onChange={(e) => setPublishBody(e.target.value)}
+												placeholder={
+													isGeneratingSuggestion
+														? "Generating…"
+														: "Description (optional)…"
+												}
+												disabled={isPublishing}
+												rows={5}
+												className="resize-none text-sm"
+											/>
+										</div>
+										{suggestion?.branch && (
+											<p className="text-xs text-muted-foreground">
+												Branch:{" "}
+												<span className="font-mono">{suggestion.branch}</span>
+											</p>
+										)}
 									</div>
 								</TabsContent>
 
@@ -440,17 +601,46 @@ export function PublishDialog({
 								<ArrowRight className="h-4 w-4 text-muted-foreground" />
 							</button>
 						) : null}
-						<button
-							type="button"
-							className="flex w-full cursor-not-allowed items-center justify-between px-6 py-3.5 text-sm opacity-50"
-							disabled
-						>
-							<span className="flex items-center gap-3">
-								<GitPullRequest className="h-4 w-4 text-muted-foreground" />
-								Open Pull Request
-							</span>
-							<span className="text-xs text-muted-foreground">Coming soon</span>
-						</button>
+						{openedPR ? (
+							<a
+								href={openedPR.html_url}
+								target="_blank"
+								rel="noreferrer"
+								className="flex w-full items-center justify-between px-6 py-3.5 text-sm transition-colors hover:bg-muted/50"
+							>
+								<span className="flex items-center gap-3 text-success">
+									<GitPullRequest className="h-4 w-4" />
+									PR #{openedPR.number} opened
+								</span>
+								<ArrowRight className="h-4 w-4 text-muted-foreground" />
+							</a>
+						) : (
+							<button
+								type="button"
+								className="flex w-full items-center justify-between px-6 py-3.5 text-sm transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+								onClick={handleOpenPR}
+								disabled={isOpeningPR || isPublishing || isLoadingGitDiff}
+							>
+								<span className="flex items-center gap-3">
+									{isOpeningPR ? (
+										<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+									) : (
+										<GitPullRequest className="h-4 w-4 text-muted-foreground" />
+									)}
+									{isOpeningPR
+										? "Opening pull request…"
+										: "Ask for human review"}
+								</span>
+								{!isOpeningPR && (
+									<ArrowRight className="h-4 w-4 text-muted-foreground" />
+								)}
+							</button>
+						)}
+						{openPRError && (
+							<p className="px-6 pb-2 text-xs text-destructive">
+								{openPRError}
+							</p>
+						)}
 					</div>
 
 					{/* Footer */}
@@ -468,7 +658,7 @@ export function PublishDialog({
 								}}
 								disabled={isPublishing}
 							>
-								Ask review
+								Ask for AI review
 							</Button>
 							<Button
 								type="button"

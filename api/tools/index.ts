@@ -1,5 +1,6 @@
 import { analyticsQueryTool } from "./analytics-query.ts";
 import { assetsTool, deleteAssetTool, uploadAssetTool } from "./assets.ts";
+import { suggestCommitMessageTool } from "./commit-summary.ts";
 import {
 	createEnvironmentTool,
 	deleteEnvironmentTool,
@@ -20,9 +21,11 @@ import {
 } from "./files.ts";
 import {
 	fsUnlinkTool,
+	gitCheckoutBranchTool,
 	gitDiffTool,
 	gitDiscardTool,
 	gitPublishTool,
+	gitRawTool,
 	gitStatusTool,
 } from "./git.ts";
 import {
@@ -36,10 +39,17 @@ import {
 	getMonitorTopPathsTool,
 } from "./monitor.ts";
 import {
-	createSandboxTaskTool,
-	killSandboxTaskTool,
-	listSandboxTasksTool,
-} from "./sandbox.ts";
+	listPullRequestsTool,
+	mergePullRequestTool,
+	openPullRequestTool,
+} from "./pull-requests.ts";
+import {
+	getProductionShaTool,
+	listReleasesTool,
+	promoteToProductionTool,
+	revertCommitTool,
+} from "./releases.ts";
+
 export const tools = [
 	analyticsQueryTool,
 	assetsTool,
@@ -63,6 +73,8 @@ export const tools = [
 	gitDiffTool,
 	gitPublishTool,
 	gitDiscardTool,
+	gitCheckoutBranchTool,
+	gitRawTool,
 	fsUnlinkTool,
 	getMonitorDataTool,
 	getMonitorSummaryTool,
@@ -72,7 +84,12 @@ export const tools = [
 	getMonitorCacheStatusTool,
 	getMonitorStatusCodesTool,
 	getAnalyticsDataTool,
-	createSandboxTaskTool,
-	listSandboxTasksTool,
-	killSandboxTaskTool,
+	listPullRequestsTool,
+	mergePullRequestTool,
+	openPullRequestTool,
+	suggestCommitMessageTool,
+	listReleasesTool,
+	promoteToProductionTool,
+	revertCommitTool,
+	getProductionShaTool,
 ];
