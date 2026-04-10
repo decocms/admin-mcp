@@ -58,7 +58,7 @@ export const createSandboxTaskTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -129,7 +129,7 @@ export const listSandboxTasksTool = createTool({
 		readOnlyHint: true,
 		destructiveHint: false,
 		idempotentHint: true,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -183,7 +183,7 @@ export const killSandboxTaskTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: true,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);

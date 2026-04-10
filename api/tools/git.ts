@@ -59,7 +59,7 @@ export const gitStatusTool = createTool({
 		readOnlyHint: true,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -112,7 +112,7 @@ export const gitDiffTool = createTool({
 		readOnlyHint: true,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -166,7 +166,7 @@ export const gitPublishTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -198,7 +198,7 @@ export const gitDiscardTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: true,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -228,7 +228,7 @@ export const fsUnlinkTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: true,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);

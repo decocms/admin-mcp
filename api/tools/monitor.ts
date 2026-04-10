@@ -112,7 +112,7 @@ export const getMonitorDataTool = createTool({
 		readOnlyHint: true,
 		destructiveHint: false,
 		idempotentHint: true,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async (_input, ctx) => {
 		const { apiKey, site } = getConfig(ctx);

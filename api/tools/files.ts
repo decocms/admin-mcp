@@ -92,7 +92,7 @@ export const fileExplorerTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const env = getEnv(ctx);
@@ -173,7 +173,7 @@ export const listFilesTool = createTool({
 		readOnlyHint: true,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -226,7 +226,7 @@ export const readFileTool = createTool({
 		readOnlyHint: true,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -269,7 +269,7 @@ export const writeFileTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -319,7 +319,7 @@ export const deleteFileTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: true,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -380,7 +380,7 @@ export const grepFilesTool = createTool({
 		readOnlyHint: true,
 		destructiveHint: false,
 		idempotentHint: true,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -444,7 +444,7 @@ export const replaceInFileTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -509,7 +509,7 @@ export const updateJsonTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
@@ -564,7 +564,7 @@ export const getPagesTool = createTool({
 		readOnlyHint: true,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { site } = getConfig(ctx);

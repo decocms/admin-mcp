@@ -65,7 +65,7 @@ export const assetsTool = createTool({
 		readOnlyHint: true,
 		destructiveHint: false,
 		idempotentHint: true,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		console.log("context", context);
@@ -164,7 +164,7 @@ export const uploadAssetTool = createTool({
 		readOnlyHint: false,
 		destructiveHint: false,
 		idempotentHint: false,
-		openWorldHint: true,
+		openWorldHint: false,
 	},
 	execute: async ({ context }, ctx) => {
 		const { url, data, mimeType, filename } = context;
