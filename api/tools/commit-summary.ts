@@ -1,7 +1,6 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
 import { callAdmin, getConfig } from "../lib/admin.ts";
-import type { Env } from "../types/env.ts";
 import type { GitStatus } from "./git.ts";
 
 const daemonDiffSchema = z.object({
@@ -222,8 +221,7 @@ async function callAdminCommitMetadata(
 
 // ─── tool ─────────────────────────────────────────────────────────────────────
 
-export const suggestCommitMessageTool = (env: Env) =>
-	createTool({
+export const suggestCommitMessageTool = createTool({
 		id: "suggest_commit_message",
 		description:
 			"Use AI to suggest a commit message, PR title, PR body, and branch name based on the current changes in the environment.",
@@ -235,8 +233,8 @@ export const suggestCommitMessageTool = (env: Env) =>
 			idempotentHint: false,
 			openWorldHint: true,
 		},
-		execute: async ({ context }) => {
-			const { site, apiKey } = getConfig(env);
+		execute: async ({ context }, ctx) => {
+			const { site, apiKey } = getConfig(ctx);
 
 			const status = (await callAdmin(
 				"deco-sites/admin/loaders/releases/git/status.ts",

@@ -1,7 +1,6 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
 import { callAdmin, getConfig } from "../lib/admin.ts";
-import type { Env } from "../types/env.ts";
 
 export const PULL_REQUESTS_RESOURCE_URI = "ui://mcp-app/pull-requests";
 
@@ -52,8 +51,7 @@ export type ListPullRequestsOutput = z.infer<
 	typeof listPullRequestsOutputSchema
 >;
 
-export const listPullRequestsTool = (env: Env) =>
-	createTool({
+export const listPullRequestsTool = createTool({
 		id: "list_pull_requests",
 		description:
 			"List all open pull requests for the configured deco.cx site's GitHub repository. Returns PR title, author, branch, labels, and GitHub URL.",
@@ -66,8 +64,8 @@ export const listPullRequestsTool = (env: Env) =>
 			idempotentHint: true,
 			openWorldHint: true,
 		},
-		execute: async () => {
-			const { site, apiKey } = getConfig(env);
+		execute: async ({ context }, ctx) => {
+			const { site, apiKey } = getConfig(ctx);
 			const data = await callAdmin(
 				"deco-sites/admin/loaders/github/getPullRequests.ts",
 				{ site },
@@ -98,8 +96,7 @@ export type MergePullRequestOutput = z.infer<
 	typeof mergePullRequestOutputSchema
 >;
 
-export const mergePullRequestTool = (env: Env) =>
-	createTool({
+export const mergePullRequestTool = createTool({
 		id: "merge_pull_request",
 		description:
 			"Merge a pull request by its number for the configured deco.cx site. Always confirm with the user before merging.",
@@ -111,8 +108,8 @@ export const mergePullRequestTool = (env: Env) =>
 			idempotentHint: false,
 			openWorldHint: true,
 		},
-		execute: async ({ context }) => {
-			const { site, apiKey } = getConfig(env);
+		execute: async ({ context }, ctx) => {
+			const { site, apiKey } = getConfig(ctx);
 			await callAdmin(
 				"deco-sites/admin/actions/github/mergePullRequest.ts",
 				{ site, pullRequestNumber: context.pullRequestNumber },
@@ -156,8 +153,7 @@ export const openPullRequestOutputSchema = z.object({
 });
 export type OpenPullRequestOutput = z.infer<typeof openPullRequestOutputSchema>;
 
-export const openPullRequestTool = (env: Env) =>
-	createTool({
+export const openPullRequestTool = createTool({
 		id: "open_pull_request",
 		description:
 			"Open a GitHub pull request from a sandbox environment. Creates a new branch from the environment's current changes, pushes it, and opens a PR to main.",
@@ -169,8 +165,8 @@ export const openPullRequestTool = (env: Env) =>
 			idempotentHint: false,
 			openWorldHint: true,
 		},
-		execute: async ({ context }) => {
-			const { site, apiKey } = getConfig(env);
+		execute: async ({ context }, ctx) => {
+			const { site, apiKey } = getConfig(ctx);
 			const base = context.base ?? "main";
 			const head = context.branch ?? context.env;
 

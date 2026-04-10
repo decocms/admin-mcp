@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createPublicResource } from "@decocms/runtime/tools";
 import { PULL_REQUESTS_RESOURCE_URI } from "../tools/pull-requests.ts";
-import type { Env } from "../types/env.ts";
 
 const RESOURCE_MIME_TYPE = "text/html;profile=mcp-app";
 
@@ -12,8 +11,7 @@ function getDistPath(): string {
 	return join(projectRoot, "dist", "client", "index.html");
 }
 
-export const pullRequestsAppResource = (_env: Env) =>
-	createPublicResource({
+export const pullRequestsAppResource = createPublicResource({
 		uri: PULL_REQUESTS_RESOURCE_URI,
 		name: "Pull Requests UI",
 		description: "Interactive pull request management for deco.cx sites",
