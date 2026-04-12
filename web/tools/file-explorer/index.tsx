@@ -524,26 +524,51 @@ function FileExplorerWorkspace({
 		}
 	}, [viewMode]);
 
-	// Load git status when env is ready
-	const loadGitStatus = useCallback(async () => {
-		if (!app || !userEnv) return;
-		try {
-			const result = await app.callServerTool({
-				name: "git_status",
-				arguments: { env: userEnv },
-			});
-			if (!result?.isError) {
-				const data = result?.structuredContent as GitStatus | undefined;
-				if (data) setGitStatus(data);
-			}
-		} catch {
-			// non-fatal
-		}
-	}, [app, userEnv]);
+	// Refresh preview and invalidate open file buffers on detected file changes
+	// Poll git_status every 5 s; on any change, treat files as stale
+	const lastGitStatusRef = useRef<string | null>(null);
 
 	useEffect(() => {
-		if (envStatus === "ready") void loadGitStatus();
-	}, [envStatus, loadGitStatus]);
+		if (envStatus !== "ready" || !app || !userEnv) return;
+		let cancelled = false;
+
+		const check = async () => {
+			try {
+				const result = await app.callServerTool({
+					name: "git_status",
+					arguments: { env: userEnv },
+				});
+				if (cancelled || result?.isError) return;
+				const data = result?.structuredContent as GitStatus | undefined;
+				if (!data) return;
+				setGitStatus(data);
+				const snapshot = JSON.stringify(data);
+				if (lastGitStatusRef.current === null) {
+					// First reading — just store baseline
+					lastGitStatusRef.current = snapshot;
+				} else if (snapshot !== lastGitStatusRef.current) {
+					lastGitStatusRef.current = snapshot;
+					setPreviewRefreshKey((k) => k + 1);
+					setFileBuffers((prev) => {
+						const next: typeof prev = {};
+						for (const [fp, buf] of Object.entries(prev)) {
+							next[fp] = { ...buf, loaded: false };
+						}
+						return next;
+					});
+				}
+			} catch {
+				// non-fatal
+			}
+		};
+
+		void check();
+		const interval = setInterval(() => void check(), 5_000);
+		return () => {
+			cancelled = true;
+			clearInterval(interval);
+		};
+	}, [app, envStatus, userEnv]);
 
 	// Env warm-up
 	useEffect(() => {
@@ -614,6 +639,8 @@ function FileExplorerWorkspace({
 			toast.dismiss(WARMUP_TOAST_ID);
 		};
 	}, [app, userEnv]);
+
+	// Refresh preview and invalidate open file buffers on detected file changes
 
 	// Fetch preview URL
 	useEffect(() => {

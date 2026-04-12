@@ -75,7 +75,7 @@ export function McpProvider({ children }: { children: ReactNode }) {
 		const ctx = app?.getHostContext();
 		if (ctx) setHostContext(ctx);
 		const toolName = ctx?.toolInfo?.tool.name;
-		setState({ status: "connected", toolName });
+		setState((prev) => ({ ...prev, status: "connected", toolName }));
 	}
 
 	return (
