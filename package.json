@@ -8,7 +8,7 @@
 		"dev": "concurrently -k \"bun run dev:api\" \"bun run dev:web\"",
 		"dev:tunnel": "concurrently -k \"bun run dev\" \"ngrok http ${PORT:-3001}\"",
 		"dev:api": "bun run --hot api/main.ts",
-		"dev:web": "vite build --watch",
+		"dev:web": "NODE_OPTIONS='--max-old-space-size=8192' vite build --watch",
 		"build:web": "vite build",
 		"build:server": "NODE_ENV=production bun build api/main.ts --target=bun --minify --outfile=dist/server/main.js",
 		"build": "bun run build:web && bun run build:server",

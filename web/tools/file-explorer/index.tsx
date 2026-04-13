@@ -19,6 +19,7 @@ import {
 	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
+	Crosshair,
 	ExternalLink,
 	Eye,
 	File,
@@ -33,6 +34,7 @@ import {
 	MousePointer2,
 	MoreHorizontal,
 	Package,
+	PanelLeft,
 	Plus,
 	RefreshCw,
 	Save,
@@ -119,6 +121,7 @@ import type { GitStatus } from "../../../api/tools/git.ts";
 import { PublishDialog } from "./publish-dialog.tsx";
 import { SectionForm } from "./cms-form.tsx";
 import type {
+	CmsInspectPayload,
 	EnvStatus,
 	FileBuffer,
 	PreviewViewport,
@@ -349,6 +352,207 @@ function visualEditorScript() {
 		},
 		true,
 	);
+}
+
+// ─── cms inspect script ───────────────────────────────────────────────────────
+
+function cmsInspectScript() {
+	if ((window as unknown as Record<string, unknown>).__cmsInspectActive) return;
+	(window as unknown as Record<string, unknown>).__cmsInspectActive = true;
+
+	let enabled = true;
+
+	const LEAF_SELECTOR =
+		"section[data-manifest-key]:not(:has(section[data-manifest-key]))";
+
+	const cursorStyle = document.createElement("style");
+	cursorStyle.textContent = `* { cursor: default !important; } ${LEAF_SELECTOR} { cursor: pointer !important; }`;
+	document.head.appendChild(cursorStyle);
+
+	const highlight = document.createElement("div");
+	highlight.style.cssText =
+		"position:fixed;pointer-events:none;outline:2px solid #0ea5e9;background:rgba(14,165,233,0.08);border-radius:4px;z-index:2147483647;display:none;transition:top 0.08s,left 0.08s,width 0.08s,height 0.08s;";
+	document.body.appendChild(highlight);
+
+	const badge = document.createElement("div");
+	badge.style.cssText =
+		"position:fixed;pointer-events:none;background:#0ea5e9;color:white;font:11px/1.2 system-ui,sans-serif;padding:3px 8px;border-radius:3px;z-index:2147483647;display:none;white-space:nowrap;max-width:280px;overflow:hidden;text-overflow:ellipsis;";
+	document.body.appendChild(badge);
+
+	let lastSection: HTMLElement | null = null;
+
+	const formatLabel = (key: string) => {
+		const parts = key.split("/");
+		const file = parts[parts.length - 1];
+		return file.replace(/\.(tsx|ts|jsx|js)$/, "").replace(/[-_]/g, " ");
+	};
+
+	document.addEventListener(
+		"mouseover",
+		(e) => {
+			if (!enabled) return;
+			const el = e.target as HTMLElement;
+			if (!el || el === highlight || el === badge) return;
+			let section = el.closest(
+				"section[data-manifest-key]",
+			) as HTMLElement | null;
+			if (section && section.querySelector("section[data-manifest-key]")) {
+				section = el.closest(LEAF_SELECTOR) as HTMLElement | null;
+			}
+			if (!section) {
+				highlight.style.display = "none";
+				badge.style.display = "none";
+				lastSection = null;
+				return;
+			}
+			if (section === lastSection) return;
+			lastSection = section;
+			const r = section.getBoundingClientRect();
+			highlight.style.display = "block";
+			highlight.style.top = `${r.top}px`;
+			highlight.style.left = `${r.left}px`;
+			highlight.style.width = `${r.width}px`;
+			highlight.style.height = `${r.height}px`;
+			const key = section.getAttribute("data-manifest-key") || "";
+			badge.textContent = formatLabel(key);
+			badge.style.display = "block";
+			badge.style.top = `${Math.max(0, r.top - 22)}px`;
+			badge.style.left = `${r.left}px`;
+		},
+		true,
+	);
+
+	document.addEventListener(
+		"mouseout",
+		(e) => {
+			if (!enabled) return;
+			const el = e.target as HTMLElement;
+			const related = (e as MouseEvent).relatedTarget as HTMLElement | null;
+			if (!el) return;
+			const fromSection = el.closest(LEAF_SELECTOR) as HTMLElement | null;
+			const toSection = related?.closest?.(LEAF_SELECTOR) as HTMLElement | null;
+			if (fromSection && fromSection !== toSection) {
+				highlight.style.display = "none";
+				badge.style.display = "none";
+				lastSection = null;
+			}
+		},
+		true,
+	);
+
+	document.addEventListener(
+		"click",
+		(e) => {
+			if (!enabled) return;
+			e.preventDefault();
+			e.stopImmediatePropagation();
+			const el = e.target as HTMLElement;
+			if (!el || el === highlight || el === badge) return;
+
+			let section = el.closest(
+				"section[data-manifest-key]",
+			) as HTMLElement | null;
+			if (section && section.querySelector("section[data-manifest-key]")) {
+				section = el.closest(LEAF_SELECTOR) as HTMLElement | null;
+			}
+			if (!section) return;
+
+			highlight.style.outline = "2px solid #0284c7";
+			highlight.style.background = "rgba(2,132,199,0.18)";
+			setTimeout(() => {
+				highlight.style.outline = "2px solid #0ea5e9";
+				highlight.style.background = "rgba(14,165,233,0.08)";
+			}, 400);
+
+			const manifestKey = section.getAttribute("data-manifest-key") || "";
+			const allSections = Array.from(document.querySelectorAll(LEAF_SELECTOR));
+			const sectionIndex = allSections.indexOf(section);
+
+			const tag = el.tagName.toLowerCase();
+			const id = el.id || "";
+			const classes =
+				el.className && typeof el.className === "string"
+					? el.className.trim()
+					: "";
+			const text = (el.textContent || "").trim().slice(0, 200);
+			const html = (el.outerHTML || "").slice(0, 800);
+
+			let ancestor: HTMLElement | null = el;
+			let componentName: string | null = null;
+			for (let i = 0; i < 10 && ancestor; i++) {
+				const ds = (ancestor as HTMLElement).dataset;
+				if (ds) componentName = ds.componentName || componentName;
+				ancestor = ancestor.parentElement;
+			}
+
+			const parents: string[] = [];
+			let p: HTMLElement | null = el.parentElement;
+			for (let i = 0; i < 4 && p && p !== document.body; i++) {
+				const pTag = p.tagName ? p.tagName.toLowerCase() : "";
+				const pId = p.id ? `#${p.id}` : "";
+				const pCls =
+					p.className && typeof p.className === "string"
+						? `.${p.className.trim().split(/\s+/)[0]}`
+						: "";
+				parents.unshift(pTag + pId + pCls);
+				p = p.parentElement;
+			}
+
+			window.parent.postMessage(
+				{
+					type: "cms-inspect::section-clicked",
+					payload: {
+						manifestKey,
+						sectionIndex,
+						tag,
+						id,
+						classes,
+						text,
+						html,
+						componentName,
+						parents: parents.join(" > "),
+						url: window.location.href,
+						path: window.location.pathname,
+						viewport: {
+							width: window.innerWidth,
+							height: window.innerHeight,
+						},
+						position: { x: Math.round(e.clientX), y: Math.round(e.clientY) },
+					},
+				},
+				"*",
+			);
+		},
+		true,
+	);
+
+	const updateHighlightPosition = () => {
+		if (!lastSection || highlight.style.display === "none") return;
+		const r = lastSection.getBoundingClientRect();
+		highlight.style.top = `${r.top}px`;
+		highlight.style.left = `${r.left}px`;
+		highlight.style.width = `${r.width}px`;
+		highlight.style.height = `${r.height}px`;
+		badge.style.top = `${Math.max(0, r.top - 22)}px`;
+		badge.style.left = `${r.left}px`;
+	};
+
+	document.addEventListener("scroll", updateHighlightPosition, true);
+	window.addEventListener("scroll", updateHighlightPosition, true);
+
+	window.addEventListener("message", (e) => {
+		if (e.data?.type === "cms-inspect::toggle") {
+			enabled = !!e.data.enabled;
+			if (!enabled) {
+				highlight.style.display = "none";
+				badge.style.display = "none";
+				lastSection = null;
+				cursorStyle.textContent = "";
+			} else {
+				cursorStyle.textContent = `* { cursor: default !important; } ${LEAF_SELECTOR} { cursor: pointer !important; }`;
+			}
+		}
+	});
 }
 
 type CodeSelectionPrompt = {
@@ -894,6 +1098,7 @@ function FileExplorerWorkspace({
 
 	// ── CMS state ────────────────────────────────────────────────────────────────
 	const [cmsOpen, setCmsOpen] = useState(false);
+	const [cmsPanelVisible, setCmsPanelVisible] = useState(true);
 	const [cmsData, setCmsData] = useState<GetPageSectionsOutput | null>(null);
 	const [cmsLoading, setCmsLoading] = useState(false);
 	const [cmsError, setCmsError] = useState<string | undefined>();
@@ -915,6 +1120,13 @@ function FileExplorerWorkspace({
 	const [cmsSchemasMap, setCmsSchemasMap] = useState<
 		Record<string, SchemaProperties>
 	>({});
+
+	// ── CMS inspect state ────────────────────────────────────────────────────
+	const [cmsInspectActive, setCmsInspectActive] = useState(false);
+	const [cmsInspectElement, setCmsInspectElement] =
+		useState<CmsInspectPayload | null>(null);
+	const [cmsInspectInput, setCmsInspectInput] = useState("");
+	const [isSendingCmsInspect, setIsSendingCmsInspect] = useState(false);
 
 	// ── Add-section picker state ──────────────────────────────────────────────
 	const [addSectionOpen, setAddSectionOpen] = useState(false);
@@ -974,6 +1186,7 @@ function FileExplorerWorkspace({
 	const pagesContainerRef = useRef<HTMLDivElement>(null);
 	const previewIframeRef = useRef<HTMLIFrameElement>(null);
 	const visualEditorInputRef = useRef<HTMLInputElement>(null);
+	const cmsInspectInputRef = useRef<HTMLInputElement>(null);
 	const codePromptInputRef = useRef<HTMLInputElement>(null);
 
 	// ── computed ────────────────────────────────────────────────────────────────
@@ -1081,6 +1294,119 @@ function FileExplorerWorkspace({
 			setTimeout(() => visualEditorInputRef.current?.focus(), 50);
 		}
 	}, [visualEditorElement]);
+
+	useEffect(() => {
+		const win = previewIframeRef.current?.contentWindow;
+		if (!win) return;
+
+		if (cmsOpen && cmsInspectActive) {
+			try {
+				const existing = (win as unknown as Record<string, unknown>)
+					.__cmsInspectActive;
+				if (existing) {
+					win.postMessage({ type: "cms-inspect::toggle", enabled: true }, "*");
+				} else {
+					const script = win.document.createElement("script");
+					script.textContent = `(${cmsInspectScript.toString()})()`;
+					win.document.head.appendChild(script);
+				}
+			} catch {
+				win.postMessage(
+					{
+						type: "editor::inject",
+						args: { script: `(${cmsInspectScript.toString()})()` },
+					},
+					"*",
+				);
+			}
+		} else {
+			try {
+				win.postMessage({ type: "cms-inspect::toggle", enabled: false }, "*");
+			} catch {}
+		}
+	}, [cmsOpen, cmsInspectActive]);
+
+	const cmsInspectHandlerRef = useRef<(payload: CmsInspectPayload) => void>(
+		() => {},
+	);
+	cmsInspectHandlerRef.current = (payload: CmsInspectPayload) => {
+		if (!cmsData) return;
+		const { manifestKey, sectionIndex } = payload;
+		const sections = cmsData.sections;
+		const rawSections = cmsData.pageData.sections as Array<{
+			__resolveType?: string;
+			section?: { __resolveType?: string };
+		}>;
+
+		const basename = (s: string) => {
+			const parts = s.split("/");
+			return parts[parts.length - 1];
+		};
+
+		const getEffectiveRt = (sec: (typeof sections)[number], i: number) => {
+			const r = rawSections[i];
+			if (sec.isLazy) {
+				return r?.section?.__resolveType ?? sec.resolveType;
+			}
+			return r?.__resolveType ?? sec.resolveType;
+		};
+
+		const matchesKey = (ert: string, key: string) =>
+			ert === key || basename(ert) === basename(key);
+
+		const matchingIndices = sections
+			.map((sec, i) => ({ i, ert: getEffectiveRt(sec, i) }))
+			.filter(({ ert }) => matchesKey(ert, manifestKey));
+
+		let matchedIdx: number;
+		if (matchingIndices.length === 1) {
+			matchedIdx = matchingIndices[0].i;
+		} else if (matchingIndices.length > 1) {
+			const occurrence = Math.min(
+				matchingIndices.length - 1,
+				Math.max(0, sectionIndex),
+			);
+			matchedIdx = matchingIndices[occurrence].i;
+		} else {
+			matchedIdx = -1;
+		}
+
+		if (matchedIdx >= 0 && matchedIdx < sections.length) {
+			handleCmsSelectSection(matchedIdx);
+		}
+	};
+
+	useEffect(() => {
+		if (!cmsOpen || !cmsInspectActive) {
+			setCmsInspectElement(null);
+			setCmsInspectInput("");
+			return;
+		}
+		const handler = (event: MessageEvent) => {
+			if (event.data?.type !== "cms-inspect::section-clicked") return;
+			const payload = event.data.payload as CmsInspectPayload;
+			setCmsInspectElement(payload);
+			setCmsInspectInput("");
+			cmsInspectHandlerRef.current(payload);
+		};
+		window.addEventListener("message", handler);
+		return () => window.removeEventListener("message", handler);
+	}, [cmsOpen, cmsInspectActive]);
+
+	useEffect(() => {
+		if (cmsInspectElement) {
+			setTimeout(() => cmsInspectInputRef.current?.focus(), 50);
+		}
+	}, [cmsInspectElement]);
+
+	const prevPreviewPathRef = useRef(previewPath);
+	useEffect(() => {
+		if (prevPreviewPathRef.current !== previewPath) {
+			prevPreviewPathRef.current = previewPath;
+			setCmsInspectElement(null);
+			setCmsInspectInput("");
+		}
+	});
 
 	useEffect(() => {
 		if (codePromptSelection) {
@@ -1667,18 +1993,33 @@ function FileExplorerWorkspace({
 	const handleCmsToggle = () => {
 		const next = !cmsOpen;
 		setCmsOpen(next);
+		if (next) {
+			setViewMode("preview");
+			setCmsPanelVisible(true);
+		}
 		if (!next) {
 			setCmsData(null);
 			setCmsSelectedSection(null);
 			setCmsSectionData(null);
 			setCmsError(undefined);
+			setCmsInspectActive(false);
+			setCmsInspectElement(null);
+			setCmsInspectInput("");
+			setCmsPanelVisible(true);
 			if (cmsAutoSaveTimerRef.current)
 				clearTimeout(cmsAutoSaveTimerRef.current);
 		}
 	};
 
+	const handleCmsPanelClose = () => {
+		setCmsPanelVisible(false);
+		setCmsSelectedSection(null);
+		setCmsSectionData(null);
+	};
+
 	const handleCmsSelectSection = (idx: number) => {
 		if (!cmsData) return;
+		setCmsPanelVisible(true);
 		setCmsSelectedSection(idx);
 		cmsSelectedSectionRef.current = idx;
 		const sections = cmsData.pageData.sections as Record<string, unknown>[];
@@ -2535,6 +2876,85 @@ function FileExplorerWorkspace({
 		setVisualEditorInput("");
 	}, [app, visualEditorElement, visualEditorInput, site, userEnv]);
 
+	const handleCmsInspectSend = useCallback(async () => {
+		if (!cmsInspectElement || !cmsInspectInput.trim() || !app) return;
+		const p = cmsInspectElement;
+		setIsSendingCmsInspect(true);
+
+		try {
+			const lines = [
+				`The user inspected a section on the live preview and asked: **"${cmsInspectInput.trim()}"**`,
+				"",
+			];
+
+			if (cmsData?.filePath) {
+				lines.push(`**Page file:** \`${cmsData.filePath}\``, "");
+			}
+
+			lines.push(`**Section type:** \`${p.manifestKey}\``);
+			if (cmsSelectedSection !== null) {
+				lines.push(`**Section index:** ${cmsSelectedSection}`);
+			}
+
+			const sectionSourceFile = p.manifestKey.startsWith("site/")
+				? p.manifestKey.replace("site/", "")
+				: p.manifestKey;
+			lines.push(`**Section source file:** \`${sectionSourceFile}\``, "");
+
+			if (cmsSectionData) {
+				const propsJson = JSON.stringify(cmsSectionData, null, 2);
+				const truncated =
+					propsJson.length > 3000
+						? `${propsJson.slice(0, 3000)}\n... (truncated)`
+						: propsJson;
+				lines.push(
+					"**Current section props (JSON):**",
+					"```json",
+					truncated,
+					"```",
+					"",
+				);
+			}
+
+			const selector = [
+				`<${p.tag}`,
+				p.classes ? ` class="${p.classes}"` : "",
+				">",
+			].join("");
+			lines.push(`**Clicked element:** \`${selector}\``);
+			if (p.parents) lines.push(`**DOM breadcrumb:** ${p.parents} > ${p.tag}`);
+			if (p.text) lines.push(`**Text content:** "${p.text}"`);
+			if (p.componentName) lines.push(`**Component name:** ${p.componentName}`);
+			lines.push("", "**HTML snippet:**", "```html", p.html, "```");
+			lines.push("", `Site: **${site}** — Environment: **${userEnv}**`);
+			lines.push(
+				"",
+				"Please read the section source file, understand the current props, and apply the requested change. " +
+					"If the change involves CMS content (text, images, settings), modify the page JSON at the correct section index. " +
+					"If the change involves code or styling, modify the section source file.",
+			);
+
+			app.sendMessage({
+				role: "user",
+				content: [{ type: "text", text: lines.join("\n") }],
+			});
+
+			setCmsInspectElement(null);
+			setCmsInspectInput("");
+		} finally {
+			setIsSendingCmsInspect(false);
+		}
+	}, [
+		app,
+		cmsInspectElement,
+		cmsInspectInput,
+		cmsData,
+		cmsSelectedSection,
+		cmsSectionData,
+		site,
+		userEnv,
+	]);
+
 	// ── render ───────────────────────────────────────────────────────────────────
 
 	return (
@@ -2557,49 +2977,54 @@ function FileExplorerWorkspace({
 						<div className="flex items-center justify-between gap-3 border-b px-3 py-2">
 							{/* View mode switcher */}
 							<div className="flex shrink-0 items-center rounded-lg border bg-muted/40">
-								<button
-									type="button"
-									className={cn(
-										"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
-										viewMode === "preview"
-											? "bg-background text-foreground shadow-xs"
-											: "text-muted-foreground hover:text-foreground",
-									)}
-									onClick={() => setViewMode("preview")}
-									disabled={envStatus !== "ready"}
-									title="Preview"
-								>
-									<Eye className="h-3.5 w-3.5" />
-								</button>
-								<button
-									type="button"
-									className={cn(
-										"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
-										viewMode === "visual"
-											? "bg-background text-foreground shadow-xs"
-											: "text-muted-foreground hover:text-foreground",
-									)}
-									onClick={() => setViewMode("visual")}
-									disabled={envStatus !== "ready"}
-									title="Visual editor — click any element to ask the AI about it"
-								>
-									<MousePointer2 className="h-3.5 w-3.5" />
-								</button>
-								<button
-									type="button"
-									className={cn(
-										"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
-										viewMode === "code"
-											? "bg-background text-foreground shadow-xs"
-											: "text-muted-foreground hover:text-foreground",
-									)}
-									onClick={() => setViewMode("code")}
-									title="Code"
-								>
-									<FileCode2 className="h-3.5 w-3.5" />
-								</button>
-								{/* CMS toggle */}
-								{(viewMode === "preview" || viewMode === "visual") && (
+								{!cmsOpen && (
+									<>
+										<button
+											type="button"
+											className={cn(
+												"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
+												viewMode === "preview"
+													? "bg-background text-foreground shadow-xs"
+													: "text-muted-foreground hover:text-foreground",
+											)}
+											onClick={() => setViewMode("preview")}
+											disabled={envStatus !== "ready"}
+											title="Preview"
+										>
+											<Eye className="h-3.5 w-3.5" />
+										</button>
+										<button
+											type="button"
+											className={cn(
+												"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
+												viewMode === "visual"
+													? "bg-background text-foreground shadow-xs"
+													: "text-muted-foreground hover:text-foreground",
+											)}
+											onClick={() => setViewMode("visual")}
+											disabled={envStatus !== "ready"}
+											title="Visual editor — click any element to ask the AI about it"
+										>
+											<MousePointer2 className="h-3.5 w-3.5" />
+										</button>
+										<button
+											type="button"
+											className={cn(
+												"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
+												viewMode === "code"
+													? "bg-background text-foreground shadow-xs"
+													: "text-muted-foreground hover:text-foreground",
+											)}
+											onClick={() => setViewMode("code")}
+											title="Code"
+										>
+											<FileCode2 className="h-3.5 w-3.5" />
+										</button>
+									</>
+								)}
+								{(cmsOpen ||
+									viewMode === "preview" ||
+									viewMode === "visual") && (
 									<button
 										type="button"
 										className={cn(
@@ -2613,6 +3038,38 @@ function FileExplorerWorkspace({
 										title="CMS — browse and edit page sections"
 									>
 										<LayersIcon className="h-3.5 w-3.5" />
+									</button>
+								)}
+								{cmsOpen && (
+									<button
+										type="button"
+										className={cn(
+											"flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 text-sm transition-colors",
+											cmsInspectActive
+												? "bg-primary/10 text-primary"
+												: "text-muted-foreground hover:text-foreground",
+										)}
+										onClick={() => setCmsInspectActive((v) => !v)}
+										disabled={envStatus !== "ready"}
+										title="Inspect — click sections in the preview to edit"
+									>
+										<Crosshair className="h-3.5 w-3.5" />
+									</button>
+								)}
+								{cmsOpen && (
+									<button
+										type="button"
+										className={cn(
+											"flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 text-sm transition-colors",
+											cmsPanelVisible
+												? "bg-primary/10 text-primary"
+												: "text-muted-foreground hover:text-foreground",
+										)}
+										onClick={() => setCmsPanelVisible((v) => !v)}
+										disabled={envStatus !== "ready"}
+										title="Toggle CMS form panel"
+									>
+										<PanelLeft className="h-3.5 w-3.5" />
 									</button>
 								)}
 								{/* More options */}
@@ -3216,7 +3673,7 @@ function FileExplorerWorkspace({
 														)}
 
 														{/* CMS panel */}
-														{cmsOpen && (
+														{cmsOpen && cmsPanelVisible && (
 															<CmsPanel
 																loading={cmsLoading}
 																error={cmsError}
@@ -3243,7 +3700,7 @@ function FileExplorerWorkspace({
 																}
 																onPageMetaChange={handleCmsPageMetaChange}
 																onAddSection={() => void handleCmsAddSection()}
-																onClose={handleCmsToggle}
+																onClose={handleCmsPanelClose}
 															/>
 														)}
 
@@ -3507,6 +3964,101 @@ function FileExplorerWorkspace({
 																);
 															})()}
 
+														{cmsOpen &&
+															cmsInspectActive &&
+															previewUrl &&
+															!cmsInspectElement && (
+																<div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 rounded-full border border-sky-400/40 bg-sky-500/90 px-3 py-1 text-xs font-medium text-white shadow-md backdrop-blur-sm pointer-events-none select-none">
+																	<Crosshair className="h-3 w-3" />
+																	Click any section to inspect
+																</div>
+															)}
+
+														{cmsOpen &&
+															cmsInspectActive &&
+															cmsInspectElement &&
+															(() => {
+																const POPUP_W = 320;
+																const POPUP_H = 44;
+																const PAD = 12;
+																const { x, y } = cmsInspectElement.position;
+																const { width: vw, height: vh } =
+																	cmsInspectElement.viewport;
+																const left = Math.max(
+																	PAD,
+																	Math.min(x - POPUP_W / 2, vw - POPUP_W - PAD),
+																);
+																const isNearBottom = y / vh > 0.68;
+																const top = isNearBottom
+																	? Math.max(PAD, y - POPUP_H - 18)
+																	: Math.min(y + 18, vh - POPUP_H - PAD);
+																return (
+																	<div
+																		className="absolute z-30 pointer-events-none"
+																		style={{
+																			left: `${(left / vw) * 100}%`,
+																			top: `${(top / vh) * 100}%`,
+																			width: `${POPUP_W}px`,
+																		}}
+																	>
+																		<form
+																			className="pointer-events-auto flex w-full items-center gap-1.5 rounded-full border border-border bg-background/95 px-3 py-1.5 shadow-xl backdrop-blur-sm"
+																			onSubmit={(e) => {
+																				e.preventDefault();
+																				void handleCmsInspectSend();
+																			}}
+																		>
+																			<input
+																				ref={cmsInspectInputRef}
+																				type="text"
+																				value={cmsInspectInput}
+																				onChange={(e) =>
+																					setCmsInspectInput(e.target.value)
+																				}
+																				onKeyDown={(e) => {
+																					if (e.key === "Escape") {
+																						setCmsInspectElement(null);
+																						setCmsInspectInput("");
+																					}
+																				}}
+																				placeholder="Ask the AI about this section..."
+																				className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+																			/>
+																			<button
+																				type="submit"
+																				disabled={
+																					!cmsInspectInput.trim() ||
+																					isSendingCmsInspect
+																				}
+																				className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-30"
+																				title="Send"
+																			>
+																				{isSendingCmsInspect ? (
+																					<Loader2 className="h-3 w-3 animate-spin" />
+																				) : (
+																					<svg
+																						width="10"
+																						height="10"
+																						viewBox="0 0 10 10"
+																						fill="none"
+																						aria-hidden="true"
+																					>
+																						<title>Send</title>
+																						<path
+																							d="M5 9V1M1 5l4-4 4 4"
+																							stroke="currentColor"
+																							strokeWidth="1.5"
+																							strokeLinecap="round"
+																							strokeLinejoin="round"
+																						/>
+																					</svg>
+																				)}
+																			</button>
+																		</form>
+																	</div>
+																);
+															})()}
+
 														{previewUrl ? (
 															<iframe
 																key={previewUrl}
@@ -3515,21 +4067,30 @@ function FileExplorerWorkspace({
 																title={`Preview of ${userEnv} at ${previewPath}`}
 																className="h-full w-full border-0"
 																onLoad={() => {
-																	if (viewMode !== "visual") return;
 																	const win =
 																		previewIframeRef.current?.contentWindow;
 																	if (!win) return;
+
+																	const scriptToInject =
+																		cmsOpen && cmsInspectActive
+																			? cmsInspectScript
+																			: viewMode === "visual"
+																				? visualEditorScript
+																				: null;
+
+																	if (!scriptToInject) return;
+
 																	try {
 																		const script =
 																			win.document.createElement("script");
-																		script.textContent = `(${visualEditorScript.toString()})()`;
+																		script.textContent = `(${scriptToInject.toString()})()`;
 																		win.document.head.appendChild(script);
 																	} catch {
 																		win.postMessage(
 																			{
 																				type: "editor::inject",
 																				args: {
-																					script: `(${visualEditorScript.toString()})()`,
+																					script: `(${scriptToInject.toString()})()`,
 																				},
 																			},
 																			"*",

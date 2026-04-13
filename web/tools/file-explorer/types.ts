@@ -34,3 +34,19 @@ export type VisualEditorPayload = {
 	viewport: { width: number; height: number };
 	position: { x: number; y: number };
 };
+
+export type CmsInspectPayload = {
+	manifestKey: string;
+	sectionIndex: number;
+	tag: string;
+	id: string;
+	classes: string;
+	text: string;
+	html: string;
+	componentName: string | null;
+	parents: string;
+	url: string;
+	path: string;
+	viewport: { width: number; height: number };
+	position: { x: number; y: number };
+};

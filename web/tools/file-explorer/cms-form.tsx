@@ -53,7 +53,11 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
 import { useMcpApp } from "@/context.tsx";
-import type { Asset, AssetsOutput, UploadAssetOutput } from "../../../api/tools/assets.ts";
+import type {
+	Asset,
+	AssetsOutput,
+	UploadAssetOutput,
+} from "../../../api/tools/assets.ts";
 import type { SchemaProperty } from "../../../api/tools/files.ts";
 
 // ─── types ────────────────────────────────────────────────────────────────────
@@ -308,7 +312,9 @@ function ImagePickerModal({
 				name: "upload_asset",
 				arguments: { data: base64, mimeType: file.type, filename: file.name },
 			});
-			const uploaded = result?.structuredContent as UploadAssetOutput | undefined;
+			const uploaded = result?.structuredContent as
+				| UploadAssetOutput
+				| undefined;
 			await fetchAssets(search, 0);
 			setPage(1);
 			if (uploaded?.asset) setSelected(uploaded.asset);
@@ -399,60 +405,60 @@ function ImagePickerModal({
 								</Button>
 							</div>
 
-						{/* grid */}
-						<div className="min-h-0 flex-1 overflow-y-auto">
-							{loading ? (
-								<div className="flex h-48 items-center justify-center">
-									<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-								</div>
-							) : assets.length === 0 ? (
-								<div className="flex h-48 flex-col items-center justify-center gap-2 text-muted-foreground">
-									<ImageIcon className="h-8 w-8" />
-									<p className="text-sm">No assets found</p>
-								</div>
-							) : (
-								<div className="grid grid-cols-4 gap-2 pr-1">
-									{assets.map((asset) => (
-										<button
-											key={asset.id}
-											type="button"
-											onClick={() =>
-												setSelected((prev) =>
-													prev?.id === asset.id ? null : asset,
-												)
-											}
-											className={cn(
-												"group relative flex flex-col overflow-hidden rounded-md border bg-muted/30 transition-all",
-												selected?.id === asset.id
-													? "ring-2 ring-primary ring-offset-1"
-													: "hover:border-muted-foreground/40",
-											)}
-										>
-											{asset.mime?.startsWith("video/") ? (
-												<div className="flex h-24 items-center justify-center bg-muted">
-													<span className="text-xs text-muted-foreground">
-														Video
-													</span>
-												</div>
-											) : (
-												<img
-													src={asset.publicUrl}
-													alt={asset.label ?? ""}
-													className="h-24 w-full object-cover"
-													onError={(e) => {
-														(e.target as HTMLImageElement).style.display =
-															"none";
-													}}
-												/>
-											)}
-											<p className="truncate px-1.5 py-1 text-left text-[10px] text-muted-foreground">
-												{asset.label ?? asset.path.split("/").pop()}
-											</p>
-										</button>
-									))}
-								</div>
-							)}
-						</div>
+							{/* grid */}
+							<div className="min-h-0 flex-1 overflow-y-auto">
+								{loading ? (
+									<div className="flex h-48 items-center justify-center">
+										<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+									</div>
+								) : assets.length === 0 ? (
+									<div className="flex h-48 flex-col items-center justify-center gap-2 text-muted-foreground">
+										<ImageIcon className="h-8 w-8" />
+										<p className="text-sm">No assets found</p>
+									</div>
+								) : (
+									<div className="grid grid-cols-4 gap-2 pr-1">
+										{assets.map((asset) => (
+											<button
+												key={asset.id}
+												type="button"
+												onClick={() =>
+													setSelected((prev) =>
+														prev?.id === asset.id ? null : asset,
+													)
+												}
+												className={cn(
+													"group relative flex flex-col overflow-hidden rounded-md border bg-muted/30 transition-all",
+													selected?.id === asset.id
+														? "ring-2 ring-primary ring-offset-1"
+														: "hover:border-muted-foreground/40",
+												)}
+											>
+												{asset.mime?.startsWith("video/") ? (
+													<div className="flex h-24 items-center justify-center bg-muted">
+														<span className="text-xs text-muted-foreground">
+															Video
+														</span>
+													</div>
+												) : (
+													<img
+														src={asset.publicUrl}
+														alt={asset.label ?? ""}
+														className="h-24 w-full object-cover"
+														onError={(e) => {
+															(e.target as HTMLImageElement).style.display =
+																"none";
+														}}
+													/>
+												)}
+												<p className="truncate px-1.5 py-1 text-left text-[10px] text-muted-foreground">
+													{asset.label ?? asset.path.split("/").pop()}
+												</p>
+											</button>
+										))}
+									</div>
+								)}
+							</div>
 
 							{/* pagination */}
 							<div className="flex items-center justify-center gap-3 border-t pt-2">
@@ -833,9 +839,9 @@ function ArrayField({
 				</span>
 			)}
 
-		{open && editIndex !== null ? (
-			<div className={nestClass(depth)}>
-				<div className="mb-2 flex items-center gap-1">
+			{open && editIndex !== null ? (
+				<div className={nestClass(depth)}>
+					<div className="mb-2 flex items-center gap-1">
 						<button
 							type="button"
 							onClick={() => setEditIndex(null)}
@@ -867,9 +873,9 @@ function ArrayField({
 						hideLabel
 					/>
 				</div>
-		) : open ? (
-			<div className={nestClass(depth)}>
-				<DndContext
+			) : open ? (
+				<div className={nestClass(depth)}>
+					<DndContext
 						sensors={sensors}
 						modifiers={[restrictToVerticalAxis]}
 						onDragEnd={handleDragEnd}
@@ -965,11 +971,8 @@ function ObjectField({
 				</span>
 			)}
 			{(open || hideLabel) && (
-		<div
-			className={cn(
-				"space-y-3",
-				!hideLabel && label && nestClass(depth),
-			)}
+				<div
+					className={cn("space-y-3", !hideLabel && label && nestClass(depth))}
 				>
 					{keys.map((k) => {
 						const prop = fieldSchema?.[k];
@@ -1069,7 +1072,8 @@ const VTEX_MODES: Array<{
 	{
 		id: "fq",
 		label: "Advanced Facets",
-		description: "Filter via VTEX fq query parameters (e.g. specificationFilter).",
+		description:
+			"Filter via VTEX fq query parameters (e.g. specificationFilter).",
 	},
 	{
 		id: "ids",
@@ -1119,7 +1123,10 @@ function emptyPropsForMode(mode: VtexMode): Record<string, FormValue> {
 	}
 }
 
-function vtexModeSummary(mode: VtexMode, props: Record<string, FormValue>): string {
+function vtexModeSummary(
+	mode: VtexMode,
+	props: Record<string, FormValue>,
+): string {
 	switch (mode) {
 		case "term": {
 			const term = props.term as string | undefined;
@@ -1131,15 +1138,21 @@ function vtexModeSummary(mode: VtexMode, props: Record<string, FormValue>): stri
 		}
 		case "fq": {
 			const fq = (props.fq as string[] | undefined) ?? [];
-			return fq.length > 0 ? `${fq.length} filter${fq.length > 1 ? "s" : ""}` : "No filters set";
+			return fq.length > 0
+				? `${fq.length} filter${fq.length > 1 ? "s" : ""}`
+				: "No filters set";
 		}
 		case "ids": {
 			const ids = (props.ids as string[] | undefined) ?? [];
-			return ids.length > 0 ? `${ids.length} SKU${ids.length > 1 ? "s" : ""}` : "No SKUs set";
+			return ids.length > 0
+				? `${ids.length} SKU${ids.length > 1 ? "s" : ""}`
+				: "No SKUs set";
 		}
 		case "productIds": {
 			const pids = (props.productIds as string[] | undefined) ?? [];
-			return pids.length > 0 ? `${pids.length} product${pids.length > 1 ? "s" : ""}` : "No products set";
+			return pids.length > 0
+				? `${pids.length} product${pids.length > 1 ? "s" : ""}`
+				: "No products set";
 		}
 	}
 }
@@ -1217,7 +1230,9 @@ function VtexProductListModal({
 	onSave: (newProps: Record<string, FormValue>) => void;
 }) {
 	const [mode, setMode] = useState<VtexMode>(() => detectVtexMode(props));
-	const [draft, setDraft] = useState<Record<string, FormValue>>(() => ({ ...props }));
+	const [draft, setDraft] = useState<Record<string, FormValue>>(() => ({
+		...props,
+	}));
 
 	useEffect(() => {
 		if (open) {
@@ -1232,7 +1247,8 @@ function VtexProductListModal({
 		const next = emptyPropsForMode(newMode);
 		// carry over shared fields
 		if ("sort" in draft && "sort" in next) next.sort = draft.sort ?? "";
-		if ("count" in draft && "count" in next) next.count = (draft.count as number) ?? 12;
+		if ("count" in draft && "count" in next)
+			next.count = (draft.count as number) ?? 12;
 		setMode(newMode);
 		setDraft(next);
 	};
@@ -1346,7 +1362,9 @@ function VtexProductListModal({
 								<FieldLabel label="Sort" description="Product sort order" />
 								<Select
 									value={sortVal === "" ? EMPTY_SENTINEL : sortVal}
-									onValueChange={(v) => update("sort", v === EMPTY_SENTINEL ? "" : v)}
+									onValueChange={(v) =>
+										update("sort", v === EMPTY_SENTINEL ? "" : v)
+									}
 								>
 									<SelectTrigger className="h-7 text-xs">
 										<SelectValue placeholder="Relevance" />
@@ -1388,7 +1406,12 @@ function VtexProductListModal({
 
 				{/* Footer */}
 				<DialogFooter className="shrink-0 border-t px-5 py-3">
-					<Button variant="outline" size="sm" onClick={onClose} className="h-7 text-xs">
+					<Button
+						variant="outline"
+						size="sm"
+						onClick={onClose}
+						className="h-7 text-xs"
+					>
 						Cancel
 					</Button>
 					<Button
@@ -1581,45 +1604,51 @@ function BlockRefField({
 				</DialogContent>
 			</Dialog>
 
-		{/* VTEX product list — dedicated configure button + modal */}
-		{isVtexProductList && (() => {
-			const vtexProps = (value.props as Record<string, FormValue>) ?? {};
-			const vtexMode = detectVtexMode(vtexProps);
-			const summary = vtexModeSummary(vtexMode, vtexProps);
-			const modeLabel = VTEX_MODES.find((m) => m.id === vtexMode)?.label ?? vtexMode;
-			return (
-				<>
-					<button
-						type="button"
-						onClick={() => setVtexModalOpen(true)}
-						className="group flex w-full items-center gap-2.5 rounded-md border border-[#F71963]/30 bg-[#F71963]/5 px-3 py-2 text-left transition-colors hover:bg-[#F71963]/10"
-					>
-						<VtexLogo />
-						<div className="min-w-0 flex-1">
-							<p className="text-[11px] font-medium text-foreground leading-none">{modeLabel}</p>
-							<p className="text-[10px] text-muted-foreground mt-0.5 truncate">{summary}</p>
-						</div>
-						<span className="shrink-0 text-[10px] text-[#F71963]/70 group-hover:text-[#F71963] transition-colors">
-							configure ↗
-						</span>
-					</button>
-					<VtexProductListModal
-						open={vtexModalOpen}
-						onClose={() => setVtexModalOpen(false)}
-						props={vtexProps}
-						onSave={(newProps) => {
-							onChange({ ...value, props: newProps as FormValue });
-							setVtexModalOpen(false);
-						}}
-					/>
-				</>
-			);
-		})()}
+			{/* VTEX product list — dedicated configure button + modal */}
+			{isVtexProductList &&
+				(() => {
+					const vtexProps = (value.props as Record<string, FormValue>) ?? {};
+					const vtexMode = detectVtexMode(vtexProps);
+					const summary = vtexModeSummary(vtexMode, vtexProps);
+					const modeLabel =
+						VTEX_MODES.find((m) => m.id === vtexMode)?.label ?? vtexMode;
+					return (
+						<>
+							<button
+								type="button"
+								onClick={() => setVtexModalOpen(true)}
+								className="group flex w-full items-center gap-2.5 rounded-md border border-[#F71963]/30 bg-[#F71963]/5 px-3 py-2 text-left transition-colors hover:bg-[#F71963]/10"
+							>
+								<VtexLogo />
+								<div className="min-w-0 flex-1">
+									<p className="text-[11px] font-medium text-foreground leading-none">
+										{modeLabel}
+									</p>
+									<p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+										{summary}
+									</p>
+								</div>
+								<span className="shrink-0 text-[10px] text-[#F71963]/70 group-hover:text-[#F71963] transition-colors">
+									configure ↗
+								</span>
+							</button>
+							<VtexProductListModal
+								open={vtexModalOpen}
+								onClose={() => setVtexModalOpen(false)}
+								props={vtexProps}
+								onSave={(newProps) => {
+									onChange({ ...value, props: newProps as FormValue });
+									setVtexModalOpen(false);
+								}}
+							/>
+						</>
+					);
+				})()}
 
-		{/* Inner config for the selected loader (generic) */}
-		{!isVtexProductList && innerKeys.length > 0 && (
-			<div className={cn("space-y-3", nestClass(depth))}>
-				{innerKeys.map((k) => {
+			{/* Inner config for the selected loader (generic) */}
+			{!isVtexProductList && innerKeys.length > 0 && (
+				<div className={cn("space-y-3", nestClass(depth))}>
+					{innerKeys.map((k) => {
 						const prop = loaderSchema?.[k];
 						return (
 							<FormField
@@ -1639,9 +1668,9 @@ function BlockRefField({
 							/>
 						);
 					})}
-			</div>
-		)}
-	</div>
+				</div>
+			)}
+		</div>
 	);
 }
 
