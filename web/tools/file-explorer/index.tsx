@@ -357,29 +357,19 @@ function visualEditorScript() {
 // ─── cms inspect script ───────────────────────────────────────────────────────
 
 function cmsInspectScript() {
-	if ((window as unknown as Record<string, unknown>).__cmsInspectActive) return;
-	(window as unknown as Record<string, unknown>).__cmsInspectActive = true;
+	const win = window as unknown as Record<string, unknown>;
+	if (win.__cmsInspect) {
+		(win.__cmsInspect as { enable: () => void }).enable();
+		return;
+	}
 
 	let enabled = true;
 
-	const LEAF_SELECTOR =
+	const LEAF =
 		"section[data-manifest-key]:not(:has(section[data-manifest-key]))";
-
-	const cursorStyle = document.createElement("style");
-	cursorStyle.textContent = `* { cursor: default !important; } ${LEAF_SELECTOR} { cursor: pointer !important; }`;
-	document.head.appendChild(cursorStyle);
-
-	const highlight = document.createElement("div");
-	highlight.style.cssText =
-		"position:fixed;pointer-events:none;outline:2px solid #0ea5e9;background:rgba(14,165,233,0.08);border-radius:4px;z-index:2147483647;display:none;transition:top 0.08s,left 0.08s,width 0.08s,height 0.08s;";
-	document.body.appendChild(highlight);
-
-	const badge = document.createElement("div");
-	badge.style.cssText =
-		"position:fixed;pointer-events:none;background:#0ea5e9;color:white;font:11px/1.2 system-ui,sans-serif;padding:3px 8px;border-radius:3px;z-index:2147483647;display:none;white-space:nowrap;max-width:280px;overflow:hidden;text-overflow:ellipsis;";
-	document.body.appendChild(badge);
-
-	let lastSection: HTMLElement | null = null;
+	const DEFERRED_CHILD =
+		'section[data-manifest-key$="Deferred.tsx"] > section[data-manifest-key]';
+	const WRAPPER_ATTR = "data-cms-inspect-overlay";
 
 	const formatLabel = (key: string) => {
 		const parts = key.split("/");
@@ -387,85 +377,116 @@ function cmsInspectScript() {
 		return file.replace(/\.(tsx|ts|jsx|js)$/, "").replace(/[-_]/g, " ");
 	};
 
-	document.addEventListener(
-		"mouseover",
-		(e) => {
-			if (!enabled) return;
-			const el = e.target as HTMLElement;
-			if (!el || el === highlight || el === badge) return;
-			let section = el.closest(
-				"section[data-manifest-key]",
-			) as HTMLElement | null;
-			if (section && section.querySelector("section[data-manifest-key]")) {
-				section = el.closest(LEAF_SELECTOR) as HTMLElement | null;
-			}
-			if (!section) {
-				highlight.style.display = "none";
-				badge.style.display = "none";
-				lastSection = null;
-				return;
-			}
-			if (section === lastSection) return;
-			lastSection = section;
-			const r = section.getBoundingClientRect();
-			highlight.style.display = "block";
-			highlight.style.top = `${r.top}px`;
-			highlight.style.left = `${r.left}px`;
-			highlight.style.width = `${r.width}px`;
-			highlight.style.height = `${r.height}px`;
-			const key = section.getAttribute("data-manifest-key") || "";
-			badge.textContent = formatLabel(key);
-			badge.style.display = "block";
-			badge.style.top = `${Math.max(0, r.top - 22)}px`;
-			badge.style.left = `${r.left}px`;
-		},
-		true,
-	);
+	const CSS = `
+		${LEAF}:hover, ${DEFERRED_CHILD}:hover {
+			position: relative;
+		}
+		${LEAF}:hover > [${WRAPPER_ATTR}],
+		${DEFERRED_CHILD}:hover > [${WRAPPER_ATTR}] {
+			display: flex;
+		}
+		[${WRAPPER_ATTR}] {
+			display: none;
+			position: absolute;
+			inset: 0;
+			z-index: 2147483647;
+			outline: 2px solid #0ea5e9;
+			background: rgba(14,165,233,0.08);
+			cursor: pointer;
+			align-items: flex-start;
+			justify-content: flex-start;
+			pointer-events: none;
+		}
+		[${WRAPPER_ATTR}] > [data-cms-badge] {
+			position: absolute;
+			top: 0;
+			left: 0;
+			transform: translateY(-100%);
+			background: #0ea5e9;
+			color: white;
+			font: 11px/1.2 system-ui, sans-serif;
+			padding: 3px 8px;
+			border-radius: 3px 3px 0 0;
+			white-space: nowrap;
+			max-width: 280px;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			pointer-events: none;
+		}
+	`;
 
-	document.addEventListener(
-		"mouseout",
-		(e) => {
-			if (!enabled) return;
-			const el = e.target as HTMLElement;
-			const related = (e as MouseEvent).relatedTarget as HTMLElement | null;
-			if (!el) return;
-			const fromSection = el.closest(LEAF_SELECTOR) as HTMLElement | null;
-			const toSection = related?.closest?.(LEAF_SELECTOR) as HTMLElement | null;
-			if (fromSection && fromSection !== toSection) {
-				highlight.style.display = "none";
-				badge.style.display = "none";
-				lastSection = null;
-			}
-		},
-		true,
-	);
+	const style = document.createElement("style");
+	style.textContent = CSS;
+	document.head.appendChild(style);
+
+	const injectOverlays = () => {
+		const sections = [
+			...Array.from(document.querySelectorAll(LEAF)),
+			...Array.from(document.querySelectorAll(DEFERRED_CHILD)),
+		];
+		const seen = new Set<Element>();
+		for (const section of sections) {
+			if (seen.has(section)) continue;
+			seen.add(section);
+			if (section.querySelector(`[${WRAPPER_ATTR}]`)) continue;
+			const key =
+				(section as HTMLElement).getAttribute("data-manifest-key") || "";
+			const overlay = document.createElement("div");
+			overlay.setAttribute(WRAPPER_ATTR, "");
+			const badge = document.createElement("div");
+			badge.setAttribute("data-cms-badge", "");
+			badge.textContent = formatLabel(key);
+			overlay.appendChild(badge);
+			section.prepend(overlay);
+		}
+	};
+
+	const removeOverlays = () => {
+		document.querySelectorAll(`[${WRAPPER_ATTR}]`).forEach((el) => el.remove());
+	};
+
+	const enable = () => {
+		enabled = true;
+		style.textContent = CSS;
+		injectOverlays();
+	};
+
+	const disable = () => {
+		enabled = false;
+		removeOverlays();
+		style.textContent = "";
+	};
+
+	win.__cmsInspect = { enable, disable };
+
+	injectOverlays();
 
 	document.addEventListener(
 		"click",
 		(e) => {
 			if (!enabled) return;
-			e.preventDefault();
-			e.stopImmediatePropagation();
 			const el = e.target as HTMLElement;
-			if (!el || el === highlight || el === badge) return;
-
-			let section = el.closest(
-				"section[data-manifest-key]",
-			) as HTMLElement | null;
-			if (section && section.querySelector("section[data-manifest-key]")) {
-				section = el.closest(LEAF_SELECTOR) as HTMLElement | null;
-			}
+			const section = el.closest(LEAF) || el.closest(DEFERRED_CHILD);
 			if (!section) return;
 
-			highlight.style.outline = "2px solid #0284c7";
-			highlight.style.background = "rgba(2,132,199,0.18)";
-			setTimeout(() => {
-				highlight.style.outline = "2px solid #0ea5e9";
-				highlight.style.background = "rgba(14,165,233,0.08)";
-			}, 400);
+			e.preventDefault();
+			e.stopImmediatePropagation();
 
-			const manifestKey = section.getAttribute("data-manifest-key") || "";
-			const allSections = Array.from(document.querySelectorAll(LEAF_SELECTOR));
+			const overlay = section.querySelector(
+				`[${WRAPPER_ATTR}]`,
+			) as HTMLElement | null;
+			if (overlay) {
+				overlay.style.outline = "2px solid #0284c7";
+				overlay.style.background = "rgba(2,132,199,0.18)";
+				setTimeout(() => {
+					overlay.style.outline = "";
+					overlay.style.background = "";
+				}, 400);
+			}
+
+			const manifestKey =
+				(section as HTMLElement).getAttribute("data-manifest-key") || "";
+			const allSections = Array.from(document.querySelectorAll(LEAF));
 			const sectionIndex = allSections.indexOf(section);
 
 			const tag = el.tagName.toLowerCase();
@@ -526,30 +547,12 @@ function cmsInspectScript() {
 		true,
 	);
 
-	const updateHighlightPosition = () => {
-		if (!lastSection || highlight.style.display === "none") return;
-		const r = lastSection.getBoundingClientRect();
-		highlight.style.top = `${r.top}px`;
-		highlight.style.left = `${r.left}px`;
-		highlight.style.width = `${r.width}px`;
-		highlight.style.height = `${r.height}px`;
-		badge.style.top = `${Math.max(0, r.top - 22)}px`;
-		badge.style.left = `${r.left}px`;
-	};
-
-	document.addEventListener("scroll", updateHighlightPosition, true);
-	window.addEventListener("scroll", updateHighlightPosition, true);
-
 	window.addEventListener("message", (e) => {
 		if (e.data?.type === "cms-inspect::toggle") {
-			enabled = !!e.data.enabled;
-			if (!enabled) {
-				highlight.style.display = "none";
-				badge.style.display = "none";
-				lastSection = null;
-				cursorStyle.textContent = "";
+			if (e.data.enabled) {
+				enable();
 			} else {
-				cursorStyle.textContent = `* { cursor: default !important; } ${LEAF_SELECTOR} { cursor: pointer !important; }`;
+				disable();
 			}
 		}
 	});
@@ -1301,10 +1304,11 @@ function FileExplorerWorkspace({
 
 		if (cmsOpen && cmsInspectActive) {
 			try {
-				const existing = (win as unknown as Record<string, unknown>)
-					.__cmsInspectActive;
-				if (existing) {
-					win.postMessage({ type: "cms-inspect::toggle", enabled: true }, "*");
+				const api = (win as unknown as Record<string, unknown>).__cmsInspect as
+					| { enable: () => void }
+					| undefined;
+				if (api) {
+					api.enable();
 				} else {
 					const script = win.document.createElement("script");
 					script.textContent = `(${cmsInspectScript.toString()})()`;
@@ -1321,8 +1325,19 @@ function FileExplorerWorkspace({
 			}
 		} else {
 			try {
-				win.postMessage({ type: "cms-inspect::toggle", enabled: false }, "*");
-			} catch {}
+				const api = (win as unknown as Record<string, unknown>).__cmsInspect as
+					| { disable: () => void }
+					| undefined;
+				if (api) {
+					api.disable();
+				} else {
+					win.postMessage({ type: "cms-inspect::toggle", enabled: false }, "*");
+				}
+			} catch {
+				try {
+					win.postMessage({ type: "cms-inspect::toggle", enabled: false }, "*");
+				} catch {}
+			}
 		}
 	}, [cmsOpen, cmsInspectActive]);
 
