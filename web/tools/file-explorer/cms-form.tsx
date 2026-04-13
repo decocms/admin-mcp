@@ -4,11 +4,15 @@ import {
 	ChevronRight,
 	GripVertical,
 	ImageIcon,
+	Link,
+	Loader2,
 	MoreHorizontal,
 	Plus,
+	Search,
 	Trash2,
+	Upload,
 } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	DndContext,
 	MouseSensor,
@@ -36,7 +40,9 @@ import {
 import {
 	Dialog,
 	DialogContent,
+	DialogFooter,
 	DialogHeader,
+	DialogTitle,
 } from "@/components/ui/dialog.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import { cn } from "@/lib/utils.ts";
@@ -46,6 +52,8 @@ import {
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
+import { useMcpApp } from "@/context.tsx";
+import type { Asset, AssetsOutput, UploadAssetOutput } from "../../../api/tools/assets.ts";
 import type { SchemaProperty } from "../../../api/tools/files.ts";
 
 // ─── types ────────────────────────────────────────────────────────────────────
@@ -220,6 +228,293 @@ function CheckboxField({
 	);
 }
 
+// ─── image picker modal ────────────────────────────────────────────────────────
+
+const PAGE_SIZE = 20;
+
+type PickerTab = "assets" | "link";
+
+function ImagePickerModal({
+	open,
+	onClose,
+	onSelect,
+}: {
+	open: boolean;
+	onClose: () => void;
+	onSelect: (url: string) => void;
+}) {
+	const app = useMcpApp();
+	const [tab, setTab] = useState<PickerTab>("assets");
+	const [assets, setAssets] = useState<Asset[]>([]);
+	const [loading, setLoading] = useState(false);
+	const [search, setSearch] = useState("");
+	const [page, setPage] = useState(1);
+	const [hasMore, setHasMore] = useState(false);
+	const [selected, setSelected] = useState<Asset | null>(null);
+	const [uploading, setUploading] = useState(false);
+	const [linkUrl, setLinkUrl] = useState("");
+	const fileInputRef = useRef<HTMLInputElement>(null);
+
+	const fetchAssets = useCallback(
+		async (term: string, offset: number) => {
+			if (!app) return;
+			setLoading(true);
+			try {
+				const result = await app.callServerTool({
+					name: "fetch_assets",
+					arguments: {
+						...(term ? { term } : {}),
+						offset,
+						limit: PAGE_SIZE,
+					},
+				});
+				const data = result?.structuredContent as AssetsOutput | undefined;
+				setAssets(data?.assets ?? []);
+				setHasMore((data?.assets?.length ?? 0) >= PAGE_SIZE);
+			} catch {
+				setAssets([]);
+			} finally {
+				setLoading(false);
+			}
+		},
+		[app],
+	);
+
+	useEffect(() => {
+		if (!open) return;
+		setSelected(null);
+		fetchAssets(search, (page - 1) * PAGE_SIZE);
+	}, [open, search, page, fetchAssets]);
+
+	const handleUpload = async (file: File) => {
+		if (!app || uploading) return;
+		setUploading(true);
+		try {
+			const base64 = await new Promise<string>((resolve, reject) => {
+				const reader = new FileReader();
+				reader.readAsDataURL(file);
+				reader.onload = () =>
+					resolve((reader.result as string).split(",")[1] ?? "");
+				reader.onerror = reject;
+			});
+			const result = await app.callServerTool({
+				name: "upload_asset",
+				arguments: { data: base64, mimeType: file.type, filename: file.name },
+			});
+			const uploaded = result?.structuredContent as UploadAssetOutput | undefined;
+			await fetchAssets(search, 0);
+			setPage(1);
+			if (uploaded?.asset) setSelected(uploaded.asset);
+		} finally {
+			setUploading(false);
+		}
+	};
+
+	const canUse =
+		tab === "assets" ? selected !== null : linkUrl.trim().length > 0;
+
+	const handleUse = () => {
+		if (tab === "assets" && selected) {
+			onSelect(selected.publicUrl);
+		} else if (tab === "link" && linkUrl.trim()) {
+			onSelect(linkUrl.trim());
+		}
+		onClose();
+	};
+
+	return (
+		<Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+			<DialogContent className="flex h-[640px] max-w-3xl flex-col gap-0 p-0">
+				<DialogHeader className="border-b px-6 py-4">
+					<DialogTitle>Add image</DialogTitle>
+				</DialogHeader>
+
+				{/* tabs */}
+				<div className="flex gap-6 border-b px-6">
+					{(["assets", "link"] as PickerTab[]).map((t) => (
+						<button
+							key={t}
+							type="button"
+							onClick={() => setTab(t)}
+							className={cn(
+								"py-2.5 text-sm capitalize transition-colors",
+								tab === t
+									? "border-b-2 border-foreground font-medium"
+									: "text-muted-foreground hover:text-foreground",
+							)}
+						>
+							{t === "assets" ? "Assets" : "Embed Link"}
+						</button>
+					))}
+				</div>
+
+				{/* content */}
+				<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-6 py-4">
+					{tab === "assets" ? (
+						<>
+							{/* search + upload */}
+							<div className="flex gap-2">
+								<div className="relative flex-1">
+									<Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+									<Input
+										className="pl-8 h-8 text-sm"
+										placeholder="Search assets"
+										value={search}
+										onChange={(e) => {
+											setSearch(e.target.value);
+											setPage(1);
+										}}
+									/>
+								</div>
+								<input
+									ref={fileInputRef}
+									type="file"
+									accept="image/*,video/*"
+									className="hidden"
+									onChange={(e) => {
+										const file = e.target.files?.[0];
+										if (file) handleUpload(file);
+										e.target.value = "";
+									}}
+								/>
+								<Button
+									variant="outline"
+									size="sm"
+									onClick={() => fileInputRef.current?.click()}
+									disabled={uploading}
+								>
+									{uploading ? (
+										<Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+									) : (
+										<Upload className="mr-1.5 h-3.5 w-3.5" />
+									)}
+									Upload file
+								</Button>
+							</div>
+
+						{/* grid */}
+						<div className="min-h-0 flex-1 overflow-y-auto">
+							{loading ? (
+								<div className="flex h-48 items-center justify-center">
+									<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+								</div>
+							) : assets.length === 0 ? (
+								<div className="flex h-48 flex-col items-center justify-center gap-2 text-muted-foreground">
+									<ImageIcon className="h-8 w-8" />
+									<p className="text-sm">No assets found</p>
+								</div>
+							) : (
+								<div className="grid grid-cols-4 gap-2 pr-1">
+									{assets.map((asset) => (
+										<button
+											key={asset.id}
+											type="button"
+											onClick={() =>
+												setSelected((prev) =>
+													prev?.id === asset.id ? null : asset,
+												)
+											}
+											className={cn(
+												"group relative flex flex-col overflow-hidden rounded-md border bg-muted/30 transition-all",
+												selected?.id === asset.id
+													? "ring-2 ring-primary ring-offset-1"
+													: "hover:border-muted-foreground/40",
+											)}
+										>
+											{asset.mime?.startsWith("video/") ? (
+												<div className="flex h-24 items-center justify-center bg-muted">
+													<span className="text-xs text-muted-foreground">
+														Video
+													</span>
+												</div>
+											) : (
+												<img
+													src={asset.publicUrl}
+													alt={asset.label ?? ""}
+													className="h-24 w-full object-cover"
+													onError={(e) => {
+														(e.target as HTMLImageElement).style.display =
+															"none";
+													}}
+												/>
+											)}
+											<p className="truncate px-1.5 py-1 text-left text-[10px] text-muted-foreground">
+												{asset.label ?? asset.path.split("/").pop()}
+											</p>
+										</button>
+									))}
+								</div>
+							)}
+						</div>
+
+							{/* pagination */}
+							<div className="flex items-center justify-center gap-3 border-t pt-2">
+								<Button
+									variant="ghost"
+									size="icon"
+									className="h-7 w-7"
+									disabled={page === 1}
+									onClick={() => setPage((p) => p - 1)}
+								>
+									<ChevronLeft className="h-4 w-4" />
+								</Button>
+								<span className="text-xs text-muted-foreground">
+									Page {page}
+								</span>
+								<Button
+									variant="ghost"
+									size="icon"
+									className="h-7 w-7"
+									disabled={!hasMore}
+									onClick={() => setPage((p) => p + 1)}
+								>
+									<ChevronRight className="h-4 w-4" />
+								</Button>
+							</div>
+						</>
+					) : (
+						<div className="flex flex-col gap-3">
+							<div className="relative">
+								<Link className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+								<Input
+									className="pl-8 h-8 text-sm"
+									placeholder="Paste image URL…"
+									value={linkUrl}
+									onChange={(e) => setLinkUrl(e.target.value)}
+									autoFocus
+								/>
+							</div>
+							{linkUrl.trim() ? (
+								<div className="flex items-center justify-center overflow-hidden rounded-md border bg-muted/30">
+									<img
+										src={linkUrl}
+										alt="preview"
+										className="max-h-64 w-full object-contain"
+									/>
+								</div>
+							) : (
+								<div className="flex h-64 flex-col items-center justify-center gap-2 rounded-md border border-dashed text-muted-foreground">
+									<ImageIcon className="h-8 w-8" />
+									<p className="text-sm">Paste an image link above</p>
+								</div>
+							)}
+						</div>
+					)}
+				</div>
+
+				<DialogFooter className="border-t px-6 py-3">
+					<Button variant="outline" onClick={onClose}>
+						Cancel
+					</Button>
+					<Button disabled={!canUse} onClick={handleUse}>
+						Use file
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	);
+}
+
 // ─── image field ──────────────────────────────────────────────────────────────
 
 function ImageField({
@@ -233,32 +528,102 @@ function ImageField({
 	value: string;
 	onChange: (v: string) => void;
 }) {
+	const [open, setOpen] = useState(false);
 	const [imgError, setImgError] = useState(false);
+
+	const filename = value
+		? (() => {
+				try {
+					return decodeURIComponent(
+						new URL(value).pathname.split("/").pop() ?? value,
+					);
+				} catch {
+					return value.split("/").pop() ?? value;
+				}
+			})()
+		: "";
+	const ext = filename.includes(".")
+		? filename.split(".").pop()?.toUpperCase()
+		: undefined;
+	const stem = ext ? filename.slice(0, filename.lastIndexOf(".")) : filename;
+
 	return (
 		<div className="space-y-1.5">
 			<FieldLabel label={label} description={description} />
-			{value && !imgError ? (
-				<div className="overflow-hidden rounded-md border">
-					<img
-						src={value}
-						alt={label}
-						className="h-20 w-full object-cover"
-						onError={() => setImgError(true)}
-					/>
+			<div className="overflow-hidden rounded-lg border bg-muted/20">
+				{/* clickable preview area */}
+				<button
+					type="button"
+					className="w-full text-left"
+					onClick={() => setOpen(true)}
+				>
+					{value && !imgError ? (
+						<img
+							src={value}
+							alt={label}
+							className="h-40 w-full object-cover"
+							onError={() => setImgError(true)}
+						/>
+					) : (
+						<div className="flex h-40 flex-col items-center justify-center gap-1.5 text-muted-foreground">
+							<ImageIcon className="h-8 w-8" />
+							<span className="text-xs">Click to select image</span>
+						</div>
+					)}
+					{value && (
+						<div className="px-3 py-2">
+							<p className="truncate font-mono text-xs font-semibold">{stem}</p>
+							{ext && (
+								<p className="text-[10px] uppercase text-muted-foreground">
+									{ext}
+								</p>
+							)}
+						</div>
+					)}
+				</button>
+
+				{/* controls */}
+				<div className="flex gap-2 border-t px-2 py-2">
+					<Button
+						variant="outline"
+						size="sm"
+						className="h-8 flex-1 text-xs"
+						onClick={() => setOpen(true)}
+					>
+						{value ? (
+							<>
+								Change <ChevronDown className="ml-1 h-3 w-3" />
+							</>
+						) : (
+							<>
+								<ImageIcon className="mr-1 h-3 w-3" /> Add image
+							</>
+						)}
+					</Button>
+					{value && (
+						<Button
+							variant="outline"
+							size="icon"
+							className="h-8 w-8 shrink-0"
+							onClick={() => {
+								onChange("");
+								setImgError(false);
+							}}
+						>
+							<Trash2 className="h-3.5 w-3.5" />
+						</Button>
+					)}
 				</div>
-			) : value ? (
-				<div className="flex h-10 items-center justify-center rounded-md border bg-muted/40">
-					<ImageIcon className="h-4 w-4 text-muted-foreground" />
-				</div>
-			) : null}
-			<Input
-				value={value}
-				onChange={(e) => {
+			</div>
+
+			<ImagePickerModal
+				open={open}
+				onClose={() => setOpen(false)}
+				onSelect={(url) => {
 					setImgError(false);
-					onChange(e.target.value);
+					onChange(url);
+					setOpen(false);
 				}}
-				className="h-7 font-mono text-[10px]"
-				placeholder="https://…"
 			/>
 		</div>
 	);
