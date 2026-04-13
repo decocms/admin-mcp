@@ -1,7 +1,23 @@
 import type { OnMount } from "@monaco-editor/react";
 import Editor, { loader } from "@monaco-editor/react";
 import {
+	DndContext,
+	MouseSensor,
+	TouchSensor,
+	useSensor,
+	useSensors,
+	type DragEndEvent,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+	SortableContext,
+	useSortable,
+	verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
 	ChevronDown,
+	ChevronLeft,
 	ChevronRight,
 	ExternalLink,
 	Eye,
@@ -9,16 +25,22 @@ import {
 	FileCode2,
 	Folder,
 	FolderOpen,
+	GripVertical,
+	LayersIcon,
 	LayoutTemplate,
 	Loader2,
 	Monitor,
 	MousePointer2,
+	MoreHorizontal,
+	Package,
+	Plus,
 	RefreshCw,
 	Save,
 	Search,
 	Smartphone,
 	Trash2,
 	X,
+	Zap,
 } from "lucide-react";
 import * as monaco from "monaco-editor";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker&inline";
@@ -51,6 +73,12 @@ import {
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu.tsx";
 import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.tsx";
+import {
 	Dialog,
 	DialogContent,
 	DialogFooter,
@@ -73,16 +101,23 @@ import type {
 	PreviewEnvironmentOutput,
 } from "../../../api/tools/environments.ts";
 import type {
+	CreatePageOutput,
 	FileExplorerInput,
 	FileExplorerOutput,
+	GetBlockSchemaOutput,
+	GetPageSectionsOutput,
 	GetPagesOutput,
+	ListAppsOutput,
 	ListFilesOutput,
+	ListSectionsOutput,
 	PageInfo,
 	ReadFileOutput,
 	WriteFileOutput,
 } from "../../../api/tools/files.ts";
+import type { SchemaProperties } from "./cms-form.tsx";
 import type { GitStatus } from "../../../api/tools/git.ts";
 import { PublishDialog } from "./publish-dialog.tsx";
+import { SectionForm } from "./cms-form.tsx";
 import type {
 	EnvStatus,
 	FileBuffer,
@@ -327,6 +362,479 @@ type CodeSelectionPrompt = {
 	};
 };
 
+// ─── sortable section row ─────────────────────────────────────────────────────
+
+function SortableSectionItem({
+	section,
+	onSelect,
+	onDuplicate,
+	onRemove,
+	onToggleLazy,
+}: {
+	section: {
+		index: number;
+		resolveType: string;
+		label: string;
+		isLazy?: boolean;
+	};
+	onSelect: () => void;
+	onDuplicate: () => void;
+	onRemove: () => void;
+	onToggleLazy: () => void;
+}) {
+	const {
+		attributes,
+		listeners,
+		setNodeRef,
+		transform,
+		transition,
+		isDragging,
+	} = useSortable({ id: String(section.index) });
+
+	return (
+		<div
+			ref={setNodeRef}
+			style={{
+				transform: CSS.Transform.toString(transform),
+				transition,
+				opacity: isDragging ? 0.4 : 1,
+			}}
+			{...listeners}
+			{...attributes}
+			onKeyDown={(e) => {
+				if (e.key === "Enter" || e.key === " ") onSelect();
+			}}
+			className="group flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 text-foreground/80 transition-colors hover:bg-accent hover:text-accent-foreground active:cursor-grabbing"
+		>
+			<GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
+			<LayoutTemplate className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+			<span className="flex-1 truncate text-xs font-medium" onClick={onSelect}>
+				{section.label}
+			</span>
+			<button
+				type="button"
+				onPointerDown={(e) => e.stopPropagation()}
+				onClick={(e) => {
+					e.stopPropagation();
+					onToggleLazy();
+				}}
+				title={section.isLazy ? "Remove lazy" : "Make lazy"}
+				className={cn(
+					"shrink-0 rounded p-0.5 transition-colors hover:bg-background/80",
+					section.isLazy
+						? "text-yellow-500"
+						: "text-muted-foreground/30 opacity-0 group-hover:opacity-100",
+				)}
+			>
+				<Zap className="h-3 w-3" />
+			</button>{" "}
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<button
+						type="button"
+						onPointerDown={(e) => e.stopPropagation()}
+						onClick={(e) => e.stopPropagation()}
+						className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-background/80 group-hover:opacity-100"
+					>
+						<MoreHorizontal className="h-3.5 w-3.5" />
+					</button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end" className="w-32">
+					<DropdownMenuItem
+						onSelect={(e) => {
+							e.stopPropagation();
+							onDuplicate();
+						}}
+					>
+						Duplicate
+					</DropdownMenuItem>
+					<DropdownMenuItem
+						onSelect={(e) => {
+							e.stopPropagation();
+							onRemove();
+						}}
+						className="text-destructive focus:text-destructive"
+					>
+						Remove
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
+		</div>
+	);
+}
+
+// ─── Apps panel ───────────────────────────────────────────────────────────────
+
+interface AppsPanelProps {
+	loading: boolean;
+	data: ListAppsOutput | null;
+	installingApps: Set<string>;
+	onClose: () => void;
+	onSelectApp: (blockId: string, configPath: string, title: string) => void;
+	onInstall: (name: string, vendor: string) => void;
+	onUninstall: (name: string, vendor: string) => void;
+}
+
+function AppsPanel({
+	loading,
+	data,
+	installingApps,
+	onClose,
+	onSelectApp,
+	onInstall,
+	onUninstall,
+}: AppsPanelProps) {
+	const [search, setSearch] = useState("");
+
+	const grouped = data?.apps
+		? Object.groupBy(
+				data.apps.filter(
+					(a) =>
+						!search ||
+						a.title.toLowerCase().includes(search.toLowerCase()) ||
+						a.description.toLowerCase().includes(search.toLowerCase()),
+				),
+				(a) => a.category,
+			)
+		: {};
+
+	return (
+		<div className="m-4 absolute top-0 left-0 bottom-0 z-30 flex w-80 flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
+			{/* Header */}
+			<div className="flex shrink-0 items-center gap-2 border-b px-3 py-2.5">
+				<Package className="h-4 w-4 shrink-0 text-muted-foreground" />
+				<span className="flex-1 text-sm font-semibold">Apps</span>
+				<button
+					type="button"
+					onClick={onClose}
+					className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+					title="Close Apps panel"
+				>
+					<X className="h-3.5 w-3.5" />
+				</button>
+			</div>
+
+			{/* Search */}
+			<div className="border-b px-3 py-2">
+				<div className="relative">
+					<Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+					<Input
+						value={search}
+						onChange={(e) => setSearch(e.target.value)}
+						placeholder="Search apps…"
+						className="h-7 pl-8 text-xs"
+					/>
+				</div>
+			</div>
+
+			{/* Body */}
+			{loading ? (
+				<div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
+					<Loader2 className="h-4 w-4 animate-spin" />
+					<span className="text-sm">Loading apps…</span>
+				</div>
+			) : !data || data.apps.length === 0 ? (
+				<div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+					No apps found
+				</div>
+			) : (
+				<ScrollArea className="min-h-0 flex-1">
+					<div className="py-3 flex flex-col gap-4">
+						{Object.entries(grouped)
+							.sort(([a], [b]) => a.localeCompare(b))
+							.map(([category, apps]) => (
+								<div key={category} className="flex flex-col gap-1">
+									<span className="px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+										{category}
+									</span>
+									<div className="flex flex-col">
+										{apps?.map((app) => {
+											const isBusy = installingApps.has(app.blockId);
+											return (
+												<div
+													key={app.blockId}
+													className={cn(
+														"group flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors hover:bg-accent",
+														isBusy && "pointer-events-none opacity-60",
+													)}
+													onClick={() => {
+														if (app.installed && !isBusy) {
+															onSelectApp(
+																app.blockId,
+																app.configPath,
+																app.title,
+															);
+														}
+													}}
+													title={
+														app.installed
+															? `Configure ${app.title}`
+															: `Install ${app.title}`
+													}
+												>
+													{/* Logo */}
+													<div className="h-8 w-8 shrink-0 overflow-hidden rounded-lg border bg-muted flex items-center justify-center">
+														{app.logo ? (
+															<img
+																src={app.logo}
+																alt={app.name}
+																className="h-full w-full object-cover"
+															/>
+														) : (
+															<Package className="h-4 w-4 text-muted-foreground" />
+														)}
+													</div>
+
+													{/* Info */}
+													<div className="min-w-0 flex-1">
+														<div className="flex items-center gap-1.5">
+															<span className="truncate text-xs font-medium leading-tight">
+																{app.title}
+															</span>
+														</div>
+														<span className="line-clamp-1 text-[10px] leading-tight text-muted-foreground">
+															{app.description}
+														</span>
+													</div>
+
+													{/* Action button */}
+													{isBusy ? (
+														<Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+													) : app.installed ? (
+														<button
+															type="button"
+															onClick={(e) => {
+																e.stopPropagation();
+																onUninstall(app.name, app.vendor);
+															}}
+															className="hidden shrink-0 rounded-md px-2 py-1 text-[10px] font-medium text-muted-foreground opacity-0 transition-all hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+															title={`Uninstall ${app.title}`}
+														>
+															Uninstall
+														</button>
+													) : (
+														<Button
+															size="sm"
+															variant="outline"
+															className="hidden h-6 shrink-0 rounded-md px-2.5 text-[11px] font-medium"
+															onClick={(e) => {
+																e.stopPropagation();
+																onInstall(app.name, app.vendor);
+															}}
+															title={`Install ${app.title}`}
+														>
+															Install
+														</Button>
+													)}
+												</div>
+											);
+										})}
+									</div>
+								</div>
+							))}
+					</div>
+				</ScrollArea>
+			)}
+		</div>
+	);
+}
+
+// ─── CMS panel ────────────────────────────────────────────────────────────────
+
+interface CmsPanelProps {
+	loading: boolean;
+	error?: string;
+	data: GetPageSectionsOutput | null;
+	selectedSection: number | null;
+	sectionData: Record<string, unknown> | null;
+	sectionSchema: SchemaProperties | null;
+	schemasMap: Record<string, SchemaProperties>;
+	autoSaving: boolean;
+	onSelectSection: (idx: number) => void;
+	onDeselectSection: () => void;
+	onChangeSectionData: (data: Record<string, unknown>) => void;
+	onReorderSections: (srcIdx: number, destIdx: number) => void;
+	onDuplicateSection: (listIdx: number) => void;
+	onRemoveSection: (listIdx: number) => void;
+	onToggleLazySection: (listIdx: number) => void;
+	onPageMetaChange: (name: string, path: string) => void;
+	onAddSection: () => void;
+	onClose: () => void;
+}
+
+function CmsPanel({
+	loading,
+	error,
+	data,
+	selectedSection,
+	sectionData,
+	sectionSchema,
+	schemasMap,
+	autoSaving,
+	onSelectSection,
+	onDeselectSection,
+	onChangeSectionData,
+	onReorderSections,
+	onDuplicateSection,
+	onRemoveSection,
+	onToggleLazySection,
+	onPageMetaChange,
+	onAddSection,
+	onClose,
+}: CmsPanelProps) {
+	const sensors = useSensors(
+		useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
+		useSensor(TouchSensor, {
+			activationConstraint: { delay: 250, tolerance: 5 },
+		}),
+	);
+
+	const [editName, setEditName] = useState(
+		(data?.pageData.name as string | undefined) ?? "",
+	);
+	const [editPath, setEditPath] = useState(
+		(data?.pageData.path as string | undefined) ?? "",
+	);
+
+	useEffect(() => {
+		setEditName((data?.pageData.name as string | undefined) ?? "");
+		setEditPath((data?.pageData.path as string | undefined) ?? "");
+	}, [data?.pageKey]);
+
+	const isEditing = selectedSection !== null && sectionData !== null;
+	const activeSection = data?.sections[selectedSection ?? -1];
+	const sortableIds = data?.sections.map((s) => String(s.index)) ?? [];
+
+	const handleDragEnd = ({ active, over }: DragEndEvent) => {
+		if (!over || active.id === over.id || !data) return;
+		const srcIdx = data.sections.findIndex(
+			(s) => String(s.index) === active.id,
+		);
+		const destIdx = data.sections.findIndex((s) => String(s.index) === over.id);
+		if (srcIdx !== -1 && destIdx !== -1) onReorderSections(srcIdx, destIdx);
+	};
+
+	return (
+		<div className="m-4 absolute top-0 left-0 bottom-0 z-30 flex w-72 flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
+			{/* Header */}
+			{isEditing ? (
+				<div className="flex shrink-0 items-center gap-2 border-b px-3 py-2.5">
+					<button
+						type="button"
+						onClick={onDeselectSection}
+						className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+						title="Back to sections"
+					>
+						<ChevronLeft className="h-3.5 w-3.5" />
+					</button>
+					<span className="flex-1 truncate text-sm font-semibold">
+						{activeSection?.label ?? "Edit"}
+					</span>
+					{autoSaving && (
+						<Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
+					)}
+				</div>
+			) : (
+				<div className="shrink-0 border-b px-3 pb-2.5 pt-2.5">
+					<div className="flex items-center gap-2">
+						<div className="flex flex-1 flex-col">
+							<input
+								value={editName}
+								onChange={(e) => {
+									setEditName(e.target.value);
+									onPageMetaChange(e.target.value, editPath);
+								}}
+								className="truncate bg-transparent text-sm font-semibold outline-none placeholder:text-muted-foreground/50 hover:bg-accent/40 focus:bg-accent/60 rounded px-1 -mx-1"
+								placeholder="Page name"
+							/>
+							<input
+								value={editPath}
+								onChange={(e) => {
+									setEditPath(e.target.value);
+									onPageMetaChange(editName, e.target.value);
+								}}
+								className="-mt-1 truncate bg-transparent text-[10px] text-muted-foreground outline-none placeholder:text-muted-foreground/40 hover:bg-accent/40 focus:bg-accent/60 rounded px-1 -mx-1"
+								placeholder="/path"
+							/>
+						</div>
+						<button
+							type="button"
+							onClick={onClose}
+							className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+							title="Close CMS panel"
+						>
+							<X className="h-3.5 w-3.5" />
+						</button>
+					</div>
+				</div>
+			)}
+
+			{/* Body */}
+			{loading ? (
+				<div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
+					<Loader2 className="h-4 w-4 animate-spin" />
+					<span className="text-sm">Loading sections…</span>
+				</div>
+			) : error ? (
+				<div className="p-3 text-xs text-destructive">{error}</div>
+			) : !data ? (
+				<div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+					No page data
+				</div>
+			) : isEditing && sectionData ? (
+				<SectionForm
+					data={sectionData}
+					schema={sectionSchema ?? undefined}
+					schemasMap={schemasMap}
+					onChange={onChangeSectionData}
+				/>
+			) : (
+				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+					<div className="min-h-0 flex-1 overflow-y-auto p-2">
+						{data.sections.length === 0 ? (
+							<div className="px-2 py-3 text-xs text-muted-foreground">
+								No sections on this page.
+							</div>
+						) : (
+							<DndContext
+								sensors={sensors}
+								modifiers={[restrictToVerticalAxis]}
+								onDragEnd={handleDragEnd}
+							>
+								<SortableContext
+									items={sortableIds}
+									strategy={verticalListSortingStrategy}
+								>
+									{data.sections.map((section) => (
+										<SortableSectionItem
+											key={String(section.index)}
+											section={section}
+											onSelect={() => onSelectSection(section.index)}
+											onDuplicate={() => onDuplicateSection(section.index)}
+											onRemove={() => onRemoveSection(section.index)}
+											onToggleLazy={() => onToggleLazySection(section.index)}
+										/>
+									))}
+								</SortableContext>
+							</DndContext>
+						)}
+					</div>
+					<div className="shrink-0 border-t p-2">
+						<button
+							type="button"
+							onClick={onAddSection}
+							className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+						>
+							<Plus className="h-3.5 w-3.5" />
+							Add section
+						</button>
+					</div>
+				</div>
+			)}
+		</div>
+	);
+}
+
 // ─── main workspace ───────────────────────────────────────────────────────────
 
 function FileExplorerWorkspace({
@@ -373,9 +881,64 @@ function FileExplorerWorkspace({
 	const [pagesLoading, setPagesLoading] = useState(false);
 	const [pagesOpen, setPagesOpen] = useState(false);
 
+	// ── create page dialog state ─────────────────────────────────────────────────
+	const [createPageDialogOpen, setCreatePageDialogOpen] = useState(false);
+	const [newPageName, setNewPageName] = useState("My New Page");
+	const [newPagePath, setNewPagePath] = useState("/example-path");
+	const [isCreatingPage, setIsCreatingPage] = useState(false);
+	const [createPageError, setCreatePageError] = useState<string>();
+
 	// ── publish ─────────────────────────────────────────────────────────────────
 	const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
 	const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+
+	// ── CMS state ────────────────────────────────────────────────────────────────
+	const [cmsOpen, setCmsOpen] = useState(false);
+	const [cmsData, setCmsData] = useState<GetPageSectionsOutput | null>(null);
+	const [cmsLoading, setCmsLoading] = useState(false);
+	const [cmsError, setCmsError] = useState<string | undefined>();
+	const [cmsSelectedSection, setCmsSelectedSection] = useState<number | null>(
+		null,
+	);
+	const [cmsSectionData, setCmsSectionData] = useState<Record<
+		string,
+		unknown
+	> | null>(null);
+	const [cmsAutoSaving, setCmsAutoSaving] = useState(false);
+	const cmsDataRef = useRef<GetPageSectionsOutput | null>(null);
+	const cmsSelectedSectionRef = useRef<number | null>(null);
+	const cmsAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+		null,
+	);
+	const [cmsSectionSchema, setCmsSectionSchema] =
+		useState<SchemaProperties | null>(null);
+	const [cmsSchemasMap, setCmsSchemasMap] = useState<
+		Record<string, SchemaProperties>
+	>({});
+
+	// ── Add-section picker state ──────────────────────────────────────────────
+	const [addSectionOpen, setAddSectionOpen] = useState(false);
+	const [addSectionSearch, setAddSectionSearch] = useState("");
+	const [addSectionSections, setAddSectionSections] =
+		useState<ListSectionsOutput | null>(null);
+	const [addSectionLoading, setAddSectionLoading] = useState(false);
+
+	// ── Apps state ───────────────────────────────────────────────────────────────
+	const [appsOpen, setAppsOpen] = useState(false);
+	const [appsData, setAppsData] = useState<ListAppsOutput | null>(null);
+	const [appsLoading, setAppsLoading] = useState(false);
+	const [installingApps, setInstallingApps] = useState<Set<string>>(
+		() => new Set(),
+	);
+	const [appConfigModalOpen, setAppConfigModalOpen] = useState(false);
+	const [appConfigTitle, setAppConfigTitle] = useState("");
+	const [appConfigData, setAppConfigData] = useState<Record<
+		string,
+		unknown
+	> | null>(null);
+	const [appConfigSchema, setAppConfigSchema] =
+		useState<SchemaProperties | null>(null);
+	const [appConfigLoading, setAppConfigLoading] = useState(false);
 
 	// ── editor / preview state ──────────────────────────────────────────────────
 	const [visualEditorElement, setVisualEditorElement] =
@@ -461,6 +1024,14 @@ function FileExplorerWorkspace({
 	useEffect(() => {
 		selectedFileRef.current = selectedFile;
 	}, [selectedFile]);
+
+	useEffect(() => {
+		cmsDataRef.current = cmsData;
+	}, [cmsData]);
+
+	useEffect(() => {
+		cmsSelectedSectionRef.current = cmsSelectedSection;
+	}, [cmsSelectedSection]);
 
 	useEffect(() => {
 		if (typeof document === "undefined") return;
@@ -762,6 +1333,74 @@ function FileExplorerWorkspace({
 		return () => document.removeEventListener("pointerdown", handler);
 	}, [pagesOpen]);
 
+	// Fetch CMS sections when panel is open or preview path changes
+	useEffect(() => {
+		if (!cmsOpen || !app || !userEnv || envStatus !== "ready") return;
+		let cancelled = false;
+		const fetch = async () => {
+			setCmsLoading(true);
+			setCmsError(undefined);
+			setCmsData(null);
+			setCmsSelectedSection(null);
+			setCmsSectionData(null);
+
+			const MAX_RETRIES = 5;
+			const RETRY_DELAY_MS = 1500;
+
+			for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+				if (cancelled) return;
+				try {
+					const result = await app.callServerTool({
+						name: "get_page_sections",
+						arguments: { env: userEnv, path: previewPath },
+					});
+					if (cancelled) return;
+					if (result?.isError) {
+						const text = result.content?.find((b) => b.type === "text");
+						const msg =
+							text?.type === "text"
+								? text.text
+								: "Failed to load page sections";
+						// Page not propagated yet — retry
+						if (
+							msg.toLowerCase().includes("no page found") &&
+							attempt < MAX_RETRIES
+						) {
+							await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+							continue;
+						}
+						throw new Error(msg);
+					}
+					const data = result?.structuredContent as
+						| GetPageSectionsOutput
+						| undefined;
+					setCmsData(data ?? null);
+					setCmsLoading(false);
+					return;
+				} catch (e) {
+					const msg =
+						e instanceof Error ? e.message : "Failed to load sections";
+					if (
+						msg.toLowerCase().includes("no page found") &&
+						attempt < MAX_RETRIES
+					) {
+						await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+						continue;
+					}
+					if (!cancelled) {
+						setCmsError(msg);
+						setCmsLoading(false);
+					}
+					return;
+				}
+			}
+		};
+		void fetch();
+		return () => {
+			cancelled = true;
+		};
+	}, [cmsOpen, previewPath, userEnv, envStatus, app]);
+
 	// ── handlers ────────────────────────────────────────────────────────────────
 
 	const loadFiles = useCallback(
@@ -894,6 +1533,570 @@ function FileExplorerWorkspace({
 		const sep = nextPath.includes("?") ? "&" : "?";
 		const url = `${envUrl}${nextPath.startsWith("/") ? "" : "/"}${nextPath}${sep}__cb=${crypto.randomUUID()}`;
 		window.open(url, "_blank", "noopener,noreferrer");
+	};
+
+	// ── Apps handlers ────────────────────────────────────────────────────────────
+
+	const fetchApps = useCallback(async () => {
+		if (!app || !userEnv || appsLoading) return;
+		setAppsLoading(true);
+		try {
+			const result = await app.callServerTool({
+				name: "list_apps",
+				arguments: { env: userEnv },
+			});
+			if (!result?.isError) {
+				setAppsData((result?.structuredContent as ListAppsOutput) ?? null);
+			}
+		} catch {
+			// silently fail
+		} finally {
+			setAppsLoading(false);
+		}
+	}, [app, userEnv, appsLoading]);
+
+	const handleAppsToggle = () => {
+		const next = !appsOpen;
+		setAppsOpen(next);
+		if (next && !appsData) {
+			void fetchApps();
+		}
+	};
+
+	const handleInstallApp = async (name: string, vendor: string) => {
+		if (!app) return;
+		const blockId = `${vendor}-${name}`;
+		setInstallingApps((prev) => new Set(prev).add(blockId));
+		try {
+			await app.callServerTool({
+				name: "install_app",
+				arguments: { env: userEnv, app: name, vendor },
+			});
+			setAppsData(null);
+			void fetchApps();
+		} catch {
+			toast.error(`Failed to install ${name}`);
+		} finally {
+			setInstallingApps((prev) => {
+				const next = new Set(prev);
+				next.delete(blockId);
+				return next;
+			});
+		}
+	};
+
+	const handleUninstallApp = async (name: string, vendor: string) => {
+		if (!app) return;
+		const blockId = `${vendor}-${name}`;
+		setInstallingApps((prev) => new Set(prev).add(blockId));
+		try {
+			await app.callServerTool({
+				name: "uninstall_app",
+				arguments: { env: userEnv, app: name, vendor },
+			});
+			setAppsData(null);
+			void fetchApps();
+		} catch {
+			toast.error(`Failed to uninstall ${name}`);
+		} finally {
+			setInstallingApps((prev) => {
+				const next = new Set(prev);
+				next.delete(blockId);
+				return next;
+			});
+		}
+	};
+
+	const handleOpenAppConfig = async (
+		_blockId: string,
+		configPath: string,
+		title: string,
+	) => {
+		if (!app || !userEnv) return;
+		setAppConfigTitle(title);
+		setAppConfigData(null);
+		setAppConfigSchema(null);
+		setAppConfigLoading(true);
+		setAppConfigModalOpen(true);
+		try {
+			const result = await app.callServerTool({
+				name: "read_file",
+				arguments: { env: userEnv, filepath: configPath },
+			});
+			if (!result?.isError) {
+				const data = result?.structuredContent as ReadFileOutput;
+				if (data?.content) {
+					let parsed: Record<string, unknown> = {};
+					try {
+						parsed = JSON.parse(data.content) as Record<string, unknown>;
+					} catch {
+						parsed = { raw: data.content };
+					}
+					setAppConfigData(parsed);
+
+					// Fetch schema for all declared props
+					const resolveType = parsed.__resolveType as string | undefined;
+					if (resolveType) {
+						const schemaResult = await app.callServerTool({
+							name: "get_block_schema",
+							arguments: { env: userEnv, resolveType },
+						});
+						if (!schemaResult?.isError) {
+							const schemaData = schemaResult?.structuredContent as
+								| GetBlockSchemaOutput
+								| undefined;
+							if (
+								schemaData?.properties &&
+								Object.keys(schemaData.properties).length > 0
+							) {
+								setAppConfigSchema(schemaData.properties);
+							}
+						}
+					}
+				}
+			}
+		} catch {
+			// silently fail
+		} finally {
+			setAppConfigLoading(false);
+		}
+	};
+
+	// ── CMS handlers ─────────────────────────────────────────────────────────────
+
+	const handleCmsToggle = () => {
+		const next = !cmsOpen;
+		setCmsOpen(next);
+		if (!next) {
+			setCmsData(null);
+			setCmsSelectedSection(null);
+			setCmsSectionData(null);
+			setCmsError(undefined);
+			if (cmsAutoSaveTimerRef.current)
+				clearTimeout(cmsAutoSaveTimerRef.current);
+		}
+	};
+
+	const handleCmsSelectSection = (idx: number) => {
+		if (!cmsData) return;
+		setCmsSelectedSection(idx);
+		cmsSelectedSectionRef.current = idx;
+		const sections = cmsData.pageData.sections as Record<string, unknown>[];
+		const raw = sections[idx] ?? null;
+		// For lazy/deferred wrappers, edit the inner section content
+		const displaySection = cmsData.sections[idx];
+		const data =
+			displaySection?.isLazy && raw
+				? (((raw as Record<string, unknown>).section as Record<
+						string,
+						unknown
+					> | null) ?? raw)
+				: raw;
+		setCmsSectionData(data);
+		setCmsSectionSchema(null);
+		setCmsSchemasMap({});
+
+		// For lazy sections, `data` is already the inner section object, so its
+		// __resolveType is the real section type. For non-lazy sections, use the
+		// displaySection resolveType. This prevents fetching the schema for the
+		// Lazy/Deferred wrapper instead of the actual section.
+		const resolveType = displaySection?.isLazy
+			? ((data as Record<string, unknown>)?.__resolveType as string | undefined)
+			: displaySection?.resolveType;
+
+		if (!resolveType || !app || !userEnv) return;
+
+		// Collect all __resolveType values nested inside the section data so we
+		// can batch-fetch their schemas (needed for block-ref fields).
+		const collectResolveTypes = (
+			node: unknown,
+			result: Set<string> = new Set(),
+		): Set<string> => {
+			if (!node || typeof node !== "object") return result;
+			if (Array.isArray(node)) {
+				node.forEach((item) => collectResolveTypes(item, result));
+				return result;
+			}
+			const obj = node as Record<string, unknown>;
+			if (typeof obj.__resolveType === "string") result.add(obj.__resolveType);
+			for (const v of Object.values(obj)) collectResolveTypes(v, result);
+			return result;
+		};
+
+		const nestedTypes = collectResolveTypes(data);
+		nestedTypes.delete(resolveType); // top-level fetched separately
+
+		const fetchSchema = (rt: string) =>
+			app
+				.callServerTool({
+					name: "get_block_schema",
+					arguments: { env: userEnv, resolveType: rt },
+				})
+				.then((result) => {
+					if (result?.isError) return null;
+					const sd = result?.structuredContent as
+						| GetBlockSchemaOutput
+						| undefined;
+					return sd?.properties && Object.keys(sd.properties).length > 0
+						? ([rt, sd.properties] as const)
+						: null;
+				})
+				.catch(() => null);
+
+		// Fetch top-level schema
+		void fetchSchema(resolveType).then((entry) => {
+			if (entry) setCmsSectionSchema(entry[1]);
+		});
+
+		// Fetch nested schemas in parallel and merge into map
+		if (nestedTypes.size > 0) {
+			void Promise.all([...nestedTypes].map(fetchSchema)).then((results) => {
+				const map: Record<string, SchemaProperties> = {};
+				for (const entry of results) {
+					if (entry) map[entry[0]] = entry[1];
+				}
+				setCmsSchemasMap(map);
+			});
+		}
+	};
+
+	const handleCmsDeselectSection = () => {
+		setCmsSelectedSection(null);
+		cmsSelectedSectionRef.current = null;
+		setCmsSectionData(null);
+		setCmsSectionSchema(null);
+		setCmsSchemasMap({});
+	};
+
+	const handleCmsSectionDataChange = (updated: Record<string, unknown>) => {
+		setCmsSectionData(updated);
+		setCmsAutoSaving(true);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			const snap = cmsDataRef.current;
+			const idx = cmsSelectedSectionRef.current;
+			if (!snap || idx === null || !app || !userEnv) {
+				setCmsAutoSaving(false);
+				return;
+			}
+			try {
+				const sections = [...(snap.pageData.sections as unknown[])];
+				const displaySection = snap.sections[idx];
+				if (displaySection?.isLazy) {
+					// preserve the lazy wrapper, update only the inner section
+					sections[idx] = {
+						...(sections[idx] as Record<string, unknown>),
+						section: updated,
+					};
+				} else {
+					sections[idx] = updated;
+				}
+				const updatedPageData = { ...snap.pageData, sections };
+				const result = await app.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: snap.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				const next = { ...snap, pageData: updatedPageData };
+				setCmsData(next);
+				cmsDataRef.current = next;
+				setPreviewRefreshKey((k) => k + 1);
+			} catch {
+				toast.error("Auto-save failed");
+			} finally {
+				setCmsAutoSaving(false);
+			}
+		}, 800);
+	};
+
+	const handleCmsReorderSections = async (srcIdx: number, destIdx: number) => {
+		const snap = cmsDataRef.current;
+		if (!snap || !app || !userEnv) return;
+
+		const rawSections = [...(snap.pageData.sections as unknown[])];
+		const [movedRaw] = rawSections.splice(srcIdx, 1);
+		rawSections.splice(destIdx, 0, movedRaw);
+
+		const displaySections = [...snap.sections];
+		const [movedDisplay] = displaySections.splice(srcIdx, 1);
+		displaySections.splice(destIdx, 0, movedDisplay);
+		const reindexed = displaySections.map((s, i) => ({ ...s, index: i }));
+
+		const updatedPageData = { ...snap.pageData, sections: rawSections };
+		const next: GetPageSectionsOutput = {
+			...snap,
+			pageData: updatedPageData,
+			sections: reindexed,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+
+		try {
+			const result = await app.callServerTool({
+				name: "write_file",
+				arguments: {
+					env: userEnv,
+					filepath: snap.filePath,
+					content: JSON.stringify(updatedPageData, null, 2),
+				},
+			});
+			if (result?.isError) throw new Error("write_file failed");
+			setPreviewRefreshKey((k) => k + 1);
+		} catch {
+			toast.error("Failed to reorder sections");
+			setCmsData(snap);
+			cmsDataRef.current = snap;
+		}
+	};
+
+	const handleCmsPageMetaChange = (name: string, path: string) => {
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			const snap = cmsDataRef.current;
+			if (!snap || !app || !userEnv) return;
+			try {
+				const updatedPageData = { ...snap.pageData, name, path };
+				const result = await app.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: snap.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				const next = { ...snap, pageData: updatedPageData };
+				setCmsData(next);
+				cmsDataRef.current = next;
+			} catch {
+				toast.error("Auto-save failed");
+			}
+		}, 600);
+	};
+
+	const handleCmsAddSection = async () => {
+		if (!app || !userEnv) return;
+		// Open the picker modal and lazily fetch available sections
+		setAddSectionOpen(true);
+		setAddSectionSearch("");
+		if (!addSectionSections) {
+			setAddSectionLoading(true);
+			try {
+				const result = await app.callServerTool({
+					name: "list_sections",
+					arguments: { env: userEnv },
+				});
+				if (!result?.isError) {
+					setAddSectionSections(
+						(result?.structuredContent as ListSectionsOutput) ?? null,
+					);
+				}
+			} finally {
+				setAddSectionLoading(false);
+			}
+		}
+	};
+
+	const handleCmsConfirmAddSection = async (
+		resolveType: string,
+		blockId?: string,
+	) => {
+		const snap = cmsDataRef.current;
+		if (!snap || !app || !userEnv) return;
+		setAddSectionOpen(false);
+		// Global sections are referenced by their blockId, component sections by resolveType
+		const sectionRef = blockId ?? resolveType;
+		const newSection = { __resolveType: sectionRef };
+		const rawSections = [...(snap.pageData.sections as unknown[]), newSection];
+		const newIndex = rawSections.length - 1;
+		const updatedPageData = { ...snap.pageData, sections: rawSections };
+		const title =
+			(blockId ?? resolveType)
+				.split("/")
+				.pop()
+				?.replace(/\.tsx?$/, "") ?? "New section";
+		const newDisplaySection = {
+			index: newIndex,
+			resolveType: sectionRef,
+			label: title,
+		};
+		const next: GetPageSectionsOutput = {
+			...snap,
+			pageData: updatedPageData,
+			sections: [...snap.sections, newDisplaySection],
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+		try {
+			const result = await app.callServerTool({
+				name: "write_file",
+				arguments: {
+					env: userEnv,
+					filepath: snap.filePath,
+					content: JSON.stringify(updatedPageData, null, 2),
+				},
+			});
+			if (result?.isError) throw new Error("write_file failed");
+			setPreviewRefreshKey((k) => k + 1);
+			// auto-open the new section for editing
+			setCmsSelectedSection(newIndex);
+			cmsSelectedSectionRef.current = newIndex;
+			setCmsSectionData(newSection);
+		} catch {
+			toast.error("Failed to add section");
+			setCmsData(snap);
+			cmsDataRef.current = snap;
+		}
+	};
+
+	const handleCmsDuplicateSection = async (listIdx: number) => {
+		const snap = cmsDataRef.current;
+		if (!snap || !app || !userEnv) return;
+		const rawSections = [...(snap.pageData.sections as unknown[])];
+		const copy = structuredClone(rawSections[listIdx]);
+		rawSections.splice(listIdx + 1, 0, copy);
+		const displaySections = [...snap.sections];
+		const original = displaySections[listIdx];
+		const newDisplay = {
+			...original,
+			index: listIdx + 1,
+			label: `${original.label} (copy)`,
+		};
+		const reindexed = [
+			...displaySections.slice(0, listIdx + 1),
+			newDisplay,
+			...displaySections
+				.slice(listIdx + 1)
+				.map((s, i) => ({ ...s, index: listIdx + 2 + i })),
+		];
+		const updatedPageData = { ...snap.pageData, sections: rawSections };
+		const next: GetPageSectionsOutput = {
+			...snap,
+			pageData: updatedPageData,
+			sections: reindexed,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+		try {
+			const result = await app.callServerTool({
+				name: "write_file",
+				arguments: {
+					env: userEnv,
+					filepath: snap.filePath,
+					content: JSON.stringify(updatedPageData, null, 2),
+				},
+			});
+			if (result?.isError) throw new Error("write_file failed");
+			setPreviewRefreshKey((k) => k + 1);
+		} catch {
+			toast.error("Failed to duplicate section");
+			setCmsData(snap);
+			cmsDataRef.current = snap;
+		}
+	};
+
+	const handleCmsRemoveSection = async (listIdx: number) => {
+		const snap = cmsDataRef.current;
+		if (!snap || !app || !userEnv) return;
+		const rawSections = (snap.pageData.sections as unknown[]).filter(
+			(_, i) => i !== listIdx,
+		);
+		const reindexed = snap.sections
+			.filter((_, i) => i !== listIdx)
+			.map((s, i) => ({ ...s, index: i }));
+		const updatedPageData = { ...snap.pageData, sections: rawSections };
+		const next: GetPageSectionsOutput = {
+			...snap,
+			pageData: updatedPageData,
+			sections: reindexed,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+		if (cmsSelectedSectionRef.current === listIdx) {
+			setCmsSelectedSection(null);
+			cmsSelectedSectionRef.current = null;
+			setCmsSectionData(null);
+		}
+		try {
+			const result = await app.callServerTool({
+				name: "write_file",
+				arguments: {
+					env: userEnv,
+					filepath: snap.filePath,
+					content: JSON.stringify(updatedPageData, null, 2),
+				},
+			});
+			if (result?.isError) throw new Error("write_file failed");
+			setPreviewRefreshKey((k) => k + 1);
+		} catch {
+			toast.error("Failed to remove section");
+			setCmsData(snap);
+			cmsDataRef.current = snap;
+		}
+	};
+
+	const LAZY_RESOLVE_TYPE = "website/sections/Rendering/Lazy.tsx";
+
+	const handleCmsToggleLazySection = async (listIdx: number) => {
+		const snap = cmsDataRef.current;
+		if (!snap || !app || !userEnv) return;
+		const rawSections = [
+			...(snap.pageData.sections as Record<string, unknown>[]),
+		];
+		const current = rawSections[listIdx];
+		const displaySection = snap.sections[listIdx];
+		const isLazy = displaySection?.isLazy;
+
+		rawSections[listIdx] = isLazy
+			? // unwrap: expose inner section
+				((current.section as Record<string, unknown>) ?? current)
+			: // wrap: add lazy envelope
+				{ __resolveType: LAZY_RESOLVE_TYPE, section: current };
+
+		const updatedDisplaySection = {
+			...displaySection,
+			resolveType: isLazy
+				? (((rawSections[listIdx] as Record<string, unknown>)
+						.__resolveType as string) ?? "")
+				: LAZY_RESOLVE_TYPE,
+			isLazy: !isLazy,
+		};
+		const updatedDisplaySections = snap.sections.map((s, i) =>
+			i === listIdx ? updatedDisplaySection : s,
+		);
+
+		const updatedPageData = { ...snap.pageData, sections: rawSections };
+		const next: GetPageSectionsOutput = {
+			...snap,
+			pageData: updatedPageData,
+			sections: updatedDisplaySections,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+		// clear edit state since section structure changed
+		setCmsSelectedSection(null);
+		cmsSelectedSectionRef.current = null;
+		setCmsSectionData(null);
+		try {
+			const result = await app.callServerTool({
+				name: "write_file",
+				arguments: {
+					env: userEnv,
+					filepath: snap.filePath,
+					content: JSON.stringify(updatedPageData, null, 2),
+				},
+			});
+			if (result?.isError) throw new Error("write_file failed");
+			setPreviewRefreshKey((k) => k + 1);
+		} catch {
+			toast.error("Failed to toggle lazy");
+			setCmsData(snap);
+			cmsDataRef.current = snap;
+		}
 	};
 
 	const handleEditorWillMount = useCallback<
@@ -1184,6 +2387,58 @@ function FileExplorerWorkspace({
 		}
 	};
 
+	const handleCreatePage = async (event: FormEvent) => {
+		event.preventDefault();
+		const trimmedName = newPageName.trim();
+		const trimmedPath = newPagePath.trim();
+		if (!trimmedName) {
+			setCreatePageError("Page name is required.");
+			return;
+		}
+		if (!trimmedPath.startsWith("/")) {
+			setCreatePageError("Path must start with /");
+			return;
+		}
+		if (pages.some((p) => p.path === trimmedPath)) {
+			setCreatePageError(`A page with path "${trimmedPath}" already exists.`);
+			return;
+		}
+		setIsCreatingPage(true);
+		setCreatePageError(undefined);
+		try {
+			const result = await app?.callServerTool({
+				name: "create_page",
+				arguments: { env: userEnv, name: trimmedName, path: trimmedPath },
+			});
+			if (result?.isError) {
+				const text = result.content?.find((b) => b.type === "text");
+				throw new Error(
+					text?.type === "text" ? text.text : "Failed to create page",
+				);
+			}
+			const data = result?.structuredContent as CreatePageOutput | undefined;
+			setCreatePageDialogOpen(false);
+			setNewPageName("My New Page");
+			setNewPagePath("/example-path");
+			// Navigate to the new page in preview
+			if (data?.path) {
+				setPreviewPathInput(data.path);
+				setPreviewPath(data.path);
+			}
+			// Refresh the pages list
+			setPagesLoaded(false);
+			// Open the CMS sections panel
+			setCmsOpen(true);
+			toast.success(`Page "${trimmedName}" created`);
+		} catch (error) {
+			setCreatePageError(
+				error instanceof Error ? error.message : "Failed to create page",
+			);
+		} finally {
+			setIsCreatingPage(false);
+		}
+	};
+
 	const fetchPages = useCallback(async () => {
 		if (!app || !userEnv || pagesLoaded || pagesLoading) return;
 		setPagesLoading(true);
@@ -1343,6 +2598,49 @@ function FileExplorerWorkspace({
 								>
 									<FileCode2 className="h-3.5 w-3.5" />
 								</button>
+								{/* CMS toggle */}
+								{(viewMode === "preview" || viewMode === "visual") && (
+									<button
+										type="button"
+										className={cn(
+											"flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 text-sm transition-colors",
+											cmsOpen
+												? "bg-primary/10 text-primary"
+												: "bg-muted/40 text-muted-foreground hover:text-foreground",
+										)}
+										onClick={handleCmsToggle}
+										disabled={envStatus !== "ready"}
+										title="CMS — browse and edit page sections"
+									>
+										<LayersIcon className="h-3.5 w-3.5" />
+									</button>
+								)}
+								{/* More options */}
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<button
+											type="button"
+											className={cn(
+												"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
+												appsOpen
+													? "bg-background text-foreground shadow-xs"
+													: "text-muted-foreground hover:text-foreground",
+											)}
+											title="More options"
+										>
+											<MoreHorizontal className="h-3.5 w-3.5" />
+										</button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent align="start" className="w-44">
+										<DropdownMenuItem
+											className="cursor-pointer"
+											onSelect={handleAppsToggle}
+										>
+											<Package className="mr-2 h-4 w-4" />
+											Apps
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
 							</div>
 
 							{/* URL bar */}
@@ -1424,6 +2722,22 @@ function FileExplorerWorkspace({
 
 								{pagesOpen && (
 									<div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-md border bg-popover shadow-md">
+										<div className="p-1 border-b">
+											<button
+												type="button"
+												className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+												onMouseDown={(e) => {
+													e.preventDefault();
+													setPagesOpen(false);
+													setCreatePageDialogOpen(true);
+												}}
+											>
+												<Plus className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+												<span className="flex-1 font-medium">
+													Create new page
+												</span>
+											</button>
+										</div>
 										{pagesLoading ? (
 											<div className="flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground">
 												<Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1901,6 +3215,205 @@ function FileExplorerWorkspace({
 															</div>
 														)}
 
+														{/* CMS panel */}
+														{cmsOpen && (
+															<CmsPanel
+																loading={cmsLoading}
+																error={cmsError}
+																data={cmsData}
+																selectedSection={cmsSelectedSection}
+																sectionData={cmsSectionData}
+																sectionSchema={cmsSectionSchema}
+																schemasMap={cmsSchemasMap}
+																autoSaving={cmsAutoSaving}
+																onSelectSection={handleCmsSelectSection}
+																onDeselectSection={handleCmsDeselectSection}
+																onChangeSectionData={handleCmsSectionDataChange}
+																onReorderSections={(src, dest) =>
+																	void handleCmsReorderSections(src, dest)
+																}
+																onDuplicateSection={(idx) =>
+																	void handleCmsDuplicateSection(idx)
+																}
+																onRemoveSection={(idx) =>
+																	void handleCmsRemoveSection(idx)
+																}
+																onToggleLazySection={(idx) =>
+																	void handleCmsToggleLazySection(idx)
+																}
+																onPageMetaChange={handleCmsPageMetaChange}
+																onAddSection={() => void handleCmsAddSection()}
+																onClose={handleCmsToggle}
+															/>
+														)}
+
+														{/* Apps panel */}
+														{appsOpen && (
+															<AppsPanel
+																loading={appsLoading}
+																data={appsData}
+																installingApps={installingApps}
+																onClose={handleAppsToggle}
+																onSelectApp={(blockId, configPath, title) =>
+																	void handleOpenAppConfig(
+																		blockId,
+																		configPath,
+																		title,
+																	)
+																}
+																onInstall={(name, vendor) =>
+																	void handleInstallApp(name, vendor)
+																}
+																onUninstall={(name, vendor) =>
+																	void handleUninstallApp(name, vendor)
+																}
+															/>
+														)}
+
+														{/* Add section modal */}
+														<Dialog
+															open={addSectionOpen}
+															onOpenChange={setAddSectionOpen}
+														>
+															<DialogContent className="flex max-h-[80vh] w-[1000px] flex-col gap-0 p-0">
+																<DialogHeader className="shrink-0 border-b px-4 py-3">
+																	<span className="text-sm font-semibold">
+																		Add section
+																	</span>
+																</DialogHeader>
+																<div className="shrink-0 border-b px-3 py-2">
+																	<Input
+																		autoFocus
+																		placeholder="Search sections…"
+																		className="h-7 text-xs"
+																		value={addSectionSearch}
+																		onChange={(e) =>
+																			setAddSectionSearch(e.target.value)
+																		}
+																	/>
+																</div>
+																<div className="min-h-0 flex-1 overflow-y-auto p-3">
+																	{addSectionLoading ? (
+																		<div className="flex items-center justify-center py-10">
+																			<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+																		</div>
+																	) : (
+																		(() => {
+																			const q = addSectionSearch.toLowerCase();
+																			const filtered = (
+																				addSectionSections?.sections ?? []
+																			).filter(
+																				(s) =>
+																					!q ||
+																					s.title.toLowerCase().includes(q) ||
+																					s.resolveType
+																						.toLowerCase()
+																						.includes(q),
+																			);
+																			const globals = filtered.filter(
+																				(s) => s.isGlobal,
+																			);
+																			const types = filtered.filter(
+																				(s) => !s.isGlobal,
+																			);
+
+																			if (filtered.length === 0) {
+																				return (
+																					<div className="py-8 text-center text-xs text-muted-foreground">
+																						No sections found
+																					</div>
+																				);
+																			}
+
+																			const SectionCard = (
+																				s: (typeof filtered)[0],
+																			) => (
+																				<button
+																					key={s.blockId ?? s.resolveType}
+																					type="button"
+																					onClick={() =>
+																						void handleCmsConfirmAddSection(
+																							s.resolveType,
+																							s.blockId,
+																						)
+																					}
+																					className="group flex flex-col overflow-hidden rounded-lg border bg-card text-left transition-all hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+																				>
+																					{/* Preview iframe */}
+																					<div className="relative h-32 w-full overflow-hidden bg-muted/30">
+																						{s.previewUrl ? (
+																							<iframe
+																								src={s.previewUrl}
+																								loading="lazy"
+																								scrolling="no"
+																								className="pointer-events-none absolute left-0 top-0 origin-top-left border-none"
+																								style={{
+																									width: "1280px",
+																									height: "640px",
+																									transform: "scale(0.234)",
+																									transformOrigin: "top left",
+																								}}
+																								title={s.title}
+																							/>
+																						) : (
+																							<div className="flex h-full items-center justify-center">
+																								<span className="text-xs text-muted-foreground">
+																									No preview
+																								</span>
+																							</div>
+																						)}
+																						{s.isGlobal && (
+																							<div className="absolute right-1.5 top-1.5 rounded-full bg-primary/90 px-1.5 py-0.5 text-[9px] font-medium text-primary-foreground">
+																								Global
+																							</div>
+																						)}
+																					</div>
+																					{/* Info */}
+																					<div className="flex flex-col gap-0.5 px-2.5 py-2">
+																						<span className="truncate text-xs font-medium text-foreground group-hover:text-primary">
+																							{s.title}
+																						</span>
+																						{s.description && (
+																							<span className="line-clamp-1 text-[10px] text-muted-foreground">
+																								{s.description}
+																							</span>
+																						)}
+																					</div>
+																				</button>
+																			);
+
+																			return (
+																				<div className="space-y-4">
+																					{globals.length > 0 && (
+																						<div className="space-y-2">
+																							<p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+																								Global sections
+																							</p>
+																							<div className="grid grid-cols-3 gap-2">
+																								{globals.map(SectionCard)}
+																							</div>
+																						</div>
+																					)}
+																					{types.length > 0 && (
+																						<div className="space-y-2">
+																							{globals.length > 0 && (
+																								<p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+																									Sections
+																								</p>
+																							)}
+																							<div className="grid grid-cols-3 gap-2">
+																								{types.map(SectionCard)}
+																							</div>
+																						</div>
+																					)}
+																				</div>
+																			);
+																		})()
+																	)}
+																</div>
+															</DialogContent>
+														</Dialog>
+
 														{viewMode === "visual" &&
 															previewUrl &&
 															!visualEditorElement && (
@@ -2083,6 +3596,74 @@ function FileExplorerWorkspace({
 				</DialogContent>
 			</Dialog>
 
+			{/* ── create page dialog ── */}
+			<Dialog
+				open={createPageDialogOpen}
+				onOpenChange={(open) => {
+					if (!isCreatingPage) {
+						setCreatePageDialogOpen(open);
+						if (!open) setCreatePageError(undefined);
+					}
+				}}
+			>
+				<DialogContent className="max-w-md">
+					<DialogHeader>
+						<DialogTitle className="text-base">Create new page</DialogTitle>
+					</DialogHeader>
+					<form onSubmit={handleCreatePage} className="space-y-4">
+						<div className="space-y-1.5">
+							<label
+								htmlFor="new-page-name"
+								className="text-xs font-medium text-muted-foreground"
+							>
+								Name
+							</label>
+							<Input
+								id="new-page-name"
+								value={newPageName}
+								onChange={(e) => setNewPageName(e.target.value)}
+								placeholder="My New Page"
+								autoFocus
+								disabled={isCreatingPage}
+							/>
+						</div>
+						<div className="space-y-1.5">
+							<label
+								htmlFor="new-page-path"
+								className="text-xs font-medium text-muted-foreground"
+							>
+								Path
+							</label>
+							<Input
+								id="new-page-path"
+								value={newPagePath}
+								onChange={(e) => setNewPagePath(e.target.value)}
+								placeholder="/example-path"
+								disabled={isCreatingPage}
+							/>
+						</div>
+						{createPageError && (
+							<p className="text-xs text-destructive">{createPageError}</p>
+						)}
+						<DialogFooter>
+							<Button
+								type="submit"
+								size="sm"
+								className="gap-1.5"
+								disabled={
+									!newPageName.trim() || !newPagePath.trim() || isCreatingPage
+								}
+							>
+								{isCreatingPage && (
+									<Loader2 className="w-3.5 h-3.5 animate-spin" />
+								)}
+								Create
+							</Button>
+						</DialogFooter>
+					</form>
+				</DialogContent>
+			</Dialog>
+
 			{/* ── publish dialog ── */}
 			<PublishDialog
 				open={publishDialogOpen}
@@ -2094,6 +3675,46 @@ function FileExplorerWorkspace({
 				gitStatus={gitStatus}
 				onGitStatusChange={setGitStatus}
 			/>
+
+			{/* ── app config modal ── */}
+			<Dialog
+				open={appConfigModalOpen}
+				onOpenChange={(open) => {
+					setAppConfigModalOpen(open);
+					if (!open) {
+						setAppConfigData(null);
+						setAppConfigSchema(null);
+						setAppConfigTitle("");
+					}
+				}}
+			>
+				<DialogContent className="max-w-lg">
+					<DialogHeader>
+						<DialogTitle className="flex items-center gap-2">
+							<Package className="h-4 w-4 text-muted-foreground" />
+							{appConfigTitle}
+						</DialogTitle>
+					</DialogHeader>
+					{appConfigLoading ? (
+						<div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
+							<Loader2 className="h-4 w-4 animate-spin" />
+							<span className="text-sm">Loading configuration…</span>
+						</div>
+					) : !appConfigData ? (
+						<div className="py-6 text-center text-sm text-muted-foreground">
+							No configuration found for this app.
+						</div>
+					) : (
+						<ScrollArea className="max-h-[60vh]">
+							<SectionForm
+								data={appConfigData}
+								schema={appConfigSchema ?? undefined}
+								onChange={(data) => setAppConfigData(data)}
+							/>
+						</ScrollArea>
+					)}
+				</DialogContent>
+			</Dialog>
 		</div>
 	);
 }
