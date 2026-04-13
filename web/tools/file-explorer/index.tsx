@@ -583,6 +583,7 @@ function SortableSectionItem({
 		resolveType: string;
 		label: string;
 		isLazy?: boolean;
+		isSavedBlock?: boolean;
 	};
 	onSelect: () => void;
 	onDuplicate: () => void;
@@ -598,6 +599,8 @@ function SortableSectionItem({
 		isDragging,
 	} = useSortable({ id: String(section.index) });
 
+	const saved = section.isSavedBlock === true;
+
 	return (
 		<div
 			ref={setNodeRef}
@@ -611,10 +614,18 @@ function SortableSectionItem({
 			onKeyDown={(e) => {
 				if (e.key === "Enter" || e.key === " ") onSelect();
 			}}
-			className="group flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 text-foreground/80 transition-colors hover:bg-accent hover:text-accent-foreground active:cursor-grabbing"
+			className={cn(
+				"group flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 transition-colors active:cursor-grabbing",
+				saved
+					? "text-[oklch(0.45_0.15_289)] hover:bg-[oklch(0.7278_0.151_289/0.12)] dark:text-[oklch(0.78_0.15_289)] dark:hover:bg-[oklch(0.7278_0.151_289/0.15)]"
+					: "text-foreground/80 hover:bg-accent hover:text-accent-foreground",
+			)}
 		>
 			<GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
-			<LayoutTemplate className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+			<LayoutTemplate
+				className="h-3.5 w-3.5 shrink-0"
+				style={saved ? { color: "oklch(0.7278 0.151 289)" } : undefined}
+			/>
 			<span className="flex-1 truncate text-xs font-medium" onClick={onSelect}>
 				{section.label}
 			</span>
@@ -857,6 +868,7 @@ interface CmsPanelProps {
 	sectionSchema: SchemaProperties | null;
 	schemasMap: Record<string, SchemaProperties>;
 	autoSaving: boolean;
+	savedBlock: false | "readonly" | "editing";
 	onSelectSection: (idx: number) => void;
 	onDeselectSection: () => void;
 	onChangeSectionData: (data: Record<string, unknown>) => void;
@@ -867,6 +879,9 @@ interface CmsPanelProps {
 	onPageMetaChange: (name: string, path: string) => void;
 	onAddSection: () => void;
 	onClose: () => void;
+	onSavedBlockEdit: () => void;
+	onSavedBlockCancel: () => void;
+	onSavedBlockSave: () => void;
 }
 
 function CmsPanel({
@@ -878,6 +893,7 @@ function CmsPanel({
 	sectionSchema,
 	schemasMap,
 	autoSaving,
+	savedBlock,
 	onSelectSection,
 	onDeselectSection,
 	onChangeSectionData,
@@ -888,6 +904,9 @@ function CmsPanel({
 	onPageMetaChange,
 	onAddSection,
 	onClose,
+	onSavedBlockEdit,
+	onSavedBlockCancel,
+	onSavedBlockSave,
 }: CmsPanelProps) {
 	const sensors = useSensors(
 		useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
@@ -937,7 +956,7 @@ function CmsPanel({
 					<span className="flex-1 truncate text-sm font-semibold">
 						{activeSection?.label ?? "Edit"}
 					</span>
-					{autoSaving && (
+					{autoSaving && !savedBlock && (
 						<Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
 					)}
 				</div>
@@ -994,6 +1013,14 @@ function CmsPanel({
 					schema={sectionSchema ?? undefined}
 					schemasMap={schemasMap}
 					onChange={onChangeSectionData}
+					readOnly={savedBlock === "readonly"}
+					savedBlockKey={
+						savedBlock ? (activeSection?.savedBlockKey ?? undefined) : undefined
+					}
+					onEditGlobally={onSavedBlockEdit}
+					onSaveGlobally={onSavedBlockSave}
+					onCancelGlobally={onSavedBlockCancel}
+					saving={autoSaving && savedBlock === "editing"}
 				/>
 			) : (
 				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -1123,6 +1150,9 @@ function FileExplorerWorkspace({
 	const [cmsSchemasMap, setCmsSchemasMap] = useState<
 		Record<string, SchemaProperties>
 	>({});
+	const [cmsSavedBlock, setCmsSavedBlock] = useState<
+		false | "readonly" | "editing"
+	>(false);
 
 	// ── CMS inspect state ────────────────────────────────────────────────────
 	const [cmsInspectActive, setCmsInspectActive] = useState(false);
@@ -1359,6 +1389,9 @@ function FileExplorerWorkspace({
 		};
 
 		const getEffectiveRt = (sec: (typeof sections)[number], i: number) => {
+			if (sec.isSavedBlock && sec.resolvedResolveType) {
+				return sec.resolvedResolveType;
+			}
 			const r = rawSections[i];
 			if (sec.isLazy) {
 				return r?.section?.__resolveType ?? sec.resolveType;
@@ -2021,6 +2054,7 @@ function FileExplorerWorkspace({
 			setCmsInspectElement(null);
 			setCmsInspectInput("");
 			setCmsPanelVisible(true);
+			setCmsSavedBlock(false);
 			if (cmsAutoSaveTimerRef.current)
 				clearTimeout(cmsAutoSaveTimerRef.current);
 		}
@@ -2030,6 +2064,7 @@ function FileExplorerWorkspace({
 		setCmsPanelVisible(false);
 		setCmsSelectedSection(null);
 		setCmsSectionData(null);
+		setCmsSavedBlock(false);
 	};
 
 	const handleCmsSelectSection = (idx: number) => {
@@ -2039,26 +2074,38 @@ function FileExplorerWorkspace({
 		cmsSelectedSectionRef.current = idx;
 		const sections = cmsData.pageData.sections as Record<string, unknown>[];
 		const raw = sections[idx] ?? null;
-		// For lazy/deferred wrappers, edit the inner section content
 		const displaySection = cmsData.sections[idx];
-		const data =
-			displaySection?.isLazy && raw
-				? (((raw as Record<string, unknown>).section as Record<
-						string,
-						unknown
-					> | null) ?? raw)
-				: raw;
+
+		const isSaved = displaySection?.isSavedBlock === true;
+		setCmsSavedBlock(isSaved ? "readonly" : false);
+
+		let data: Record<string, unknown> | null;
+		if (isSaved && raw) {
+			data = (raw as Record<string, unknown>).__resolvedData as Record<
+				string,
+				unknown
+			> | null;
+		} else if (displaySection?.isLazy && raw) {
+			data =
+				((raw as Record<string, unknown>).section as Record<
+					string,
+					unknown
+				> | null) ?? raw;
+		} else {
+			data = raw;
+		}
+
 		setCmsSectionData(data);
 		setCmsSectionSchema(null);
 		setCmsSchemasMap({});
 
-		// For lazy sections, `data` is already the inner section object, so its
-		// __resolveType is the real section type. For non-lazy sections, use the
-		// displaySection resolveType. This prevents fetching the schema for the
-		// Lazy/Deferred wrapper instead of the actual section.
-		const resolveType = displaySection?.isLazy
-			? ((data as Record<string, unknown>)?.__resolveType as string | undefined)
-			: displaySection?.resolveType;
+		const resolveType = isSaved
+			? displaySection?.resolvedResolveType
+			: displaySection?.isLazy
+				? ((data as Record<string, unknown>)?.__resolveType as
+						| string
+						| undefined)
+				: displaySection?.resolveType;
 
 		if (!resolveType || !app || !userEnv) return;
 
@@ -2122,10 +2169,66 @@ function FileExplorerWorkspace({
 		setCmsSectionData(null);
 		setCmsSectionSchema(null);
 		setCmsSchemasMap({});
+		setCmsSavedBlock(false);
+	};
+
+	const handleSavedBlockEdit = () => {
+		setCmsSavedBlock("editing");
+	};
+
+	const handleSavedBlockCancel = () => {
+		const snap = cmsDataRef.current;
+		const idx = cmsSelectedSectionRef.current;
+		if (snap && idx !== null) {
+			const raw = (snap.pageData.sections as Record<string, unknown>[])[idx];
+			const resolved =
+				(raw?.__resolvedData as Record<string, unknown> | null) ?? null;
+			setCmsSectionData(resolved);
+		}
+		setCmsSavedBlock("readonly");
+	};
+
+	const handleSavedBlockSave = async () => {
+		const snap = cmsDataRef.current;
+		const idx = cmsSelectedSectionRef.current;
+		if (!snap || idx === null || !app || !userEnv || !cmsSectionData) return;
+
+		const displaySection = snap.sections[idx];
+		const blockFilePath = displaySection?.savedBlockFilePath;
+		if (!blockFilePath) return;
+
+		setCmsAutoSaving(true);
+		try {
+			const result = await app.callServerTool({
+				name: "write_file",
+				arguments: {
+					env: userEnv,
+					filepath: blockFilePath,
+					content: JSON.stringify(cmsSectionData, null, 2),
+				},
+			});
+			if (result?.isError) throw new Error("write_file failed");
+
+			const sections = [
+				...(snap.pageData.sections as Record<string, unknown>[]),
+			];
+			sections[idx] = { ...sections[idx], __resolvedData: cmsSectionData };
+			const updatedPageData = { ...snap.pageData, sections };
+			const next = { ...snap, pageData: updatedPageData };
+			setCmsData(next);
+			cmsDataRef.current = next;
+			setCmsSavedBlock("readonly");
+			setPreviewRefreshKey((k) => k + 1);
+		} catch {
+			toast.error("Failed to save block");
+		} finally {
+			setCmsAutoSaving(false);
+		}
 	};
 
 	const handleCmsSectionDataChange = (updated: Record<string, unknown>) => {
 		setCmsSectionData(updated);
+		if (cmsSavedBlock === "editing") return;
 		setCmsAutoSaving(true);
 		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
 		cmsAutoSaveTimerRef.current = setTimeout(async () => {
@@ -3698,6 +3801,7 @@ function FileExplorerWorkspace({
 																sectionSchema={cmsSectionSchema}
 																schemasMap={cmsSchemasMap}
 																autoSaving={cmsAutoSaving}
+																savedBlock={cmsSavedBlock}
 																onSelectSection={handleCmsSelectSection}
 																onDeselectSection={handleCmsDeselectSection}
 																onChangeSectionData={handleCmsSectionDataChange}
@@ -3716,6 +3820,11 @@ function FileExplorerWorkspace({
 																onPageMetaChange={handleCmsPageMetaChange}
 																onAddSection={() => void handleCmsAddSection()}
 																onClose={handleCmsPanelClose}
+																onSavedBlockEdit={handleSavedBlockEdit}
+																onSavedBlockCancel={handleSavedBlockCancel}
+																onSavedBlockSave={() =>
+																	void handleSavedBlockSave()
+																}
 															/>
 														)}
 

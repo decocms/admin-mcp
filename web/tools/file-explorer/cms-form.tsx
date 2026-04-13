@@ -1862,6 +1862,12 @@ export function SectionForm({
 	schema,
 	schemasMap = {},
 	onChange,
+	readOnly,
+	savedBlockKey,
+	onEditGlobally,
+	onSaveGlobally,
+	onCancelGlobally,
+	saving,
 }: {
 	data: Record<string, unknown>;
 	/**
@@ -1873,10 +1879,15 @@ export function SectionForm({
 	/** Schemas for nested block types (loaders, etc.) keyed by resolveType */
 	schemasMap?: Record<string, SchemaProperties>;
 	onChange: (data: Record<string, unknown>) => void;
+	/** When true, fields are displayed but not editable */
+	readOnly?: boolean;
+	/** Block key for saved blocks (shown in the read-only banner) */
+	savedBlockKey?: string;
+	onEditGlobally?: () => void;
+	onSaveGlobally?: () => void;
+	onCancelGlobally?: () => void;
+	saving?: boolean;
 }) {
-	// Build the ordered list of keys to render.
-	// If a schema is present, use its keys as the source of truth so every
-	// declared property is visible even if absent from the current data.
 	const keys: string[] = schema
 		? Object.keys(schema).filter((k) => !k.startsWith("__") && k !== "@type")
 		: Object.keys(data).filter((k) => !k.startsWith("__"));
@@ -1891,7 +1902,24 @@ export function SectionForm({
 
 	return (
 		<div className="min-h-0 flex-1 block! min-w-auto overflow-y-auto">
-			<div className="space-y-4 p-3">
+			{readOnly && (
+				<style>
+					{`[data-cms-readonly] input,
+[data-cms-readonly] textarea,
+[data-cms-readonly] select,
+[data-cms-readonly] [role="combobox"],
+[data-cms-readonly] [role="slider"],
+[data-cms-readonly] [role="switch"],
+[data-cms-readonly] [contenteditable] {
+  pointer-events: none;
+  opacity: 0.6;
+}`}
+				</style>
+			)}
+			<div
+				className="space-y-4 p-3"
+				{...(readOnly ? { "data-cms-readonly": "" } : {})}
+			>
 				{keys.map((key) => {
 					const prop = schema?.[key];
 					return (
@@ -1913,6 +1941,63 @@ export function SectionForm({
 					);
 				})}
 			</div>
+			{readOnly && (
+				<div
+					className="sticky bottom-0 border-t bg-background px-3 py-3"
+					style={{ borderColor: "oklch(0.7278 0.151 289 / 0.25)" }}
+				>
+					<p
+						className="mb-2 text-[11px] leading-snug"
+						style={{ color: "oklch(0.55 0.12 289)" }}
+					>
+						Changing this block will update all pages where it is used.
+					</p>
+					<button
+						type="button"
+						onClick={onEditGlobally}
+						className="flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-white transition-colors hover:opacity-90"
+						style={{ background: "oklch(0.7278 0.151 289)" }}
+					>
+						Edit globally{savedBlockKey ? ` (${savedBlockKey})` : ""}
+					</button>
+				</div>
+			)}
+			{!readOnly && savedBlockKey && (
+				<div
+					className="sticky bottom-0 border-t bg-background px-3 py-3"
+					style={{ borderColor: "oklch(0.7278 0.151 289 / 0.25)" }}
+				>
+					<p
+						className="mb-2 text-[11px] leading-snug"
+						style={{ color: "oklch(0.55 0.12 289)" }}
+					>
+						You are editing a shared block. Save to apply changes everywhere.
+					</p>
+					<div className="flex gap-2">
+						<button
+							type="button"
+							onClick={onCancelGlobally}
+							disabled={saving}
+							className="flex flex-1 items-center justify-center rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
+							style={{
+								borderColor: "oklch(0.7278 0.151 289 / 0.3)",
+								color: "oklch(0.55 0.12 289)",
+							}}
+						>
+							Cancel
+						</button>
+						<button
+							type="button"
+							onClick={onSaveGlobally}
+							disabled={saving}
+							className="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+							style={{ background: "oklch(0.7278 0.151 289)" }}
+						>
+							{saving ? "Saving…" : "Save"}
+						</button>
+					</div>
+				</div>
+			)}
 		</div>
 	);
 }

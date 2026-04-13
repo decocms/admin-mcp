@@ -680,6 +680,10 @@ export type CmsSection = {
 	resolveType: string;
 	label: string;
 	isLazy?: boolean;
+	isSavedBlock?: boolean;
+	savedBlockKey?: string;
+	savedBlockFilePath?: string;
+	resolvedResolveType?: string;
 };
 
 export const getPageSectionsInputSchema = z.object({
@@ -700,6 +704,10 @@ export const getPageSectionsOutputSchema = z.object({
 			resolveType: z.string(),
 			label: z.string(),
 			isLazy: z.boolean().optional(),
+			isSavedBlock: z.boolean().optional(),
+			savedBlockKey: z.string().optional(),
+			savedBlockFilePath: z.string().optional(),
+			resolvedResolveType: z.string().optional(),
 		}),
 	),
 });
@@ -775,9 +783,14 @@ export const getPageSectionsTool = createTool({
 		const isLazyResolveType = (rt: string) =>
 			LAZY_RESOLVE_SUFFIXES.some((suffix) => rt.endsWith(suffix));
 
+		const isSavedBlockRef = (rt: string) =>
+			rt !== "" && !rt.includes("/") && rt in decofile;
+
 		const rawSections = Array.isArray(pageBlock.sections)
 			? pageBlock.sections
 			: [];
+
+		const resolvedSections: unknown[] = [];
 
 		const sections: CmsSection[] = rawSections.map((s, idx) => {
 			const sectionObj = s as {
@@ -786,9 +799,30 @@ export const getPageSectionsTool = createTool({
 			};
 			const rt = sectionObj.__resolveType ?? "";
 			const isLazy = isLazyResolveType(rt);
+
+			if (!isLazy && isSavedBlockRef(rt)) {
+				const resolvedBlock = decofile[rt] as Block;
+				const resolvedRt = resolvedBlock?.__resolveType ?? rt;
+				resolvedSections.push({
+					...sectionObj,
+					__resolvedData: resolvedBlock,
+				});
+				return {
+					index: idx,
+					resolveType: rt,
+					label: labelFromResolveType(resolvedRt) || `Section ${idx + 1}`,
+					isLazy,
+					isSavedBlock: true,
+					savedBlockKey: rt,
+					savedBlockFilePath: `/.deco/blocks/${rt}.json`,
+					resolvedResolveType: resolvedRt,
+				};
+			}
+
 			const effectiveRt = isLazy
 				? (sectionObj.section?.__resolveType ?? rt)
 				: rt;
+			resolvedSections.push(sectionObj);
 			return {
 				index: idx,
 				resolveType: rt,
@@ -797,12 +831,17 @@ export const getPageSectionsTool = createTool({
 			};
 		});
 
+		const pageDataWithResolved = {
+			...pageBlock,
+			sections: resolvedSections,
+		} as Record<string, unknown>;
+
 		return {
 			site,
 			env: context.env,
 			pageKey,
 			filePath,
-			pageData: pageBlock as Record<string, unknown>,
+			pageData: pageDataWithResolved,
 			sections,
 		};
 	},
