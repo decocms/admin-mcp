@@ -853,8 +853,7 @@ function MediaField({
 	const Icon = mediaType === "video" ? VideoIcon : FileIcon;
 	const placeholder =
 		mediaType === "video" ? "Click to select video" : "Click to select file";
-	const addLabel =
-		mediaType === "video" ? "Add video" : "Add file";
+	const addLabel = mediaType === "video" ? "Add video" : "Add file";
 
 	const filename = value
 		? (() => {

@@ -34,6 +34,7 @@ import {
 	MousePointer2,
 	MoreHorizontal,
 	Package,
+	Minus,
 	PanelLeft,
 	Plus,
 	RefreshCw,
@@ -400,7 +401,7 @@ function cmsInspectScript() {
 		[${WRAPPER_ATTR}] > [data-cms-badge] {
 			position: absolute;
 			top: 0;
-			left: 0;
+			right: 0;
 			transform: translateY(-100%);
 			background: #0ea5e9;
 			color: white;
@@ -879,6 +880,7 @@ interface CmsPanelProps {
 	onPageMetaChange: (name: string, path: string) => void;
 	onAddSection: () => void;
 	onClose: () => void;
+	onMinimize: () => void;
 	onSavedBlockEdit: () => void;
 	onSavedBlockCancel: () => void;
 	onSavedBlockSave: () => void;
@@ -904,6 +906,7 @@ function CmsPanel({
 	onPageMetaChange,
 	onAddSection,
 	onClose,
+	onMinimize,
 	onSavedBlockEdit,
 	onSavedBlockCancel,
 	onSavedBlockSave,
@@ -1017,9 +1020,17 @@ function CmsPanel({
 						</div>
 						<button
 							type="button"
+							onClick={onMinimize}
+							className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+							title="Minimize panel"
+						>
+							<Minus className="h-3.5 w-3.5" />
+						</button>
+						<button
+							type="button"
 							onClick={onClose}
 							className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-							title="Close CMS panel"
+							title="Exit CMS mode"
 						>
 							<X className="h-3.5 w-3.5" />
 						</button>
@@ -2085,6 +2096,7 @@ function FileExplorerWorkspace({
 		if (next) {
 			setViewMode("preview");
 			setCmsPanelVisible(true);
+			setCmsInspectActive(true);
 		}
 		if (!next) {
 			setCmsData(null);
@@ -2102,6 +2114,21 @@ function FileExplorerWorkspace({
 	};
 
 	const handleCmsPanelClose = () => {
+		// Closing the panel exits CMS mode entirely
+		setCmsOpen(false);
+		setCmsData(null);
+		setCmsSelectedSection(null);
+		setCmsSectionData(null);
+		setCmsError(undefined);
+		setCmsInspectActive(false);
+		setCmsInspectElement(null);
+		setCmsInspectInput("");
+		setCmsPanelVisible(true);
+		setCmsSavedBlock(false);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+	};
+
+	const handleCmsPanelMinimize = () => {
 		setCmsPanelVisible(false);
 		setCmsSelectedSection(null);
 		setCmsSectionData(null);
@@ -3136,54 +3163,57 @@ function FileExplorerWorkspace({
 						<div className="flex items-center justify-between gap-3 border-b px-3 py-2">
 							{/* View mode switcher */}
 							<div className="flex shrink-0 items-center rounded-lg border bg-muted/40">
-								{!cmsOpen && (
-									<>
-										<button
-											type="button"
-											className={cn(
-												"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
-												viewMode === "preview"
-													? "bg-background text-foreground shadow-xs"
-													: "text-muted-foreground hover:text-foreground",
-											)}
-											onClick={() => setViewMode("preview")}
-											disabled={envStatus !== "ready"}
-											title="Preview"
-										>
-											<Eye className="h-3.5 w-3.5" />
-										</button>
-										<button
-											type="button"
-											className={cn(
-												"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
-												viewMode === "visual"
-													? "bg-background text-foreground shadow-xs"
-													: "text-muted-foreground hover:text-foreground",
-											)}
-											onClick={() => setViewMode("visual")}
-											disabled={envStatus !== "ready"}
-											title="Visual editor — click any element to ask the AI about it"
-										>
-											<MousePointer2 className="h-3.5 w-3.5" />
-										</button>
-										<button
-											type="button"
-											className={cn(
-												"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
-												viewMode === "code"
-													? "bg-background text-foreground shadow-xs"
-													: "text-muted-foreground hover:text-foreground",
-											)}
-											onClick={() => setViewMode("code")}
-											title="Code"
-										>
-											<FileCode2 className="h-3.5 w-3.5" />
-										</button>
-									</>
-								)}
-								{(cmsOpen ||
-									viewMode === "preview" ||
-									viewMode === "visual") && (
+								<button
+									type="button"
+									className={cn(
+										"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
+										viewMode === "preview" && !cmsOpen
+											? "bg-background text-foreground shadow-xs"
+											: "text-muted-foreground hover:text-foreground",
+									)}
+									onClick={() => {
+										if (cmsOpen) handleCmsPanelClose();
+										setViewMode("preview");
+									}}
+									disabled={envStatus !== "ready"}
+									title="Preview"
+								>
+									<Eye className="h-3.5 w-3.5" />
+								</button>
+								<button
+									type="button"
+									className={cn(
+										"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
+										viewMode === "visual" && !cmsOpen
+											? "bg-background text-foreground shadow-xs"
+											: "text-muted-foreground hover:text-foreground",
+									)}
+									onClick={() => {
+										if (cmsOpen) handleCmsPanelClose();
+										setViewMode("visual");
+									}}
+									disabled={envStatus !== "ready"}
+									title="Visual editor — click any element to ask the AI about it"
+								>
+									<MousePointer2 className="h-3.5 w-3.5" />
+								</button>
+								<button
+									type="button"
+									className={cn(
+										"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
+										viewMode === "code" && !cmsOpen
+											? "bg-background text-foreground shadow-xs"
+											: "text-muted-foreground hover:text-foreground",
+									)}
+									onClick={() => {
+										if (cmsOpen) handleCmsPanelClose();
+										setViewMode("code");
+									}}
+									title="Code"
+								>
+									<FileCode2 className="h-3.5 w-3.5" />
+								</button>
+								{(viewMode === "preview" || viewMode === "visual") && (
 									<button
 										type="button"
 										className={cn(
@@ -3197,38 +3227,6 @@ function FileExplorerWorkspace({
 										title="CMS — browse and edit page sections"
 									>
 										<LayersIcon className="h-3.5 w-3.5" />
-									</button>
-								)}
-								{cmsOpen && (
-									<button
-										type="button"
-										className={cn(
-											"flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 text-sm transition-colors",
-											cmsInspectActive
-												? "bg-primary/10 text-primary"
-												: "text-muted-foreground hover:text-foreground",
-										)}
-										onClick={() => setCmsInspectActive((v) => !v)}
-										disabled={envStatus !== "ready"}
-										title="Inspect — click sections in the preview to edit"
-									>
-										<Crosshair className="h-3.5 w-3.5" />
-									</button>
-								)}
-								{cmsOpen && (
-									<button
-										type="button"
-										className={cn(
-											"flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 text-sm transition-colors",
-											cmsPanelVisible
-												? "bg-primary/10 text-primary"
-												: "text-muted-foreground hover:text-foreground",
-										)}
-										onClick={() => setCmsPanelVisible((v) => !v)}
-										disabled={envStatus !== "ready"}
-										title="Toggle CMS form panel"
-									>
-										<PanelLeft className="h-3.5 w-3.5" />
 									</button>
 								)}
 								{/* More options */}
@@ -3861,12 +3859,26 @@ function FileExplorerWorkspace({
 																onPageMetaChange={handleCmsPageMetaChange}
 																onAddSection={() => void handleCmsAddSection()}
 																onClose={handleCmsPanelClose}
+																onMinimize={handleCmsPanelMinimize}
 																onSavedBlockEdit={handleSavedBlockEdit}
 																onSavedBlockCancel={handleSavedBlockCancel}
 																onSavedBlockSave={() =>
 																	void handleSavedBlockSave()
 																}
 															/>
+														)}
+
+														{/* Minimized CMS restore button */}
+														{cmsOpen && !cmsPanelVisible && (
+															<button
+																type="button"
+																onClick={() => setCmsPanelVisible(true)}
+																className="absolute top-4 left-4 z-30 flex items-center gap-1.5 rounded-lg border bg-background/95 px-2.5 py-1.5 text-xs font-medium text-muted-foreground shadow-lg backdrop-blur-sm transition-colors hover:text-foreground"
+																title="Show CMS panel"
+															>
+																<PanelLeft className="h-3.5 w-3.5" />
+																<span>CMS</span>
+															</button>
 														)}
 
 														{/* Apps panel */}
@@ -4188,8 +4200,7 @@ function FileExplorerWorkspace({
 																						startTop: pos.top,
 																					};
 																					const onMove = (ev: PointerEvent) => {
-																						const d =
-																							cmsInspectDragRef.current;
+																						const d = cmsInspectDragRef.current;
 																						if (!d) return;
 																						setCmsInspectPopupPos({
 																							left: Math.max(
