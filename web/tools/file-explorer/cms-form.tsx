@@ -372,6 +372,348 @@ function CodeField({
 	);
 }
 
+// ─── rich text field (TipTap) ────────────────────────────────────────────────
+
+const TIPTAP_CONTENT_CSS = `
+.cms-tiptap {
+	min-height: 120px;
+	padding: 8px 12px;
+	font-size: 13px;
+	line-height: 1.6;
+	outline: none;
+}
+.cms-tiptap p { margin: 0 0 0.5em; }
+.cms-tiptap h1 { font-size: 1.5em; font-weight: 700; margin: 0.6em 0 0.3em; }
+.cms-tiptap h2 { font-size: 1.3em; font-weight: 700; margin: 0.5em 0 0.3em; }
+.cms-tiptap h3 { font-size: 1.1em; font-weight: 600; margin: 0.4em 0 0.2em; }
+.cms-tiptap ul, .cms-tiptap ol { padding-left: 1.4em; margin: 0.3em 0; }
+.cms-tiptap li { margin: 0.15em 0; }
+.cms-tiptap ul { list-style: disc; }
+.cms-tiptap ol { list-style: decimal; }
+.cms-tiptap blockquote { border-left: 3px solid oklch(0.7 0 0 / 0.25); padding-left: 0.8em; margin: 0.4em 0; color: oklch(0.55 0 0); }
+.cms-tiptap code { background: oklch(0.92 0 0); padding: 0.1em 0.3em; border-radius: 3px; font-size: 0.9em; }
+.cms-tiptap pre { background: oklch(0.15 0 0); color: oklch(0.9 0 0); padding: 0.6em 0.8em; border-radius: 6px; overflow-x: auto; margin: 0.4em 0; }
+.cms-tiptap pre code { background: none; padding: 0; }
+.cms-tiptap a { color: oklch(0.55 0.2 250); text-decoration: underline; }
+.cms-tiptap img { max-width: 100%; border-radius: 4px; margin: 0.3em 0; }
+.cms-tiptap hr { border: none; border-top: 1px solid oklch(0.7 0 0 / 0.25); margin: 0.8em 0; }
+.cms-tiptap p[style*="text-align: center"] { text-align: center; }
+.cms-tiptap p[style*="text-align: right"] { text-align: right; }
+.cms-tiptap-inline { min-height: 40px; padding: 6px 10px; font-size: 13px; line-height: 1.5; outline: none; }
+.cms-tiptap-inline p { margin: 0; }
+.cms-tiptap-inline a { color: oklch(0.55 0.2 250); text-decoration: underline; }
+`;
+
+let tiptapCssInjected = false;
+function ensureTiptapCss() {
+	if (tiptapCssInjected) return;
+	tiptapCssInjected = true;
+	const style = document.createElement("style");
+	style.textContent = TIPTAP_CONTENT_CSS;
+	document.head.appendChild(style);
+}
+
+function RichTextField({
+	label,
+	description,
+	value,
+	onChange,
+	inline = false,
+}: {
+	label: string;
+	description?: string;
+	value: string;
+	onChange: (v: string) => void;
+	inline?: boolean;
+}) {
+	const [editorMod, setEditorMod] = useState<{
+		useEditor: typeof import("@tiptap/react").useEditor;
+		EditorContent: typeof import("@tiptap/react").EditorContent;
+	} | null>(null);
+
+	useEffect(() => {
+		ensureTiptapCss();
+		let cancelled = false;
+		Promise.all([
+			import("@tiptap/react"),
+			import("@tiptap/starter-kit"),
+			import("@tiptap/extension-link"),
+			import("@tiptap/extension-underline"),
+			...(inline
+				? []
+				: [
+						import("@tiptap/extension-image"),
+						import("@tiptap/extension-text-align"),
+					]),
+		]).then((mods) => {
+			if (cancelled) return;
+			const [react, starterKit, link, underline, image, textAlign] = mods;
+
+			const extensions = inline
+				? [
+						starterKit.default.configure({
+							heading: false,
+							blockquote: false,
+							codeBlock: false,
+							horizontalRule: false,
+							bulletList: false,
+							orderedList: false,
+						}),
+						link.default.configure({ openOnClick: false }),
+						underline.default,
+					]
+				: [
+						starterKit.default,
+						link.default.configure({ openOnClick: false }),
+						underline.default,
+						(image as { default: { configure: (opts: Record<string, unknown>) => unknown } }).default.configure({ inline: true }),
+						(textAlign as { default: { configure: (opts: Record<string, unknown>) => unknown } }).default.configure({
+							types: ["heading", "paragraph"],
+						}),
+					];
+
+			setEditorMod({
+				useEditor: react.useEditor,
+				EditorContent: react.EditorContent,
+				_extensions: extensions,
+			} as unknown as typeof editorMod);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [inline]);
+
+	if (!editorMod) {
+		return (
+			<div className="space-y-1">
+				<FieldLabel label={label} description={description} />
+				<div className="flex h-20 items-center justify-center rounded-md border text-xs text-muted-foreground">
+					<Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+					Loading editor…
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<RichTextFieldInner
+			label={label}
+			description={description}
+			value={value}
+			onChange={onChange}
+			inline={inline}
+			editorMod={editorMod}
+		/>
+	);
+}
+
+function RichTextFieldInner({
+	label,
+	description,
+	value,
+	onChange,
+	inline,
+	editorMod,
+}: {
+	label: string;
+	description?: string;
+	value: string;
+	onChange: (v: string) => void;
+	inline: boolean;
+	editorMod: Record<string, unknown>;
+}) {
+	const { useEditor, EditorContent, _extensions } = editorMod as {
+		useEditor: typeof import("@tiptap/react").useEditor;
+		EditorContent: typeof import("@tiptap/react").EditorContent;
+		_extensions: unknown[];
+	};
+
+	const onChangeRef = useRef(onChange);
+	onChangeRef.current = onChange;
+
+	const editor = useEditor({
+		extensions: _extensions as import("@tiptap/core").Extension[],
+		content: value,
+		editorProps: {
+			attributes: { class: inline ? "cms-tiptap-inline" : "cms-tiptap" },
+		},
+		onUpdate: ({ editor: e }) => {
+			onChangeRef.current(e.getHTML());
+		},
+	});
+
+	// Sync external value changes
+	useEffect(() => {
+		if (editor && !editor.isFocused && value !== editor.getHTML()) {
+			editor.commands.setContent(value, { emitUpdate: false });
+		}
+	}, [value, editor]);
+
+	if (!editor) return null;
+
+	return (
+		<div className="space-y-1">
+			<FieldLabel label={label} description={description} />
+			<div className="overflow-hidden rounded-md border border-input">
+				{/* Toolbar */}
+				<div className="flex flex-wrap items-center gap-0.5 border-b bg-muted/30 px-1.5 py-1">
+					{!inline && (
+						<>
+							<TiptapBtn
+								active={editor.isActive("heading", { level: 1 })}
+								onClick={() =>
+									editor.chain().focus().toggleHeading({ level: 1 }).run()
+								}
+								title="Heading 1"
+							>
+								H1
+							</TiptapBtn>
+							<TiptapBtn
+								active={editor.isActive("heading", { level: 2 })}
+								onClick={() =>
+									editor.chain().focus().toggleHeading({ level: 2 }).run()
+								}
+								title="Heading 2"
+							>
+								H2
+							</TiptapBtn>
+							<TiptapBtn
+								active={editor.isActive("heading", { level: 3 })}
+								onClick={() =>
+									editor.chain().focus().toggleHeading({ level: 3 }).run()
+								}
+								title="Heading 3"
+							>
+								H3
+							</TiptapBtn>
+							<TiptapSep />
+						</>
+					)}
+					<TiptapBtn
+						active={editor.isActive("bold")}
+						onClick={() => editor.chain().focus().toggleBold().run()}
+						title="Bold"
+					>
+						<span className="font-bold">B</span>
+					</TiptapBtn>
+					<TiptapBtn
+						active={editor.isActive("italic")}
+						onClick={() => editor.chain().focus().toggleItalic().run()}
+						title="Italic"
+					>
+						<span className="italic">I</span>
+					</TiptapBtn>
+					<TiptapBtn
+						active={editor.isActive("underline")}
+						onClick={() => (editor.chain().focus() as unknown as { toggleUnderline: () => { run: () => void } }).toggleUnderline().run()}
+						title="Underline"
+					>
+						<span className="underline">U</span>
+					</TiptapBtn>
+					<TiptapBtn
+						active={editor.isActive("strike")}
+						onClick={() => editor.chain().focus().toggleStrike().run()}
+						title="Strikethrough"
+					>
+						<span className="line-through">S</span>
+					</TiptapBtn>
+					<TiptapSep />
+					<TiptapBtn
+						active={editor.isActive("link")}
+						onClick={() => {
+							if (editor.isActive("link")) {
+								(editor.chain().focus() as unknown as { unsetLink: () => { run: () => void } }).unsetLink().run();
+							} else {
+								const url = prompt("URL:");
+								if (url) {
+									(editor.chain().focus() as unknown as { setLink: (opts: { href: string }) => { run: () => void } }).setLink({ href: url }).run();
+								}
+							}
+						}}
+						title="Link"
+					>
+						<Link className="h-3 w-3" />
+					</TiptapBtn>
+					{!inline && (
+						<>
+							<TiptapSep />
+							<TiptapBtn
+								active={editor.isActive("bulletList")}
+								onClick={() =>
+									editor.chain().focus().toggleBulletList().run()
+								}
+								title="Bullet list"
+							>
+								•≡
+							</TiptapBtn>
+							<TiptapBtn
+								active={editor.isActive("orderedList")}
+								onClick={() =>
+									editor.chain().focus().toggleOrderedList().run()
+								}
+								title="Ordered list"
+							>
+								1.
+							</TiptapBtn>
+							<TiptapBtn
+								active={editor.isActive("blockquote")}
+								onClick={() =>
+									editor.chain().focus().toggleBlockquote().run()
+								}
+								title="Blockquote"
+							>
+								❝
+							</TiptapBtn>
+							<TiptapBtn
+								active={editor.isActive("codeBlock")}
+								onClick={() =>
+									editor.chain().focus().toggleCodeBlock().run()
+								}
+								title="Code block"
+							>
+								{"</>"}
+							</TiptapBtn>
+						</>
+					)}
+				</div>
+				<EditorContent editor={editor} />
+			</div>
+		</div>
+	);
+}
+
+function TiptapBtn({
+	active,
+	onClick,
+	title,
+	children,
+}: {
+	active: boolean;
+	onClick: () => void;
+	title: string;
+	children: React.ReactNode;
+}) {
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			title={title}
+			className={cn(
+				"flex h-6 min-w-[24px] items-center justify-center rounded px-1 text-[11px] transition-colors",
+				active
+					? "bg-primary/15 text-primary"
+					: "text-muted-foreground hover:bg-accent hover:text-foreground",
+			)}
+		>
+			{children}
+		</button>
+	);
+}
+
+function TiptapSep() {
+	return <div className="mx-0.5 h-4 w-px bg-border" />;
+}
+
 // ─── number field ─────────────────────────────────────────────────────────────
 
 function NumberField({
@@ -2199,6 +2541,33 @@ function FormField({
 						description={description}
 						value={effectiveValue as string}
 						onChange={onChange as (v: string) => void}
+					/>
+				);
+			}
+			if (
+				schemaFormat === "html" ||
+				schemaFormat === "rich-text"
+			) {
+				return (
+					<RichTextField
+						label={label}
+						description={description}
+						value={effectiveValue as string}
+						onChange={onChange as (v: string) => void}
+					/>
+				);
+			}
+			if (
+				schemaFormat === "html-inline" ||
+				schemaFormat === "rich-text-inline"
+			) {
+				return (
+					<RichTextField
+						label={label}
+						description={description}
+						value={effectiveValue as string}
+						onChange={onChange as (v: string) => void}
+						inline
 					/>
 				);
 			}

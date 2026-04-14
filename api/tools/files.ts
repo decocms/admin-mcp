@@ -803,10 +803,7 @@ export const getPageSectionsTool = createTool({
 			if (!isLazy && isSavedBlockRef(rt)) {
 				const resolvedBlock = decofile[rt] as Block;
 				const resolvedRt = resolvedBlock?.__resolveType ?? rt;
-				resolvedSections.push({
-					...sectionObj,
-					__resolvedData: resolvedBlock,
-				});
+				resolvedSections.push(sectionObj);
 				return {
 					index: idx,
 					resolveType: rt,
@@ -816,6 +813,7 @@ export const getPageSectionsTool = createTool({
 					savedBlockKey: rt,
 					savedBlockFilePath: `/.deco/blocks/${rt}.json`,
 					resolvedResolveType: resolvedRt,
+					__resolvedData: resolvedBlock,
 				};
 			}
 

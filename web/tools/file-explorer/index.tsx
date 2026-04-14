@@ -2148,8 +2148,8 @@ function FileExplorerWorkspace({
 		setCmsSavedBlock(isSaved ? "readonly" : false);
 
 		let data: Record<string, unknown> | null;
-		if (isSaved && raw) {
-			data = (raw as Record<string, unknown>).__resolvedData as Record<
+		if (isSaved) {
+			data = (displaySection as Record<string, unknown>).__resolvedData as Record<
 				string,
 				unknown
 			> | null;
@@ -2248,9 +2248,9 @@ function FileExplorerWorkspace({
 		const snap = cmsDataRef.current;
 		const idx = cmsSelectedSectionRef.current;
 		if (snap && idx !== null) {
-			const raw = (snap.pageData.sections as Record<string, unknown>[])[idx];
+			const displaySection = snap.sections[idx];
 			const resolved =
-				(raw?.__resolvedData as Record<string, unknown> | null) ?? null;
+				((displaySection as Record<string, unknown>)?.__resolvedData as Record<string, unknown> | null) ?? null;
 			setCmsSectionData(resolved);
 		}
 		setCmsSavedBlock("readonly");
@@ -2277,12 +2277,12 @@ function FileExplorerWorkspace({
 			});
 			if (result?.isError) throw new Error("write_file failed");
 
-			const sections = [
-				...(snap.pageData.sections as Record<string, unknown>[]),
-			];
-			sections[idx] = { ...sections[idx], __resolvedData: cmsSectionData };
-			const updatedPageData = { ...snap.pageData, sections };
-			const next = { ...snap, pageData: updatedPageData };
+			// Update only the display sections (not pageData — the page JSON
+			// must keep just {"__resolveType":"Footer"} for saved blocks)
+			const updatedDisplaySections = snap.sections.map((s, i) =>
+				i === idx ? { ...s, __resolvedData: cmsSectionData } : s,
+			);
+			const next = { ...snap, sections: updatedDisplaySections };
 			setCmsData(next);
 			cmsDataRef.current = next;
 			setCmsSavedBlock("readonly");
