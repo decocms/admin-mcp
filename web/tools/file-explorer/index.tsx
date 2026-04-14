@@ -1246,6 +1246,8 @@ function FileExplorerWorkspace({
 
 	// ── refs ────────────────────────────────────────────────────────────────────
 	const selectedFileRef = useRef<string | null>(null);
+	const fileBuffersRef = useRef(fileBuffers);
+	fileBuffersRef.current = fileBuffers;
 	const saveActiveFileRef = useRef<(() => Promise<void>) | null>(null);
 	const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
 	const pagesContainerRef = useRef<HTMLDivElement>(null);
@@ -1479,14 +1481,10 @@ function FileExplorerWorkspace({
 		}
 	}, [cmsInspectElement]);
 
-	const prevPreviewPathRef = useRef(previewPath);
 	useEffect(() => {
-		if (prevPreviewPathRef.current !== previewPath) {
-			prevPreviewPathRef.current = previewPath;
-			setCmsInspectElement(null);
-			setCmsInspectInput("");
-		}
-	});
+		setCmsInspectElement(null);
+		setCmsInspectInput("");
+	}, [previewPath]);
 
 	useEffect(() => {
 		if (codePromptSelection) {
@@ -1685,7 +1683,7 @@ function FileExplorerWorkspace({
 	// Load file content on selection
 	useEffect(() => {
 		if (!userEnv || !selectedFile) return;
-		if (fileBuffers[selectedFile]?.loaded) return;
+		if (fileBuffersRef.current[selectedFile]?.loaded) return;
 
 		let cancelled = false;
 		const run = async () => {
@@ -1726,7 +1724,7 @@ function FileExplorerWorkspace({
 		return () => {
 			cancelled = true;
 		};
-	}, [app, fileBuffers, userEnv, selectedFile]);
+	}, [app, userEnv, selectedFile]);
 
 	// Close pages dropdown on outside click
 	useEffect(() => {
