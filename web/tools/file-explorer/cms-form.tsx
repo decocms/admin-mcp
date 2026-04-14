@@ -1919,7 +1919,10 @@ export function SectionForm({
 			{readOnly && (
 				<div
 					className="sticky top-0 z-10 border-b px-3 py-2.5"
-					style={{ borderColor: "oklch(0.7278 0.151 289 / 0.25)" }}
+					style={{
+						borderColor: "oklch(0.7278 0.151 289 / 0.25)",
+						background: "oklch(0.97 0.01 289)",
+					}}
 				>
 					<p
 						className="mb-2 text-[11px] leading-snug"
@@ -1940,7 +1943,10 @@ export function SectionForm({
 			{!readOnly && savedBlockKey && (
 				<div
 					className="sticky top-0 z-10 border-b px-3 py-2.5"
-					style={{ borderColor: "oklch(0.7278 0.151 289 / 0.25)" }}
+					style={{
+						borderColor: "oklch(0.7278 0.151 289 / 0.25)",
+						background: "oklch(0.97 0.01 289)",
+					}}
 				>
 					<p
 						className="mb-1.5 text-[11px] leading-snug"

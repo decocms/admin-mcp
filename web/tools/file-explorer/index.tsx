@@ -1192,6 +1192,16 @@ function FileExplorerWorkspace({
 		useState<CmsInspectPayload | null>(null);
 	const [cmsInspectInput, setCmsInspectInput] = useState("");
 	const [isSendingCmsInspect, setIsSendingCmsInspect] = useState(false);
+	const [cmsInspectPopupPos, setCmsInspectPopupPos] = useState<{
+		left: number;
+		top: number;
+	} | null>(null);
+	const cmsInspectDragRef = useRef<{
+		startX: number;
+		startY: number;
+		startLeft: number;
+		startTop: number;
+	} | null>(null);
 
 	// ── Add-section picker state ──────────────────────────────────────────────
 	const [addSectionOpen, setAddSectionOpen] = useState(false);
@@ -1477,6 +1487,7 @@ function FileExplorerWorkspace({
 
 	useEffect(() => {
 		if (cmsInspectElement) {
+			setCmsInspectPopupPos(null);
 			setTimeout(() => cmsInspectInputRef.current?.focus(), 50);
 		}
 	}, [cmsInspectElement]);
@@ -4133,35 +4144,97 @@ function FileExplorerWorkspace({
 															cmsInspectElement &&
 															(() => {
 																const POPUP_W = 320;
-																const POPUP_H = 44;
 																const PAD = 12;
 																const { x, y } = cmsInspectElement.position;
 																const { width: vw, height: vh } =
 																	cmsInspectElement.viewport;
-																const left = Math.max(
+																const defaultLeft = Math.max(
 																	PAD,
 																	Math.min(x - POPUP_W / 2, vw - POPUP_W - PAD),
 																);
 																const isNearBottom = y / vh > 0.68;
-																const top = isNearBottom
-																	? Math.max(PAD, y - POPUP_H - 18)
-																	: Math.min(y + 18, vh - POPUP_H - PAD);
+																const defaultTop = isNearBottom
+																	? Math.max(PAD, y - 62)
+																	: Math.min(y + 18, vh - 62);
+																const pos = cmsInspectPopupPos ?? {
+																	left: defaultLeft,
+																	top: defaultTop,
+																};
 																return (
 																	<div
-																		className="absolute z-30 pointer-events-none"
+																		className="absolute z-30"
 																		style={{
-																			left: `${(left / vw) * 100}%`,
-																			top: `${(top / vh) * 100}%`,
+																			left: `${(pos.left / vw) * 100}%`,
+																			top: `${(pos.top / vh) * 100}%`,
 																			width: `${POPUP_W}px`,
 																		}}
 																	>
 																		<form
-																			className="pointer-events-auto flex w-full items-center gap-1.5 rounded-full border border-border bg-background/95 px-3 py-1.5 shadow-xl backdrop-blur-sm"
+																			className="flex w-full items-center gap-1.5 rounded-full border border-border bg-background/95 px-1 py-1 shadow-xl backdrop-blur-sm"
 																			onSubmit={(e) => {
 																				e.preventDefault();
 																				void handleCmsInspectSend();
 																			}}
 																		>
+																			{/* Drag handle */}
+																			<div
+																				className="flex h-6 w-6 shrink-0 cursor-grab items-center justify-center rounded-full text-muted-foreground/60 hover:text-muted-foreground active:cursor-grabbing"
+																				onPointerDown={(e) => {
+																					e.preventDefault();
+																					cmsInspectDragRef.current = {
+																						startX: e.clientX,
+																						startY: e.clientY,
+																						startLeft: pos.left,
+																						startTop: pos.top,
+																					};
+																					const onMove = (ev: PointerEvent) => {
+																						const d =
+																							cmsInspectDragRef.current;
+																						if (!d) return;
+																						setCmsInspectPopupPos({
+																							left: Math.max(
+																								PAD,
+																								Math.min(
+																									d.startLeft +
+																										ev.clientX -
+																										d.startX,
+																									vw - POPUP_W - PAD,
+																								),
+																							),
+																							top: Math.max(
+																								PAD,
+																								Math.min(
+																									d.startTop +
+																										ev.clientY -
+																										d.startY,
+																									vh - 62,
+																								),
+																							),
+																						});
+																					};
+																					const onUp = () => {
+																						cmsInspectDragRef.current = null;
+																						window.removeEventListener(
+																							"pointermove",
+																							onMove,
+																						);
+																						window.removeEventListener(
+																							"pointerup",
+																							onUp,
+																						);
+																					};
+																					window.addEventListener(
+																						"pointermove",
+																						onMove,
+																					);
+																					window.addEventListener(
+																						"pointerup",
+																						onUp,
+																					);
+																				}}
+																			>
+																				<GripVertical className="h-3 w-3" />
+																			</div>
 																			<input
 																				ref={cmsInspectInputRef}
 																				type="text"
@@ -4207,6 +4280,18 @@ function FileExplorerWorkspace({
 																						/>
 																					</svg>
 																				)}
+																			</button>
+																			{/* Close button */}
+																			<button
+																				type="button"
+																				onClick={() => {
+																					setCmsInspectElement(null);
+																					setCmsInspectInput("");
+																				}}
+																				className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground/60 hover:bg-accent hover:text-foreground"
+																				title="Close"
+																			>
+																				<X className="h-3 w-3" />
 																			</button>
 																		</form>
 																	</div>
