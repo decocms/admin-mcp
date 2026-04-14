@@ -2,10 +2,13 @@ import {
 	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
+	Code2,
 	GripVertical,
+	FileIcon,
 	ImageIcon,
 	Link,
 	Loader2,
+	VideoIcon,
 	MoreHorizontal,
 	Plus,
 	Search,
@@ -29,6 +32,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Input } from "@/components/ui/input.tsx";
+import { Textarea } from "@/components/ui/textarea.tsx";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import {
 	Select,
@@ -176,6 +180,194 @@ function TextField({
 				onChange={(e) => onChange(e.target.value)}
 				className="h-7 text-xs"
 			/>
+		</div>
+	);
+}
+
+// ─── textarea field ──────────────────────────────────────────────────────────
+
+function TextareaField({
+	label,
+	description,
+	value,
+	onChange,
+}: {
+	label: string;
+	description?: string;
+	value: string;
+	onChange: (v: string) => void;
+}) {
+	return (
+		<div className="space-y-1">
+			<FieldLabel label={label} description={description} />
+			<Textarea
+				value={value}
+				onChange={(e) => onChange(e.target.value)}
+				rows={5}
+				className="min-h-[unset] text-xs"
+			/>
+		</div>
+	);
+}
+
+// ─── color input field ───────────────────────────────────────────────────────
+
+function ColorInputField({
+	label,
+	description,
+	value,
+	onChange,
+}: {
+	label: string;
+	description?: string;
+	value: string;
+	onChange: (v: string) => void;
+}) {
+	const [color, setColor] = useState(value || "#000000");
+
+	useEffect(() => {
+		setColor(value || "#000000");
+	}, [value]);
+
+	return (
+		<div className="space-y-1">
+			<FieldLabel label={label} description={description} />
+			<label className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-md border border-input bg-transparent px-2 text-xs shadow-xs transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
+				<style>
+					{`input[type="color"].cms-color-swatch{-webkit-appearance:none;border:none;width:18px;height:18px;border-radius:999px;padding:0;cursor:pointer}
+input[type="color"].cms-color-swatch::-webkit-color-swatch-wrapper{padding:0}
+input[type="color"].cms-color-swatch::-webkit-color-swatch{border:1px solid oklch(0.7 0 0 / 0.25);border-radius:999px}`}
+				</style>
+				<input
+					type="color"
+					className="cms-color-swatch outline-1 outline outline-border"
+					value={color}
+					onChange={(e) => {
+						setColor(e.target.value);
+						onChange(e.target.value);
+					}}
+				/>
+				<input
+					type="text"
+					className="min-w-0 flex-1 bg-transparent uppercase outline-none"
+					value={color}
+					onChange={(e) => {
+						setColor(e.target.value);
+						onChange(e.target.value);
+					}}
+				/>
+			</label>
+		</div>
+	);
+}
+
+// ─── date / datetime field ───────────────────────────────────────────────────
+
+function formatForNativeInput(
+	dateStr: string | undefined,
+	mode: "date" | "date-time",
+): string {
+	if (!dateStr) return "";
+	const date = new Date(dateStr);
+	if (Number.isNaN(date.getTime())) return dateStr;
+	const y = date.getFullYear();
+	const m = String(date.getMonth() + 1).padStart(2, "0");
+	const d = String(date.getDate()).padStart(2, "0");
+	if (mode === "date") return `${y}-${m}-${d}`;
+	const hh = String(date.getHours()).padStart(2, "0");
+	const mm = String(date.getMinutes()).padStart(2, "0");
+	return `${y}-${m}-${d}T${hh}:${mm}`;
+}
+
+function DateField({
+	label,
+	description,
+	value,
+	onChange,
+	mode = "date",
+}: {
+	label: string;
+	description?: string;
+	value: string;
+	onChange: (v: string) => void;
+	mode?: "date" | "date-time";
+}) {
+	const inputType = mode === "date" ? "date" : "datetime-local";
+	const inputRef = useRef<HTMLInputElement>(null);
+	const [local, setLocal] = useState(() => formatForNativeInput(value, mode));
+	const internalChange = useRef(false);
+
+	useEffect(() => {
+		if (internalChange.current) {
+			internalChange.current = false;
+			return;
+		}
+		setLocal(formatForNativeInput(value, mode));
+	}, [value, mode]);
+
+	const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const raw = e.target.value;
+		setLocal(raw);
+		internalChange.current = true;
+		if (!raw) {
+			onChange("");
+			return;
+		}
+		// Native date input already gives YYYY-MM-DD, datetime-local gives YYYY-MM-DDTHH:MM
+		// For date mode, pass through directly (avoids timezone issues with new Date())
+		if (mode === "date") {
+			onChange(raw);
+		} else {
+			const parsed = new Date(raw);
+			if (!Number.isNaN(parsed.getTime())) {
+				onChange(parsed.toISOString());
+			}
+		}
+	};
+
+	return (
+		<div className="space-y-1">
+			<FieldLabel label={label} description={description} />
+			<input
+				ref={inputRef}
+				type={inputType}
+				value={local}
+				onChange={handleChange}
+				className="flex h-7 w-full rounded-md border border-input bg-transparent px-2 text-xs shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+			/>
+		</div>
+	);
+}
+
+// ─── code field ──────────────────────────────────────────────────────────────
+
+function CodeField({
+	label,
+	description,
+	value,
+	onChange,
+}: {
+	label: string;
+	description?: string;
+	value: string;
+	onChange: (v: string) => void;
+}) {
+	return (
+		<div className="space-y-1">
+			<FieldLabel label={label} description={description} />
+			<div className="relative overflow-hidden rounded-md border border-input">
+				<div className="flex items-center gap-1.5 border-b bg-muted/30 px-2 py-1">
+					<Code2 className="h-3 w-3 text-muted-foreground" />
+					<span className="text-[10px] text-muted-foreground">Code</span>
+				</div>
+				<textarea
+					value={value}
+					onChange={(e) => onChange(e.target.value)}
+					rows={10}
+					spellCheck={false}
+					className="w-full resize-y bg-muted/10 px-3 py-2 font-mono text-xs leading-relaxed outline-none"
+				/>
+			</div>
 		</div>
 	);
 }
@@ -642,6 +834,116 @@ function ImageField({
 	);
 }
 
+// ─── media field (video / generic file) ──────────────────────────────────────
+
+function MediaField({
+	label,
+	description,
+	value,
+	onChange,
+	mediaType,
+}: {
+	label: string;
+	description?: string;
+	value: string;
+	onChange: (v: string) => void;
+	mediaType: "video" | "file";
+}) {
+	const [open, setOpen] = useState(false);
+	const Icon = mediaType === "video" ? VideoIcon : FileIcon;
+	const placeholder =
+		mediaType === "video" ? "Click to select video" : "Click to select file";
+	const addLabel =
+		mediaType === "video" ? "Add video" : "Add file";
+
+	const filename = value
+		? (() => {
+				try {
+					return decodeURIComponent(
+						new URL(value).pathname.split("/").pop() ?? value,
+					);
+				} catch {
+					return value.split("/").pop() ?? value;
+				}
+			})()
+		: "";
+	const ext = filename.includes(".")
+		? filename.split(".").pop()?.toUpperCase()
+		: undefined;
+	const stem = ext ? filename.slice(0, filename.lastIndexOf(".")) : filename;
+
+	return (
+		<div className="space-y-1.5">
+			<FieldLabel label={label} description={description} />
+			<div className="overflow-hidden rounded-lg border bg-muted/20">
+				<button
+					type="button"
+					className="w-full text-left"
+					onClick={() => setOpen(true)}
+				>
+					{value ? (
+						<div className="flex items-center gap-2 px-3 py-3">
+							<Icon className="h-5 w-5 shrink-0 text-muted-foreground" />
+							<div className="min-w-0 flex-1">
+								<p className="truncate font-mono text-xs font-semibold">
+									{stem}
+								</p>
+								{ext && (
+									<p className="text-[10px] uppercase text-muted-foreground">
+										{ext}
+									</p>
+								)}
+							</div>
+						</div>
+					) : (
+						<div className="flex h-20 flex-col items-center justify-center gap-1.5 text-muted-foreground">
+							<Icon className="h-8 w-8" />
+							<span className="text-xs">{placeholder}</span>
+						</div>
+					)}
+				</button>
+				<div className="flex gap-2 border-t px-2 py-2">
+					<Button
+						variant="outline"
+						size="sm"
+						className="h-8 flex-1 text-xs"
+						onClick={() => setOpen(true)}
+					>
+						{value ? (
+							<>
+								Change <ChevronDown className="ml-1 h-3 w-3" />
+							</>
+						) : (
+							<>
+								<Icon className="mr-1 h-3 w-3" /> {addLabel}
+							</>
+						)}
+					</Button>
+					{value && (
+						<Button
+							variant="outline"
+							size="icon"
+							className="h-8 w-8 shrink-0"
+							onClick={() => onChange("")}
+						>
+							<Trash2 className="h-3.5 w-3.5" />
+						</Button>
+					)}
+				</div>
+			</div>
+
+			<ImagePickerModal
+				open={open}
+				onClose={() => setOpen(false)}
+				onSelect={(url) => {
+					onChange(url);
+					setOpen(false);
+				}}
+			/>
+		</div>
+	);
+}
+
 // ─── array field ──────────────────────────────────────────────────────────────
 
 function emptyItemFrom(template: FormValue): FormValue {
@@ -985,6 +1287,7 @@ function ObjectField({
 								schemaType={prop?.type}
 								schemaDefault={prop?.default}
 								schemaEnum={prop?.enum}
+								schemaFormat={prop?.format}
 								fieldSchema={prop?.properties}
 								anyOfRefs={prop?.anyOfRefs}
 								schemasMap={schemasMap}
@@ -1659,6 +1962,7 @@ function BlockRefField({
 								schemaType={prop?.type}
 								schemaDefault={prop?.default}
 								schemaEnum={prop?.enum}
+								schemaFormat={prop?.format}
 								fieldSchema={prop?.properties}
 								anyOfRefs={prop?.anyOfRefs}
 								schemasMap={schemasMap}
@@ -1686,6 +1990,7 @@ function FormField({
 	schemaType,
 	schemaDefault,
 	schemaEnum,
+	schemaFormat,
 	description,
 	fieldSchema,
 	anyOfRefs,
@@ -1704,6 +2009,8 @@ function FormField({
 	schemaDefault?: unknown;
 	/** Enum options from the schema */
 	schemaEnum?: unknown[];
+	/** Format hint from the schema (e.g. "color-input", "textarea", "image-uri") */
+	schemaFormat?: string;
 	description?: string;
 	/** Nested schema properties for object-type fields */
 	fieldSchema?: SchemaProperties;
@@ -1811,6 +2118,92 @@ function FormField({
 					/>
 				);
 			}
+			// ── format-based widgets ──────────────────────────────────
+			if (schemaFormat === "color-input") {
+				return (
+					<ColorInputField
+						label={label}
+						description={description}
+						value={effectiveValue as string}
+						onChange={onChange as (v: string) => void}
+					/>
+				);
+			}
+			if (schemaFormat === "textarea") {
+				return (
+					<TextareaField
+						label={label}
+						description={description}
+						value={effectiveValue as string}
+						onChange={onChange as (v: string) => void}
+					/>
+				);
+			}
+			if (schemaFormat === "image-uri") {
+				return (
+					<ImageField
+						label={label}
+						description={description}
+						value={effectiveValue as string}
+						onChange={onChange as (v: string) => void}
+					/>
+				);
+			}
+			if (schemaFormat === "video-uri") {
+				return (
+					<MediaField
+						label={label}
+						description={description}
+						value={effectiveValue as string}
+						onChange={onChange as (v: string) => void}
+						mediaType="video"
+					/>
+				);
+			}
+			if (schemaFormat === "file-uri") {
+				return (
+					<MediaField
+						label={label}
+						description={description}
+						value={effectiveValue as string}
+						onChange={onChange as (v: string) => void}
+						mediaType="file"
+					/>
+				);
+			}
+			if (schemaFormat === "date") {
+				return (
+					<DateField
+						label={label}
+						description={description}
+						value={effectiveValue as string}
+						onChange={onChange as (v: string) => void}
+						mode="date"
+					/>
+				);
+			}
+			if (schemaFormat === "date-time") {
+				return (
+					<DateField
+						label={label}
+						description={description}
+						value={effectiveValue as string}
+						onChange={onChange as (v: string) => void}
+						mode="date-time"
+					/>
+				);
+			}
+			if (schemaFormat === "code") {
+				return (
+					<CodeField
+						label={label}
+						description={description}
+						value={effectiveValue as string}
+						onChange={onChange as (v: string) => void}
+					/>
+				);
+			}
+			// ── name heuristic fallback ──────────────────────────────
 			if (isImageField(name, effectiveValue)) {
 				return (
 					<ImageField
@@ -1994,6 +2387,7 @@ export function SectionForm({
 							schemaType={prop?.type}
 							schemaDefault={prop?.default}
 							schemaEnum={prop?.enum}
+							schemaFormat={prop?.format}
 							fieldSchema={prop?.properties}
 							anyOfRefs={prop?.anyOfRefs}
 							schemasMap={schemasMap}
