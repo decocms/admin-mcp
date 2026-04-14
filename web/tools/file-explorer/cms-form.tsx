@@ -1916,34 +1916,9 @@ export function SectionForm({
 }`}
 				</style>
 			)}
-			<div
-				className="space-y-4 p-3"
-				{...(readOnly ? { "data-cms-readonly": "" } : {})}
-			>
-				{keys.map((key) => {
-					const prop = schema?.[key];
-					return (
-						<FormField
-							key={key}
-							name={key}
-							label={prop?.title}
-							description={prop?.description}
-							schemaType={prop?.type}
-							schemaDefault={prop?.default}
-							schemaEnum={prop?.enum}
-							fieldSchema={prop?.properties}
-							anyOfRefs={prop?.anyOfRefs}
-							schemasMap={schemasMap}
-							value={data[key] as FormValue}
-							onChange={(v) => onChange({ ...data, [key]: v })}
-							depth={0}
-						/>
-					);
-				})}
-			</div>
 			{readOnly && (
 				<div
-					className="sticky bottom-0 border-t bg-background px-3 py-3"
+					className="sticky top-0 z-10 border-b px-3 py-2.5"
 					style={{ borderColor: "oklch(0.7278 0.151 289 / 0.25)" }}
 				>
 					<p
@@ -1964,14 +1939,14 @@ export function SectionForm({
 			)}
 			{!readOnly && savedBlockKey && (
 				<div
-					className="sticky bottom-0 border-t bg-background px-3 py-3"
+					className="sticky top-0 z-10 border-b px-3 py-2.5"
 					style={{ borderColor: "oklch(0.7278 0.151 289 / 0.25)" }}
 				>
 					<p
-						className="mb-2 text-[11px] leading-snug"
+						className="mb-1.5 text-[11px] leading-snug"
 						style={{ color: "oklch(0.55 0.12 289)" }}
 					>
-						You are editing a shared block. Save to apply changes everywhere.
+						Editing shared block. Save to apply everywhere.
 					</p>
 					<div className="flex gap-2">
 						<button
@@ -1998,6 +1973,31 @@ export function SectionForm({
 					</div>
 				</div>
 			)}
+			<div
+				className="space-y-4 p-3"
+				{...(readOnly ? { "data-cms-readonly": "" } : {})}
+			>
+				{keys.map((key) => {
+					const prop = schema?.[key];
+					return (
+						<FormField
+							key={key}
+							name={key}
+							label={prop?.title}
+							description={prop?.description}
+							schemaType={prop?.type}
+							schemaDefault={prop?.default}
+							schemaEnum={prop?.enum}
+							fieldSchema={prop?.properties}
+							anyOfRefs={prop?.anyOfRefs}
+							schemasMap={schemasMap}
+							value={data[key] as FormValue}
+							onChange={(v) => onChange({ ...data, [key]: v })}
+							depth={0}
+						/>
+					);
+				})}
+			</div>
 		</div>
 	);
 }

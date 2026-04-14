@@ -940,11 +940,32 @@ function CmsPanel({
 		if (srcIdx !== -1 && destIdx !== -1) onReorderSections(srcIdx, destIdx);
 	};
 
+	const editingGlobally = savedBlock === "editing";
+
 	return (
-		<div className="m-4 absolute top-0 left-0 bottom-0 z-30 flex w-72 flex-col overflow-hidden rounded-xl border bg-background shadow-2xl">
+		<div
+			className="m-4 absolute top-0 left-0 bottom-0 z-30 flex w-72 flex-col overflow-hidden rounded-xl border shadow-2xl transition-colors"
+			style={
+				editingGlobally
+					? {
+							borderColor: "oklch(0.7278 0.151 289 / 0.35)",
+							background: "oklch(0.97 0.01 289)",
+							boxShadow:
+								"0 25px 50px -12px oklch(0.7278 0.151 289 / 0.2), 0 0 0 1px oklch(0.7278 0.151 289 / 0.1)",
+						}
+					: { background: "var(--background, #fff)" }
+			}
+		>
 			{/* Header */}
 			{isEditing ? (
-				<div className="flex shrink-0 items-center gap-2 border-b px-3 py-2.5">
+				<div
+					className="flex shrink-0 items-center gap-2 border-b px-3 py-2.5 transition-colors"
+					style={
+						editingGlobally
+							? { borderColor: "oklch(0.7278 0.151 289 / 0.2)" }
+							: undefined
+					}
+				>
 					<button
 						type="button"
 						onClick={onDeselectSection}
@@ -956,6 +977,17 @@ function CmsPanel({
 					<span className="flex-1 truncate text-sm font-semibold">
 						{activeSection?.label ?? "Edit"}
 					</span>
+					{editingGlobally && (
+						<span
+							className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
+							style={{
+								background: "oklch(0.7278 0.151 289 / 0.12)",
+								color: "oklch(0.5 0.15 289)",
+							}}
+						>
+							editing
+						</span>
+					)}
 					{autoSaving && !savedBlock && (
 						<Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
 					)}
