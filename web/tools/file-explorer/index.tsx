@@ -4233,6 +4233,10 @@ function FileExplorerWorkspace({
 																							"pointerup",
 																							onUp,
 																						);
+																						window.removeEventListener(
+																							"pointercancel",
+																							onUp,
+																						);
 																					};
 																					window.addEventListener(
 																						"pointermove",
@@ -4240,6 +4244,10 @@ function FileExplorerWorkspace({
 																					);
 																					window.addEventListener(
 																						"pointerup",
+																						onUp,
+																					);
+																					window.addEventListener(
+																						"pointercancel",
 																						onUp,
 																					);
 																				}}
