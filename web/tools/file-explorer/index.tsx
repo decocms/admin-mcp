@@ -16,31 +16,44 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+	Calendar,
 	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
+	CircleHelp,
+	Clock,
+	CloudLightning,
+	Code,
+	Cookie,
 	Crosshair,
 	ExternalLink,
 	Eye,
+	EyeOff,
 	File,
 	FileCode2,
 	Folder,
 	FolderOpen,
+	GitFork,
+	Globe,
 	GripVertical,
+	type LucideIcon,
 	LayersIcon,
 	LayoutTemplate,
 	Loader2,
+	MapPin,
+	Minus,
 	Monitor,
+	MousePointer,
 	MousePointer2,
 	MoreHorizontal,
 	Package,
-	Minus,
 	PanelLeft,
 	Plus,
 	RefreshCw,
 	Save,
 	Search,
 	Smartphone,
+	Tablet,
 	Trash2,
 	X,
 	Zap,
@@ -112,6 +125,7 @@ import type {
 	GetPagesOutput,
 	ListAppsOutput,
 	ListFilesOutput,
+	ListMatchersOutput,
 	ListSectionsOutput,
 	PageInfo,
 	ReadFileOutput,
@@ -585,6 +599,7 @@ function SortableSectionItem({
 		label: string;
 		isLazy?: boolean;
 		isSavedBlock?: boolean;
+		isMultivariate?: boolean;
 	};
 	onSelect: () => void;
 	onDuplicate: () => void;
@@ -601,6 +616,7 @@ function SortableSectionItem({
 	} = useSortable({ id: String(section.index) });
 
 	const saved = section.isSavedBlock === true;
+	const multivariate = section.isMultivariate === true;
 
 	return (
 		<div
@@ -619,13 +635,21 @@ function SortableSectionItem({
 				"group flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 transition-colors active:cursor-grabbing",
 				saved
 					? "text-[oklch(0.45_0.15_289)] hover:bg-[oklch(0.7278_0.151_289/0.12)] dark:text-[oklch(0.78_0.15_289)] dark:hover:bg-[oklch(0.7278_0.151_289/0.15)]"
-					: "text-foreground/80 hover:bg-accent hover:text-accent-foreground",
+					: multivariate
+						? "text-[oklch(0.45_0.15_160)] hover:bg-[oklch(0.65_0.15_160/0.12)] dark:text-[oklch(0.78_0.15_160)] dark:hover:bg-[oklch(0.65_0.15_160/0.15)]"
+						: "text-foreground/80 hover:bg-accent hover:text-accent-foreground",
 			)}
 		>
 			<GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
 			<LayoutTemplate
 				className="h-3.5 w-3.5 shrink-0"
-				style={saved ? { color: "oklch(0.7278 0.151 289)" } : undefined}
+				style={
+					saved
+						? { color: "oklch(0.7278 0.151 289)" }
+						: multivariate
+							? { color: "oklch(0.65 0.15 160)" }
+							: undefined
+				}
 			/>
 			<span className="flex-1 truncate text-xs font-medium" onClick={onSelect}>
 				{section.label}
@@ -678,6 +702,255 @@ function SortableSectionItem({
 					</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>
+		</div>
+	);
+}
+
+// ─── Matcher picker ─────────────────────────────────────────────────────────
+
+/** Map deco.cx / Tabler icon names → Lucide components */
+const MATCHER_ICON_MAP: Record<string, LucideIcon> = {
+	// website/matchers
+	eye: Eye,
+	"eye-off": EyeOff,
+	cookie: Cookie,
+	refresh: RefreshCw,
+	"calendar-event": Calendar,
+	"calendar-month": Calendar,
+	"device-mobile": Smartphone,
+	"device-desktop": Monitor,
+	"device-tablet": Tablet,
+	code: Code,
+	"world-www": Globe,
+	world: Globe,
+	"map-2": MapPin,
+	"current-location": MapPin,
+	plus: Plus,
+	minus: Minus,
+	"question-mark": CircleHelp,
+	"arrow-split": GitFork,
+	"hand-click": MousePointer,
+	// weather
+	"cloud-storm": CloudLightning,
+	// common aliases
+	schedule: Clock,
+	clock: Clock,
+	smartphone: Smartphone,
+	computer: Monitor,
+};
+
+function matcherIcon(name: string | undefined): LucideIcon {
+	if (!name) return Crosshair;
+	return MATCHER_ICON_MAP[name] ?? Crosshair;
+}
+
+function MatcherPicker({
+	currentRt,
+	currentLabel,
+	matchers,
+	onFetchMatchers,
+	onSelect,
+}: {
+	currentRt: string;
+	currentLabel: string;
+	matchers: ListMatchersOutput["matchers"] | null;
+	onFetchMatchers: () => void;
+	onSelect: (resolveType: string) => void;
+}) {
+	const [open, setOpen] = useState(false);
+	const [search, setSearch] = useState("");
+
+	const handleOpen = () => {
+		setOpen(true);
+		setSearch("");
+		onFetchMatchers();
+	};
+
+	const filtered = matchers?.filter(
+		(m) =>
+			!search ||
+			m.title.toLowerCase().includes(search.toLowerCase()) ||
+			m.resolveType.toLowerCase().includes(search.toLowerCase()) ||
+			m.description?.toLowerCase().includes(search.toLowerCase()),
+	);
+
+	const CurrentIcon = matcherIcon(
+		matchers?.find((m) => m.resolveType === currentRt)?.icon,
+	);
+
+	return (
+		<>
+			{/* Trigger button */}
+			<button
+				type="button"
+				onClick={handleOpen}
+				className="flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent/40"
+			>
+				<CurrentIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+				<span className="flex-1 truncate">{currentLabel}</span>
+				<ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+			</button>
+
+			{/* Modal */}
+			{open && (
+				<div
+					className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-[2px]"
+					onClick={(e) => {
+						if (e.target === e.currentTarget) setOpen(false);
+					}}
+					onKeyDown={(e) => {
+						if (e.key === "Escape") setOpen(false);
+					}}
+				>
+					<div className="relative flex max-h-[70vh] w-80 flex-col overflow-hidden rounded-xl border bg-popover shadow-2xl">
+						{/* Header */}
+						<div className="flex shrink-0 items-center gap-2 border-b px-4 py-3">
+							<span className="flex-1 text-sm font-semibold">Segment Rule</span>
+							<button
+								type="button"
+								onClick={() => setOpen(false)}
+								className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+							>
+								<X className="h-3.5 w-3.5" />
+							</button>
+						</div>
+
+						{/* Search */}
+						<div className="shrink-0 px-3 pt-2.5 pb-1.5">
+							<div className="flex items-center gap-2 rounded-md border px-2.5 py-1.5">
+								<Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+								<input
+									autoFocus
+									value={search}
+									onChange={(e) => setSearch(e.target.value)}
+									placeholder="Search…"
+									className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground/50"
+								/>
+							</div>
+						</div>
+
+						{/* List */}
+						<div className="min-h-0 flex-1 overflow-y-auto px-2 py-1.5">
+							{/* Always */}
+							<button
+								type="button"
+								onClick={() => {
+									onSelect("");
+									setOpen(false);
+								}}
+								className={cn(
+									"flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-accent/60",
+									!currentRt && "bg-accent",
+								)}
+							>
+								<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-background">
+									<Eye className="h-4 w-4 text-muted-foreground" />
+								</div>
+								<div className="min-w-0 flex-1">
+									<div className="truncate text-xs font-medium">Always</div>
+									<div className="truncate text-[10px] leading-snug text-muted-foreground">
+										Matches all visitors
+									</div>
+								</div>
+							</button>
+
+							{!matchers ? (
+								<div className="flex items-center justify-center gap-2 py-10 text-xs text-muted-foreground">
+									<Loader2 className="h-4 w-4 animate-spin" />
+									Loading…
+								</div>
+							) : filtered?.length === 0 ? (
+								<div className="py-8 text-center text-xs text-muted-foreground">
+									No matchers found
+								</div>
+							) : (
+								filtered?.map((m) => {
+									const Icon = matcherIcon(m.icon);
+									return (
+										<button
+											key={m.resolveType}
+											type="button"
+											onClick={() => {
+												onSelect(m.resolveType);
+												setOpen(false);
+											}}
+											className={cn(
+												"flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-accent/60",
+												currentRt === m.resolveType && "bg-accent",
+											)}
+										>
+											<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-background">
+												<Icon className="h-4 w-4 text-muted-foreground" />
+											</div>
+											<div className="min-w-0 flex-1">
+												<div className="truncate text-xs font-medium">
+													{m.title}
+												</div>
+												{m.description && (
+													<div className="line-clamp-1 text-[10px] leading-snug text-muted-foreground">
+														{m.description}
+													</div>
+												)}
+											</div>
+										</button>
+									);
+								})
+							)}
+						</div>
+					</div>
+				</div>
+			)}
+		</>
+	);
+}
+
+// ─── Sortable variant item ───────────────────────────────────────────────────
+
+function SortableVariantItem({
+	id,
+	label,
+	valueLabel,
+	onSelect,
+}: {
+	id: string;
+	label: string;
+	valueLabel: string;
+	onSelect: () => void;
+}) {
+	const {
+		attributes,
+		listeners,
+		setNodeRef,
+		transform,
+		transition,
+		isDragging,
+	} = useSortable({ id });
+
+	return (
+		<div
+			ref={setNodeRef}
+			style={{
+				transform: CSS.Transform.toString(transform),
+				transition,
+				opacity: isDragging ? 0.4 : 1,
+			}}
+			{...listeners}
+			{...attributes}
+			onKeyDown={(e) => {
+				if (e.key === "Enter" || e.key === " ") onSelect();
+			}}
+			className="group flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 text-[oklch(0.45_0.15_160)] hover:bg-[oklch(0.65_0.15_160/0.12)] dark:text-[oklch(0.78_0.15_160)] dark:hover:bg-[oklch(0.65_0.15_160/0.15)]"
+		>
+			<GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
+			<div
+				className="flex flex-1 flex-col gap-0.5 overflow-hidden"
+				onClick={onSelect}
+			>
+				<span className="truncate text-xs font-medium">{valueLabel}</span>
+				<span className="truncate text-[10px] text-muted-foreground">
+					{label}
+				</span>
+			</div>
 		</div>
 	);
 }
@@ -870,6 +1143,8 @@ interface CmsPanelProps {
 	schemasMap: Record<string, SchemaProperties>;
 	autoSaving: boolean;
 	savedBlock: false | "readonly" | "editing";
+	selectedVariant: number | null;
+	variantRuleSchema: SchemaProperties | null;
 	onSelectSection: (idx: number) => void;
 	onDeselectSection: () => void;
 	onChangeSectionData: (data: Record<string, unknown>) => void;
@@ -884,6 +1159,16 @@ interface CmsPanelProps {
 	onSavedBlockEdit: () => void;
 	onSavedBlockCancel: () => void;
 	onSavedBlockSave: () => void;
+	onSelectVariant: (variantIdx: number) => void;
+	onDeselectVariant: () => void;
+	onChangeVariantData: (
+		field: "value" | "rule",
+		data: Record<string, unknown>,
+	) => void;
+	onReorderVariants: (srcIdx: number, destIdx: number) => void;
+	availableMatchers: ListMatchersOutput["matchers"] | null;
+	onFetchMatchers: () => void;
+	onChangeMatcherType: (resolveType: string) => void;
 }
 
 function CmsPanel({
@@ -910,6 +1195,15 @@ function CmsPanel({
 	onSavedBlockEdit,
 	onSavedBlockCancel,
 	onSavedBlockSave,
+	selectedVariant,
+	variantRuleSchema,
+	onSelectVariant,
+	onDeselectVariant,
+	onChangeVariantData,
+	onReorderVariants,
+	availableMatchers,
+	onFetchMatchers,
+	onChangeMatcherType,
 }: CmsPanelProps) {
 	const sensors = useSensors(
 		useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
@@ -930,9 +1224,16 @@ function CmsPanel({
 		setEditPath((data?.pageData.path as string | undefined) ?? "");
 	}, [data?.pageKey]);
 
-	const isEditing = selectedSection !== null && sectionData !== null;
 	const activeSection = data?.sections[selectedSection ?? -1];
+	const isMultivariate =
+		selectedSection !== null && activeSection?.isMultivariate === true;
+	const isEditing =
+		selectedSection !== null && sectionData !== null && !isMultivariate;
+	const isEditingVariant =
+		isMultivariate && selectedVariant !== null && sectionData !== null;
 	const sortableIds = data?.sections.map((s) => String(s.index)) ?? [];
+	const variantSortableIds =
+		activeSection?.variants?.map((_, i) => String(i)) ?? [];
 
 	const handleDragEnd = ({ active, over }: DragEndEvent) => {
 		if (!over || active.id === over.id || !data) return;
@@ -942,6 +1243,17 @@ function CmsPanel({
 		const destIdx = data.sections.findIndex((s) => String(s.index) === over.id);
 		if (srcIdx !== -1 && destIdx !== -1) onReorderSections(srcIdx, destIdx);
 	};
+
+	const handleVariantDragEnd = ({ active, over }: DragEndEvent) => {
+		if (!over || active.id === over.id) return;
+		const srcIdx = Number(active.id);
+		const destIdx = Number(over.id);
+		if (!Number.isNaN(srcIdx) && !Number.isNaN(destIdx))
+			onReorderVariants(srcIdx, destIdx);
+	};
+
+	const [variantRuleOpen, setVariantRuleOpen] = useState(true);
+	const [variantSectionOpen, setVariantSectionOpen] = useState(true);
 
 	const editingGlobally = savedBlock === "editing";
 
@@ -960,7 +1272,42 @@ function CmsPanel({
 			}
 		>
 			{/* Header */}
-			{isEditing ? (
+			{isEditingVariant ? (
+				<div className="flex shrink-0 items-center gap-2 border-b px-3 py-2.5">
+					<button
+						type="button"
+						onClick={onDeselectVariant}
+						className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+						title="Back to variants"
+					>
+						<ChevronLeft className="h-3.5 w-3.5" />
+					</button>
+					<span className="flex-1 truncate text-sm font-semibold">
+						{activeSection?.variants?.[selectedVariant ?? 0]?.label ??
+							`Variant ${(selectedVariant ?? 0) + 1}`}
+					</span>
+					{autoSaving && (
+						<Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
+					)}
+				</div>
+			) : isMultivariate ? (
+				<div className="flex shrink-0 items-center gap-2 border-b px-3 py-2.5">
+					<button
+						type="button"
+						onClick={onDeselectSection}
+						className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+						title="Back to sections"
+					>
+						<ChevronLeft className="h-3.5 w-3.5" />
+					</button>
+					<span
+						className="flex-1 truncate text-sm font-semibold"
+						style={{ color: "oklch(0.45 0.15 160)" }}
+					>
+						{activeSection?.label ?? "Variants"}
+					</span>
+				</div>
+			) : isEditing ? (
 				<div
 					className="flex shrink-0 items-center gap-2 border-b px-3 py-2.5 transition-colors"
 					style={
@@ -1049,6 +1396,127 @@ function CmsPanel({
 			) : !data ? (
 				<div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
 					No page data
+				</div>
+			) : isEditingVariant && sectionData ? (
+				/* ── Variant editing: rule + section collapsibles ── */
+				<div className="min-h-0 flex-1 overflow-y-auto">
+					{/* Segment Rule collapsible */}
+					<div className="border-b">
+						<button
+							type="button"
+							onClick={() => setVariantRuleOpen((v) => !v)}
+							className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-accent/40"
+						>
+							<ChevronDown
+								className={cn(
+									"h-3 w-3 transition-transform",
+									!variantRuleOpen && "-rotate-90",
+								)}
+							/>
+							Segment Rule
+						</button>
+						{variantRuleOpen && (
+							<div className="px-1 pb-2">
+								{(() => {
+									const variant =
+										activeSection?.variants?.[selectedVariant ?? 0];
+									const ruleData = variant?.rule ?? {};
+									const ruleRt = (ruleData.__resolveType as string) ?? "";
+									const ruleLabel = ruleRt
+										? ruleRt
+												.split("/")
+												.pop()
+												?.replace(/\.(tsx|ts)$/, "")
+										: "Always";
+									return (
+										<div className="space-y-1 px-2">
+											{/* Matcher type selector */}
+											<MatcherPicker
+												currentRt={ruleRt}
+												currentLabel={ruleLabel ?? "Always"}
+												matchers={availableMatchers}
+												onFetchMatchers={onFetchMatchers}
+												onSelect={onChangeMatcherType}
+											/>
+											{variantRuleSchema ? (
+												<SectionForm
+													data={ruleData}
+													schema={variantRuleSchema}
+													schemasMap={schemasMap}
+													onChange={(d) => onChangeVariantData("rule", d)}
+												/>
+											) : ruleRt ? (
+												<div className="text-[10px] text-muted-foreground/60 py-1">
+													Loading schema…
+												</div>
+											) : null}
+										</div>
+									);
+								})()}
+							</div>
+						)}
+					</div>
+					{/* Section props collapsible */}
+					<div className="border-b">
+						<button
+							type="button"
+							onClick={() => setVariantSectionOpen((v) => !v)}
+							className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-accent/40"
+						>
+							<ChevronDown
+								className={cn(
+									"h-3 w-3 transition-transform",
+									!variantSectionOpen && "-rotate-90",
+								)}
+							/>
+							Section
+						</button>
+						{variantSectionOpen && (
+							<div className="px-1 pb-2">
+								<SectionForm
+									data={sectionData}
+									schema={sectionSchema ?? undefined}
+									schemasMap={schemasMap}
+									onChange={(d) => onChangeVariantData("value", d)}
+								/>
+							</div>
+						)}
+					</div>
+				</div>
+			) : isMultivariate && activeSection?.variants ? (
+				/* ── Variant list (DnD reorderable) ── */
+				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+					<div className="min-h-0 flex-1 overflow-y-auto p-2">
+						<DndContext
+							sensors={sensors}
+							modifiers={[restrictToVerticalAxis]}
+							onDragEnd={handleVariantDragEnd}
+						>
+							<SortableContext
+								items={variantSortableIds}
+								strategy={verticalListSortingStrategy}
+							>
+								{activeSection.variants.map((variant, vIdx) => {
+									const valueRt = (variant.value.__resolveType as string) ?? "";
+									const valueLabel = valueRt
+										? (valueRt
+												.split("/")
+												.pop()
+												?.replace(/\.(tsx|ts)$/, "") ?? "Section")
+										: "Section";
+									return (
+										<SortableVariantItem
+											key={String(vIdx)}
+											id={String(vIdx)}
+											label={variant.label}
+											valueLabel={valueLabel}
+											onSelect={() => onSelectVariant(vIdx)}
+										/>
+									);
+								})}
+							</SortableContext>
+						</DndContext>
+					</div>
 				</div>
 			) : isEditing && sectionData ? (
 				<SectionForm
@@ -1196,6 +1664,15 @@ function FileExplorerWorkspace({
 	const [cmsSavedBlock, setCmsSavedBlock] = useState<
 		false | "readonly" | "editing"
 	>(false);
+	// ── Multivariate variant state ───────────────────────────────────────────
+	const [cmsSelectedVariant, setCmsSelectedVariant] = useState<number | null>(
+		null,
+	);
+	const [cmsVariantRuleSchema, setCmsVariantRuleSchema] =
+		useState<SchemaProperties | null>(null);
+	const [cmsAvailableMatchers, setCmsAvailableMatchers] = useState<
+		ListMatchersOutput["matchers"] | null
+	>(null);
 
 	// ── CMS inspect state ────────────────────────────────────────────────────
 	const [cmsInspectActive, setCmsInspectActive] = useState(false);
@@ -2140,19 +2617,29 @@ function FileExplorerWorkspace({
 		setCmsPanelVisible(true);
 		setCmsSelectedSection(idx);
 		cmsSelectedSectionRef.current = idx;
+		setCmsSelectedVariant(null);
+		setCmsVariantRuleSchema(null);
+		const displaySection = cmsData.sections[idx];
+
+		// ── Multivariate: show variant list, don't load section data ──
+		if (displaySection?.isMultivariate) {
+			setCmsSectionData(null);
+			setCmsSectionSchema(null);
+			setCmsSchemasMap({});
+			setCmsSavedBlock(false);
+			return;
+		}
+
 		const sections = cmsData.pageData.sections as Record<string, unknown>[];
 		const raw = sections[idx] ?? null;
-		const displaySection = cmsData.sections[idx];
 
 		const isSaved = displaySection?.isSavedBlock === true;
 		setCmsSavedBlock(isSaved ? "readonly" : false);
 
 		let data: Record<string, unknown> | null;
 		if (isSaved) {
-			data = (displaySection as Record<string, unknown>).__resolvedData as Record<
-				string,
-				unknown
-			> | null;
+			data = (displaySection as Record<string, unknown>)
+				.__resolvedData as Record<string, unknown> | null;
 		} else if (displaySection?.isLazy && raw) {
 			data =
 				((raw as Record<string, unknown>).section as Record<
@@ -2238,6 +2725,8 @@ function FileExplorerWorkspace({
 		setCmsSectionSchema(null);
 		setCmsSchemasMap({});
 		setCmsSavedBlock(false);
+		setCmsSelectedVariant(null);
+		setCmsVariantRuleSchema(null);
 	};
 
 	const handleSavedBlockEdit = () => {
@@ -2250,10 +2739,257 @@ function FileExplorerWorkspace({
 		if (snap && idx !== null) {
 			const displaySection = snap.sections[idx];
 			const resolved =
-				((displaySection as Record<string, unknown>)?.__resolvedData as Record<string, unknown> | null) ?? null;
+				((displaySection as Record<string, unknown>)?.__resolvedData as Record<
+					string,
+					unknown
+				> | null) ?? null;
 			setCmsSectionData(resolved);
 		}
 		setCmsSavedBlock("readonly");
+	};
+
+	// ── Variant handlers ────────────────────────────────────────────────────
+
+	const fetchBlockSchema = useCallback(
+		(rt: string) => {
+			if (!app || !userEnv) return Promise.resolve(null);
+			return app
+				.callServerTool({
+					name: "get_block_schema",
+					arguments: { env: userEnv, resolveType: rt },
+				})
+				.then((result) => {
+					if (result?.isError) return null;
+					const sd = result?.structuredContent as
+						| GetBlockSchemaOutput
+						| undefined;
+					return sd?.properties && Object.keys(sd.properties).length > 0
+						? sd.properties
+						: null;
+				})
+				.catch(() => null);
+		},
+		[app, userEnv],
+	);
+
+	const handleCmsSelectVariant = (variantIdx: number) => {
+		if (!cmsData) return;
+		const sectionIdx = cmsSelectedSectionRef.current;
+		if (sectionIdx === null) return;
+		const displaySection = cmsData.sections[sectionIdx];
+		if (!displaySection?.variants) return;
+		const variant = displaySection.variants[variantIdx];
+		if (!variant) return;
+
+		setCmsSelectedVariant(variantIdx);
+		setCmsSectionData(variant.value);
+		setCmsSectionSchema(null);
+		setCmsVariantRuleSchema(null);
+		setCmsSchemasMap({});
+
+		// Fetch schema for the variant's value (section)
+		const valueRt = (variant.value.__resolveType as string) ?? "";
+		if (valueRt) {
+			void fetchBlockSchema(valueRt).then((schema) => {
+				if (schema) setCmsSectionSchema(schema);
+			});
+		}
+
+		// Fetch schema for the variant's rule (matcher)
+		const ruleRt = (variant.rule.__resolveType as string) ?? "";
+		if (ruleRt) {
+			void fetchBlockSchema(ruleRt).then((schema) => {
+				if (schema) setCmsVariantRuleSchema(schema);
+			});
+		}
+	};
+
+	const handleCmsDeselectVariant = () => {
+		setCmsSelectedVariant(null);
+		setCmsSectionData(null);
+		setCmsSectionSchema(null);
+		setCmsVariantRuleSchema(null);
+		setCmsSchemasMap({});
+	};
+
+	const fetchMatchersList = useCallback(async () => {
+		if (!app || !userEnv || cmsAvailableMatchers) return;
+		try {
+			const result = await app.callServerTool({
+				name: "list_matchers",
+				arguments: { env: userEnv },
+			});
+			if (!result?.isError) {
+				const data = result?.structuredContent as
+					| ListMatchersOutput
+					| undefined;
+				setCmsAvailableMatchers(data?.matchers ?? []);
+			}
+		} catch {
+			// silently fail
+		}
+	}, [app, userEnv, cmsAvailableMatchers]);
+
+	const handleChangeMatcherType = (newResolveType: string) => {
+		if (cmsSelectedVariant === null) return;
+		// Set new rule with just the __resolveType, clearing old props
+		const newRule: Record<string, unknown> = newResolveType
+			? { __resolveType: newResolveType }
+			: {};
+		handleChangeVariantData("rule", newRule);
+		// Fetch schema for new matcher
+		setCmsVariantRuleSchema(null);
+		if (newResolveType) {
+			void fetchBlockSchema(newResolveType).then((schema) => {
+				if (schema) setCmsVariantRuleSchema(schema);
+			});
+		}
+	};
+
+	const handleChangeVariantData = (
+		field: "value" | "rule",
+		newData: Record<string, unknown>,
+	) => {
+		if (!cmsData || cmsSelectedVariant === null) return;
+		const sectionIdx = cmsSelectedSectionRef.current;
+		if (sectionIdx === null) return;
+
+		// Update the raw section in pageData
+		const rawSections = [
+			...(cmsData.pageData.sections as Record<string, unknown>[]),
+		];
+		const rawSection = { ...rawSections[sectionIdx] } as {
+			__resolveType: string;
+			variants: Array<{
+				value: Record<string, unknown>;
+				rule: Record<string, unknown>;
+			}>;
+		};
+		const variants = [...(rawSection.variants ?? [])];
+		variants[cmsSelectedVariant] = {
+			...variants[cmsSelectedVariant],
+			[field]: newData,
+		};
+		rawSection.variants = variants;
+		rawSections[sectionIdx] = rawSection;
+
+		// Also update the display section's variant data
+		const newDisplaySections = [...cmsData.sections];
+		const displaySection = { ...newDisplaySections[sectionIdx] };
+		if (displaySection.variants) {
+			const newVariants = [...displaySection.variants];
+			newVariants[cmsSelectedVariant] = {
+				...newVariants[cmsSelectedVariant],
+				[field]: newData,
+			};
+			if (field === "rule") {
+				const ruleRt = (newData.__resolveType as string) ?? "";
+				newVariants[cmsSelectedVariant].label =
+					ruleRt
+						.split("/")
+						.pop()
+						?.replace(/\.(tsx|ts)$/, "") || "Always";
+			}
+			displaySection.variants = newVariants;
+		}
+		newDisplaySections[sectionIdx] = displaySection;
+
+		const updatedPageData = { ...cmsData.pageData, sections: rawSections };
+		const next: GetPageSectionsOutput = {
+			...cmsData,
+			pageData: updatedPageData,
+			sections: newDisplaySections,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+
+		if (field === "value") {
+			setCmsSectionData(newData);
+		}
+
+		// Auto-save
+		setCmsAutoSaving(true);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			try {
+				const result = await app?.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: next.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				setPreviewRefreshKey((k) => k + 1);
+			} catch {
+				toast.error("Auto-save failed");
+			} finally {
+				setCmsAutoSaving(false);
+			}
+		}, 800);
+	};
+
+	const handleReorderVariants = (srcIdx: number, destIdx: number) => {
+		if (!cmsData) return;
+		const sectionIdx = cmsSelectedSectionRef.current;
+		if (sectionIdx === null) return;
+
+		// Reorder in raw pageData
+		const rawSections = [
+			...(cmsData.pageData.sections as Record<string, unknown>[]),
+		];
+		const rawSection = { ...rawSections[sectionIdx] } as {
+			__resolveType: string;
+			variants: Array<unknown>;
+		};
+		const rawVariants = [...(rawSection.variants ?? [])];
+		const [moved] = rawVariants.splice(srcIdx, 1);
+		rawVariants.splice(destIdx, 0, moved);
+		rawSection.variants = rawVariants;
+		rawSections[sectionIdx] = rawSection;
+
+		// Reorder in display sections
+		const newDisplaySections = [...cmsData.sections];
+		const displaySection = { ...newDisplaySections[sectionIdx] };
+		if (displaySection.variants) {
+			const newVariants = [...displaySection.variants];
+			const [movedV] = newVariants.splice(srcIdx, 1);
+			newVariants.splice(destIdx, 0, movedV);
+			displaySection.variants = newVariants;
+		}
+		newDisplaySections[sectionIdx] = displaySection;
+
+		const updatedPageData = { ...cmsData.pageData, sections: rawSections };
+		const next: GetPageSectionsOutput = {
+			...cmsData,
+			pageData: updatedPageData,
+			sections: newDisplaySections,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+
+		// Auto-save
+		setCmsAutoSaving(true);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			try {
+				const result = await app?.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: next.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				setPreviewRefreshKey((k) => k + 1);
+			} catch {
+				toast.error("Auto-save failed");
+			} finally {
+				setCmsAutoSaving(false);
+			}
+		}, 800);
 	};
 
 	const handleSavedBlockSave = async () => {
@@ -3865,6 +4601,15 @@ function FileExplorerWorkspace({
 																onSavedBlockSave={() =>
 																	void handleSavedBlockSave()
 																}
+																selectedVariant={cmsSelectedVariant}
+																variantRuleSchema={cmsVariantRuleSchema}
+																onSelectVariant={handleCmsSelectVariant}
+																onDeselectVariant={handleCmsDeselectVariant}
+																onChangeVariantData={handleChangeVariantData}
+																onReorderVariants={handleReorderVariants}
+																availableMatchers={cmsAvailableMatchers}
+																onFetchMatchers={() => void fetchMatchersList()}
+																onChangeMatcherType={handleChangeMatcherType}
 															/>
 														)}
 
