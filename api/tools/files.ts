@@ -675,6 +675,12 @@ export const getPagesTool = createTool({
 
 // ─── get_page_sections ────────────────────────────────────────────────────────
 
+export type CmsVariant = {
+	value: Record<string, unknown>;
+	rule: Record<string, unknown>;
+	label: string;
+};
+
 export type CmsSection = {
 	index: number;
 	resolveType: string;
@@ -684,6 +690,8 @@ export type CmsSection = {
 	savedBlockKey?: string;
 	savedBlockFilePath?: string;
 	resolvedResolveType?: string;
+	isMultivariate?: boolean;
+	variants?: CmsVariant[];
 };
 
 export const getPageSectionsInputSchema = z.object({
@@ -708,6 +716,16 @@ export const getPageSectionsOutputSchema = z.object({
 			savedBlockKey: z.string().optional(),
 			savedBlockFilePath: z.string().optional(),
 			resolvedResolveType: z.string().optional(),
+			isMultivariate: z.boolean().optional(),
+			variants: z
+				.array(
+					z.object({
+						value: z.record(z.string(), z.unknown()),
+						rule: z.record(z.string(), z.unknown()),
+						label: z.string(),
+					}),
+				)
+				.optional(),
 		}),
 	),
 });
@@ -814,6 +832,42 @@ export const getPageSectionsTool = createTool({
 					savedBlockFilePath: `/.deco/blocks/${rt}.json`,
 					resolvedResolveType: resolvedRt,
 					__resolvedData: resolvedBlock,
+				};
+			}
+
+			// ── multivariate flag detection ─────────────────────────
+			if (rt.includes("flags/multivariate")) {
+				const mvObj = sectionObj as {
+					__resolveType: string;
+					variants?: Array<{
+						value?: Record<string, unknown>;
+						rule?: Record<string, unknown>;
+					}>;
+				};
+				const rawVariants = Array.isArray(mvObj.variants) ? mvObj.variants : [];
+				const variants: CmsVariant[] = rawVariants.map((v) => {
+					const value = (v.value ?? {}) as Record<string, unknown>;
+					const rule = (v.rule ?? {}) as Record<string, unknown>;
+					const ruleRt = (rule.__resolveType as string) ?? "";
+					return {
+						value,
+						rule,
+						label: labelFromResolveType(ruleRt) || "Always",
+					};
+				});
+				const firstValueRt = (
+					rawVariants[0]?.value as Record<string, unknown> | undefined
+				)?.__resolveType as string | undefined;
+				const sectionLabel = firstValueRt
+					? labelFromResolveType(firstValueRt)
+					: "Section";
+				resolvedSections.push(sectionObj);
+				return {
+					index: idx,
+					resolveType: rt,
+					label: `Variants of ${sectionLabel}`,
+					isMultivariate: true,
+					variants,
 				};
 			}
 
@@ -1222,6 +1276,147 @@ export const listSectionsTool = createTool({
 			}
 
 			return { sections: [...globalSections, ...sectionTypes] };
+		} catch {
+			return empty;
+		}
+	},
+});
+
+// ─── list_matchers ────────────────────────────────────────────────────────────
+
+export const listMatchersInputSchema = z.object({
+	env: z.string().describe("Sandbox environment name"),
+});
+export type ListMatchersInput = z.infer<typeof listMatchersInputSchema>;
+
+export const matcherEntrySchema = z.object({
+	resolveType: z.string(),
+	title: z.string(),
+	description: z.string().optional(),
+	icon: z.string().optional(),
+});
+export type MatcherEntry = z.infer<typeof matcherEntrySchema>;
+
+export const listMatchersOutputSchema = z.object({
+	matchers: z.array(matcherEntrySchema),
+});
+export type ListMatchersOutput = z.infer<typeof listMatchersOutputSchema>;
+
+export const listMatchersTool = createTool({
+	id: "list_matchers",
+	description:
+		"List all available matcher/rule types from the live/_meta manifest. Used to populate the variant rule picker.",
+	inputSchema: listMatchersInputSchema,
+	outputSchema: listMatchersOutputSchema,
+	annotations: {
+		readOnlyHint: true,
+		destructiveHint: false,
+		idempotentHint: false,
+		openWorldHint: false,
+	},
+	execute: async ({ context }, ctx) => {
+		const { site } = getConfig(ctx);
+		const empty = { matchers: [] };
+
+		const consistentHash = (input: string) => {
+			let hash = 0;
+			for (let i = 0; i < input.length; i++) {
+				hash = (hash << 5) - hash + input.charCodeAt(i);
+				hash = hash & hash;
+			}
+			return Math.abs(hash).toString(36);
+		};
+
+		const envUrl = `https://sites-${site}--${consistentHash(context.env)}.decocdn.com`;
+
+		try {
+			const metaRes = await fetch(`${envUrl}/live/_meta`);
+			if (!metaRes.ok) return empty;
+
+			type RawSchema = Record<string, unknown>;
+			const meta = (await metaRes.json()) as {
+				manifest?: { blocks?: Record<string, Record<string, RawSchema>> };
+				schema?: RawSchema;
+			};
+
+			const matcherBlocks = meta.manifest?.blocks?.["matchers"] ?? {};
+			const defs = (meta.schema?.$defs ??
+				meta.schema?.definitions ??
+				{}) as RawSchema;
+
+			const resolveRef = (ref: string): RawSchema => {
+				const key = ref.split("/").pop() ?? "";
+				return (defs[key] as RawSchema | undefined) ?? {};
+			};
+
+			const getTitle = (schema: RawSchema, fallback: string): string => {
+				if (typeof schema.title === "string") return schema.title;
+				for (const key of ["allOf", "anyOf", "oneOf"] as const) {
+					const arr = schema[key];
+					if (!Array.isArray(arr)) continue;
+					for (const part of arr as RawSchema[]) {
+						const resolved =
+							typeof part.$ref === "string" ? resolveRef(part.$ref) : part;
+						if (typeof resolved.title === "string") return resolved.title;
+					}
+				}
+				if (typeof schema.$ref === "string") {
+					const resolved = resolveRef(schema.$ref);
+					if (typeof resolved.title === "string") return resolved.title;
+				}
+				return (
+					fallback
+						.split("/")
+						.pop()
+						?.replace(/\.tsx?$/, "")
+						.replace(/[-_]/g, " ")
+						.replace(/\b\w/g, (c) => c.toUpperCase()) ?? fallback
+				);
+			};
+
+			const getDescription = (schema: RawSchema): string | undefined => {
+				if (typeof schema.description === "string") return schema.description;
+				for (const key of ["allOf", "anyOf", "oneOf"] as const) {
+					const arr = schema[key];
+					if (!Array.isArray(arr)) continue;
+					for (const part of arr as RawSchema[]) {
+						const resolved =
+							typeof part.$ref === "string" ? resolveRef(part.$ref) : part;
+						if (typeof resolved.description === "string")
+							return resolved.description;
+					}
+				}
+				return undefined;
+			};
+
+			const getIcon = (schema: RawSchema): string | undefined => {
+				if (typeof schema.icon === "string") return schema.icon;
+				for (const key of ["allOf", "anyOf", "oneOf"] as const) {
+					const arr = schema[key];
+					if (!Array.isArray(arr)) continue;
+					for (const part of arr as RawSchema[]) {
+						const resolved =
+							typeof part.$ref === "string" ? resolveRef(part.$ref) : part;
+						if (typeof resolved.icon === "string") return resolved.icon;
+					}
+				}
+				if (typeof schema.$ref === "string") {
+					const resolved = resolveRef(schema.$ref);
+					if (typeof resolved.icon === "string") return resolved.icon;
+				}
+				return undefined;
+			};
+
+			const matchers: MatcherEntry[] = Object.entries(matcherBlocks)
+				.map(([rt, schema]) => ({
+					resolveType: rt,
+					title: getTitle(schema, rt),
+					description: getDescription(schema),
+					icon: getIcon(schema),
+				}))
+				.sort((a, b) => a.title.localeCompare(b.title));
+
+			return { matchers };
 		} catch {
 			return empty;
 		}

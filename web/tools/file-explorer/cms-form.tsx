@@ -343,11 +343,30 @@ function DateField({
 					className="absolute right-1.5 flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
 					title="Open picker"
 				>
-					<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+					<svg
+						width="12"
+						height="12"
+						viewBox="0 0 16 16"
+						fill="none"
+						aria-hidden="true"
+					>
 						<title>Calendar</title>
-						<rect x="1" y="3" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
+						<rect
+							x="1"
+							y="3"
+							width="14"
+							height="12"
+							rx="2"
+							stroke="currentColor"
+							strokeWidth="1.5"
+						/>
 						<path d="M1 7h14" stroke="currentColor" strokeWidth="1.5" />
-						<path d="M5 1v4M11 1v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+						<path
+							d="M5 1v4M11 1v4"
+							stroke="currentColor"
+							strokeWidth="1.5"
+							strokeLinecap="round"
+						/>
 					</svg>
 				</button>
 			</div>
@@ -482,8 +501,20 @@ function RichTextField({
 						starterKit.default,
 						link.default.configure({ openOnClick: false }),
 						underline.default,
-						(image as { default: { configure: (opts: Record<string, unknown>) => unknown } }).default.configure({ inline: true }),
-						(textAlign as { default: { configure: (opts: Record<string, unknown>) => unknown } }).default.configure({
+						(
+							image as {
+								default: {
+									configure: (opts: Record<string, unknown>) => unknown;
+								};
+							}
+						).default.configure({ inline: true }),
+						(
+							textAlign as {
+								default: {
+									configure: (opts: Record<string, unknown>) => unknown;
+								};
+							}
+						).default.configure({
 							types: ["heading", "paragraph"],
 						}),
 					];
@@ -621,7 +652,15 @@ function RichTextFieldInner({
 					</TiptapBtn>
 					<TiptapBtn
 						active={editor.isActive("underline")}
-						onClick={() => (editor.chain().focus() as unknown as { toggleUnderline: () => { run: () => void } }).toggleUnderline().run()}
+						onClick={() =>
+							(
+								editor.chain().focus() as unknown as {
+									toggleUnderline: () => { run: () => void };
+								}
+							)
+								.toggleUnderline()
+								.run()
+						}
 						title="Underline"
 					>
 						<span className="underline">U</span>
@@ -638,11 +677,23 @@ function RichTextFieldInner({
 						active={editor.isActive("link")}
 						onClick={() => {
 							if (editor.isActive("link")) {
-								(editor.chain().focus() as unknown as { unsetLink: () => { run: () => void } }).unsetLink().run();
+								(
+									editor.chain().focus() as unknown as {
+										unsetLink: () => { run: () => void };
+									}
+								)
+									.unsetLink()
+									.run();
 							} else {
 								const url = prompt("URL:");
 								if (url) {
-									(editor.chain().focus() as unknown as { setLink: (opts: { href: string }) => { run: () => void } }).setLink({ href: url }).run();
+									(
+										editor.chain().focus() as unknown as {
+											setLink: (opts: { href: string }) => { run: () => void };
+										}
+									)
+										.setLink({ href: url })
+										.run();
 								}
 							}
 						}}
@@ -655,36 +706,28 @@ function RichTextFieldInner({
 							<TiptapSep />
 							<TiptapBtn
 								active={editor.isActive("bulletList")}
-								onClick={() =>
-									editor.chain().focus().toggleBulletList().run()
-								}
+								onClick={() => editor.chain().focus().toggleBulletList().run()}
 								title="Bullet list"
 							>
 								•≡
 							</TiptapBtn>
 							<TiptapBtn
 								active={editor.isActive("orderedList")}
-								onClick={() =>
-									editor.chain().focus().toggleOrderedList().run()
-								}
+								onClick={() => editor.chain().focus().toggleOrderedList().run()}
 								title="Ordered list"
 							>
 								1.
 							</TiptapBtn>
 							<TiptapBtn
 								active={editor.isActive("blockquote")}
-								onClick={() =>
-									editor.chain().focus().toggleBlockquote().run()
-								}
+								onClick={() => editor.chain().focus().toggleBlockquote().run()}
 								title="Blockquote"
 							>
 								❝
 							</TiptapBtn>
 							<TiptapBtn
 								active={editor.isActive("codeBlock")}
-								onClick={() =>
-									editor.chain().focus().toggleCodeBlock().run()
-								}
+								onClick={() => editor.chain().focus().toggleCodeBlock().run()}
 								title="Code block"
 							>
 								{"</>"}
@@ -2560,10 +2603,7 @@ function FormField({
 					/>
 				);
 			}
-			if (
-				schemaFormat === "html" ||
-				schemaFormat === "rich-text"
-			) {
+			if (schemaFormat === "html" || schemaFormat === "rich-text") {
 				return (
 					<RichTextField
 						label={label}
