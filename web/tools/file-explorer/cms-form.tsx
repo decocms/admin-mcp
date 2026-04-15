@@ -295,26 +295,27 @@ function DateField({
 	const inputType = mode === "date" ? "date" : "datetime-local";
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [local, setLocal] = useState(() => formatForNativeInput(value, mode));
-	const internalChange = useRef(false);
 
+	// Sync external value changes, but only if the formatted value actually
+	// differs from what we already have — avoids re-renders that kill the
+	// native date picker popup.
+	const prevFormattedRef = useRef(local);
 	useEffect(() => {
-		if (internalChange.current) {
-			internalChange.current = false;
-			return;
+		const formatted = formatForNativeInput(value, mode);
+		if (formatted !== prevFormattedRef.current) {
+			prevFormattedRef.current = formatted;
+			setLocal(formatted);
 		}
-		setLocal(formatForNativeInput(value, mode));
 	}, [value, mode]);
 
 	const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 		const raw = e.target.value;
 		setLocal(raw);
-		internalChange.current = true;
+		prevFormattedRef.current = raw;
 		if (!raw) {
 			onChange("");
 			return;
 		}
-		// Native date input already gives YYYY-MM-DD, datetime-local gives YYYY-MM-DDTHH:MM
-		// For date mode, pass through directly (avoids timezone issues with new Date())
 		if (mode === "date") {
 			onChange(raw);
 		} else {
@@ -328,13 +329,28 @@ function DateField({
 	return (
 		<div className="space-y-1">
 			<FieldLabel label={label} description={description} />
-			<input
-				ref={inputRef}
-				type={inputType}
-				value={local}
-				onChange={handleChange}
-				className="flex h-7 w-full rounded-md border border-input bg-transparent px-2 text-xs shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-			/>
+			<div className="relative flex items-center">
+				<input
+					ref={inputRef}
+					type={inputType}
+					value={local}
+					onChange={handleChange}
+					className="flex h-7 w-full rounded-md border border-input bg-transparent px-2 pr-7 text-xs shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 [&::-webkit-calendar-picker-indicator]{opacity:0;width:0}"
+				/>
+				<button
+					type="button"
+					onClick={() => inputRef.current?.showPicker()}
+					className="absolute right-1.5 flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+					title="Open picker"
+				>
+					<svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+						<title>Calendar</title>
+						<rect x="1" y="3" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
+						<path d="M1 7h14" stroke="currentColor" strokeWidth="1.5" />
+						<path d="M5 1v4M11 1v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+					</svg>
+				</button>
+			</div>
 		</div>
 	);
 }
