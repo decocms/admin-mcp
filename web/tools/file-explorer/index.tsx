@@ -16,6 +16,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+	AlertTriangle,
 	Calendar,
 	ChevronDown,
 	ChevronLeft,
@@ -31,11 +32,13 @@ import {
 	EyeOff,
 	File,
 	FileCode2,
+	Flag,
 	Folder,
 	FolderOpen,
 	GitFork,
 	Globe,
 	GripVertical,
+	Lock,
 	type LucideIcon,
 	LayersIcon,
 	LayoutTemplate,
@@ -908,11 +911,13 @@ function SortableVariantItem({
 	label,
 	valueLabel,
 	onSelect,
+	onRemove,
 }: {
 	id: string;
 	label: string;
 	valueLabel: string;
 	onSelect: () => void;
+	onRemove: () => void;
 }) {
 	const {
 		attributes,
@@ -948,6 +953,18 @@ function SortableVariantItem({
 					{label}
 				</span>
 			</div>
+			<button
+				type="button"
+				onPointerDown={(e) => e.stopPropagation()}
+				onClick={(e) => {
+					e.stopPropagation();
+					onRemove();
+				}}
+				className="shrink-0 rounded p-0.5 text-muted-foreground/30 opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+				title="Remove variant"
+			>
+				<Trash2 className="h-3 w-3" />
+			</button>
 		</div>
 	);
 }
@@ -1166,6 +1183,10 @@ interface CmsPanelProps {
 	availableMatchers: ListMatchersOutput["matchers"] | null;
 	onFetchMatchers: () => void;
 	onChangeMatcherType: (resolveType: string) => void;
+	onWrapWithVariants: () => void;
+	onAddVariant: () => void;
+	onRemoveVariant: (variantIdx: number) => void;
+	onAddFallback: () => void;
 }
 
 function CmsPanel({
@@ -1201,6 +1222,10 @@ function CmsPanel({
 	availableMatchers,
 	onFetchMatchers,
 	onChangeMatcherType,
+	onWrapWithVariants,
+	onAddVariant,
+	onRemoveVariant,
+	onAddFallback,
 }: CmsPanelProps) {
 	const sensors = useSensors(
 		useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
@@ -1229,8 +1254,22 @@ function CmsPanel({
 	const isEditingVariant =
 		isMultivariate && selectedVariant !== null && sectionData !== null;
 	const sortableIds = data?.sections.map((s) => String(s.index)) ?? [];
-	const variantSortableIds =
-		activeSection?.variants?.map((_, i) => String(i)) ?? [];
+
+	// Fallback detection: last variant with "website/matchers/always.ts" rule
+	const variants = activeSection?.variants ?? [];
+	const lastIdx = variants.length - 1;
+	const fallbackIdx =
+		lastIdx >= 0 &&
+		(variants[lastIdx].rule.__resolveType as string) ===
+			"website/matchers/always.ts"
+			? lastIdx
+			: -1;
+	const hasFallback = fallbackIdx >= 0;
+
+	// Exclude fallback from sortable IDs
+	const variantSortableIds = variants
+		.map((_, i) => String(i))
+		.filter((_, i) => i !== fallbackIdx);
 
 	const handleDragEnd = ({ active, over }: DragEndEvent) => {
 		if (!over || active.id === over.id || !data) return;
@@ -1280,9 +1319,16 @@ function CmsPanel({
 						<ChevronLeft className="h-3.5 w-3.5" />
 					</button>
 					<span className="flex-1 truncate text-sm font-semibold">
-						{activeSection?.variants?.[selectedVariant ?? 0]?.label ??
-							`Variant ${(selectedVariant ?? 0) + 1}`}
+						{selectedVariant === fallbackIdx
+							? "Fallback"
+							: (activeSection?.variants?.[selectedVariant ?? 0]?.label ??
+								`Variant ${(selectedVariant ?? 0) + 1}`)}
 					</span>
+					{selectedVariant === fallbackIdx && (
+						<span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">
+							always
+						</span>
+					)}
 					{autoSaving && (
 						<Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
 					)}
@@ -1334,6 +1380,16 @@ function CmsPanel({
 						>
 							editing
 						</span>
+					)}
+					{!savedBlock && !activeSection?.isMultivariate && (
+						<button
+							type="button"
+							onClick={onWrapWithVariants}
+							className="shrink-0 rounded p-1 text-muted-foreground hover:text-[oklch(0.45_0.15_160)] hover:bg-[oklch(0.65_0.15_160/0.12)]"
+							title="Turn into variant"
+						>
+							<Flag className="h-3.5 w-3.5" />
+						</button>
 					)}
 					{autoSaving && !savedBlock && (
 						<Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
@@ -1425,16 +1481,25 @@ function CmsPanel({
 												.pop()
 												?.replace(/\.(tsx|ts)$/, "")
 										: "Always";
+									const isFallbackVariant =
+										selectedVariant === fallbackIdx;
 									return (
 										<div className="space-y-1 px-2">
-											{/* Matcher type selector */}
-											<MatcherPicker
-												currentRt={ruleRt}
-												currentLabel={ruleLabel ?? "Always"}
-												matchers={availableMatchers}
-												onFetchMatchers={onFetchMatchers}
-												onSelect={onChangeMatcherType}
-											/>
+											{/* Matcher type selector (hidden for fallback) */}
+											{isFallbackVariant ? (
+												<div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1.5 text-[11px] text-muted-foreground">
+													<Lock className="h-3 w-3" />
+													Always (fallback — cannot change)
+												</div>
+											) : (
+												<MatcherPicker
+													currentRt={ruleRt}
+													currentLabel={ruleLabel ?? "Always"}
+													matchers={availableMatchers}
+													onFetchMatchers={onFetchMatchers}
+													onSelect={onChangeMatcherType}
+												/>
+											)}
 											{variantRuleSchema ? (
 												<SectionForm
 													data={ruleData}
@@ -1483,6 +1548,26 @@ function CmsPanel({
 			) : isMultivariate && activeSection?.variants ? (
 				/* ── Variant list (DnD reorderable) ── */
 				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+					{!hasFallback && (
+						<div className="mx-2 mt-2 flex items-start gap-2 rounded-md border border-amber-300/50 bg-amber-50 px-3 py-2 dark:border-amber-500/30 dark:bg-amber-950/30">
+							<AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+							<div className="flex flex-col gap-1">
+								<span className="text-[11px] font-medium text-amber-800 dark:text-amber-300">
+									No fallback variant
+								</span>
+								<span className="text-[10px] text-amber-700/80 dark:text-amber-400/70">
+									A fallback ensures a default section is always shown.
+								</span>
+								<button
+									type="button"
+									onClick={onAddFallback}
+									className="mt-0.5 self-start rounded px-2 py-0.5 text-[10px] font-medium text-amber-800 transition-colors hover:bg-amber-200/60 dark:text-amber-300 dark:hover:bg-amber-800/40"
+								>
+									Add fallback variant
+								</button>
+							</div>
+						</div>
+					)}
 					<div className="min-h-0 flex-1 overflow-y-auto p-2">
 						<DndContext
 							sensors={sensors}
@@ -1493,26 +1578,74 @@ function CmsPanel({
 								items={variantSortableIds}
 								strategy={verticalListSortingStrategy}
 							>
-								{activeSection.variants.map((variant, vIdx) => {
-									const valueRt = (variant.value.__resolveType as string) ?? "";
-									const valueLabel = valueRt
-										? (valueRt
-												.split("/")
-												.pop()
-												?.replace(/\.(tsx|ts)$/, "") ?? "Section")
-										: "Section";
-									return (
-										<SortableVariantItem
-											key={String(vIdx)}
-											id={String(vIdx)}
-											label={variant.label}
-											valueLabel={valueLabel}
-											onSelect={() => onSelectVariant(vIdx)}
-										/>
-									);
-								})}
+								{activeSection.variants
+									.map((variant, vIdx) => ({ variant, vIdx }))
+									.filter(({ vIdx }) => vIdx !== fallbackIdx)
+									.map(({ variant, vIdx }) => {
+										const valueRt =
+											(variant.value.__resolveType as string) ?? "";
+										const valueLabel = valueRt
+											? (valueRt
+													.split("/")
+													.pop()
+													?.replace(/\.(tsx|ts)$/, "") ?? "Section")
+											: "Section";
+										return (
+											<SortableVariantItem
+												key={String(vIdx)}
+												id={String(vIdx)}
+												label={variant.label}
+												valueLabel={valueLabel}
+												onSelect={() => onSelectVariant(vIdx)}
+												onRemove={() => onRemoveVariant(vIdx)}
+											/>
+										);
+									})}
 							</SortableContext>
 						</DndContext>
+						{/* Fallback variant (not draggable, not removable) */}
+						{hasFallback && (() => {
+							const fbVariant = activeSection.variants[fallbackIdx];
+							const fbValueRt =
+								(fbVariant.value.__resolveType as string) ?? "";
+							const fbValueLabel = fbValueRt
+								? (fbValueRt
+										.split("/")
+										.pop()
+										?.replace(/\.(tsx|ts)$/, "") ?? "Section")
+								: "Section";
+							return (
+								<div
+									className="mt-1 flex cursor-pointer select-none items-center gap-2 rounded-md border border-dashed border-muted-foreground/20 bg-muted/30 px-2 py-2 hover:bg-muted/50"
+									onClick={() => onSelectVariant(fallbackIdx)}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" || e.key === " ")
+											onSelectVariant(fallbackIdx);
+									}}
+								>
+									<Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
+									<div className="flex flex-1 flex-col gap-0.5 overflow-hidden">
+										<span className="truncate text-xs font-medium">
+											{fbValueLabel}
+										</span>
+										<span className="truncate text-[10px] text-muted-foreground">
+											Fallback (always)
+										</span>
+									</div>
+								</div>
+							);
+						})()}
+					</div>
+					<div className="shrink-0 border-t p-2">
+						<button
+							type="button"
+							onClick={onAddVariant}
+							className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-[oklch(0.65_0.15_160/0.12)]"
+							style={{ color: "oklch(0.45 0.15 160)" }}
+						>
+							<Plus className="h-3.5 w-3.5" />
+							Add variant
+						</button>
 					</div>
 				</div>
 			) : isEditing && sectionData ? (
@@ -2987,6 +3120,344 @@ function FileExplorerWorkspace({
 				setCmsAutoSaving(false);
 			}
 		}, 800);
+	};
+
+	const handleWrapWithVariants = () => {
+		const snap = cmsDataRef.current;
+		const idx = cmsSelectedSectionRef.current;
+		if (!snap || idx === null || !app || !userEnv) return;
+
+		const rawSections = [
+			...(snap.pageData.sections as Record<string, unknown>[]),
+		];
+		const originalSection = rawSections[idx];
+		if (!originalSection) return;
+
+		// Build multivariate wrapper
+		const multivariate = {
+			__resolveType: "website/flags/multivariate/section.ts",
+			variants: [
+				{ value: { ...originalSection }, rule: {} },
+				{
+					value: { ...originalSection },
+					rule: { __resolveType: "website/matchers/always.ts" },
+				},
+			],
+		};
+		rawSections[idx] = multivariate;
+
+		// Rebuild display sections
+		const rt = multivariate.__resolveType;
+		const labelFromResolveType = (r: string): string => {
+			const parts = r.split("/");
+			const filename = parts[parts.length - 1];
+			return filename.replace(/\.(tsx|ts|jsx|js)$/, "") || r;
+		};
+		const origRt = (originalSection as Record<string, unknown>)
+			.__resolveType as string;
+		const sectionLabel = origRt ? labelFromResolveType(origRt) : "Section";
+		const displayVariants = multivariate.variants.map((v) => {
+			const ruleRt = (v.rule.__resolveType as string) ?? "";
+			return {
+				value: v.value as Record<string, unknown>,
+				rule: v.rule as Record<string, unknown>,
+				label: labelFromResolveType(ruleRt) || "Always",
+			};
+		});
+
+		const newDisplaySections = [...snap.sections];
+		newDisplaySections[idx] = {
+			index: idx,
+			resolveType: rt,
+			label: `Variants of ${sectionLabel}`,
+			isMultivariate: true,
+			variants: displayVariants,
+		};
+
+		const updatedPageData = { ...snap.pageData, sections: rawSections };
+		const next: GetPageSectionsOutput = {
+			...snap,
+			pageData: updatedPageData,
+			sections: newDisplaySections,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+
+		// Switch to variant list view
+		setCmsSectionData(null);
+		setCmsSectionSchema(null);
+		setCmsSchemasMap({});
+		setCmsSavedBlock(false);
+		setCmsSelectedVariant(null);
+
+		// Auto-save
+		setCmsAutoSaving(true);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			try {
+				const result = await app.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: next.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				setPreviewRefreshKey((k) => k + 1);
+			} catch {
+				toast.error("Auto-save failed");
+			} finally {
+				setCmsAutoSaving(false);
+			}
+		}, 300);
+	};
+
+	const handleAddVariant = () => {
+		const snap = cmsDataRef.current;
+		const idx = cmsSelectedSectionRef.current;
+		if (!snap || idx === null || !app || !userEnv) return;
+
+		const displaySection = snap.sections[idx];
+		if (!displaySection?.isMultivariate || !displaySection.variants) return;
+
+		// Get the resolveType from the first variant's value as template
+		const firstValue = displaySection.variants[0]?.value ?? {};
+		const templateRt = (firstValue.__resolveType as string | undefined) ?? "";
+		const newValue: Record<string, unknown> = templateRt
+			? { __resolveType: templateRt }
+			: {};
+		const newRule: Record<string, unknown> = {};
+
+		// Update raw pageData
+		const rawSections = [
+			...(snap.pageData.sections as Record<string, unknown>[]),
+		];
+		const rawSection = { ...rawSections[idx] } as {
+			__resolveType: string;
+			variants: Array<{
+				value: Record<string, unknown>;
+				rule: Record<string, unknown>;
+			}>;
+		};
+		// Insert before fallback (last variant with always.ts) if it exists
+		const rawVariants = [...rawSection.variants];
+		const lastRaw = rawVariants[rawVariants.length - 1];
+		const lastIsAlways =
+			lastRaw &&
+			(lastRaw.rule.__resolveType as string) ===
+				"website/matchers/always.ts";
+		if (lastIsAlways) {
+			rawVariants.splice(rawVariants.length - 1, 0, {
+				value: newValue,
+				rule: newRule,
+			});
+		} else {
+			rawVariants.push({ value: newValue, rule: newRule });
+		}
+		rawSection.variants = rawVariants;
+		rawSections[idx] = rawSection;
+
+		// Update display sections
+		const newDisplaySections = [...snap.sections];
+		const updatedDisplay = { ...newDisplaySections[idx] };
+		const displayVariants = [...(updatedDisplay.variants ?? [])];
+		if (lastIsAlways) {
+			displayVariants.splice(displayVariants.length - 1, 0, {
+				value: newValue,
+				rule: newRule,
+				label: "",
+			});
+		} else {
+			displayVariants.push({ value: newValue, rule: newRule, label: "" });
+		}
+		updatedDisplay.variants = displayVariants;
+		newDisplaySections[idx] = updatedDisplay;
+
+		const updatedPageData = { ...snap.pageData, sections: rawSections };
+		const next: GetPageSectionsOutput = {
+			...snap,
+			pageData: updatedPageData,
+			sections: newDisplaySections,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+
+		// Auto-save
+		setCmsAutoSaving(true);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			try {
+				const result = await app.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: next.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				setPreviewRefreshKey((k) => k + 1);
+			} catch {
+				toast.error("Auto-save failed");
+			} finally {
+				setCmsAutoSaving(false);
+			}
+		}, 300);
+	};
+
+	const handleRemoveVariant = (variantIdx: number) => {
+		const snap = cmsDataRef.current;
+		const idx = cmsSelectedSectionRef.current;
+		if (!snap || idx === null || !app || !userEnv) return;
+
+		const displaySection = snap.sections[idx];
+		if (!displaySection?.isMultivariate || !displaySection.variants) return;
+		if (displaySection.variants.length <= 1) return; // keep at least 1
+
+		// Don't allow removing the fallback variant
+		const lastV = displaySection.variants[displaySection.variants.length - 1];
+		const isFallback =
+			(lastV.rule.__resolveType as string) ===
+			"website/matchers/always.ts";
+		if (isFallback && variantIdx === displaySection.variants.length - 1) return;
+
+		// Update raw pageData
+		const rawSections = [
+			...(snap.pageData.sections as Record<string, unknown>[]),
+		];
+		const rawSection = { ...rawSections[idx] } as {
+			__resolveType: string;
+			variants: Array<unknown>;
+		};
+		const rawVariants = [...rawSection.variants];
+		rawVariants.splice(variantIdx, 1);
+		rawSection.variants = rawVariants;
+		rawSections[idx] = rawSection;
+
+		// Update display sections
+		const newDisplaySections = [...snap.sections];
+		const updatedDisplay = { ...newDisplaySections[idx] };
+		const newVariants = [...(updatedDisplay.variants ?? [])];
+		newVariants.splice(variantIdx, 1);
+		updatedDisplay.variants = newVariants;
+		newDisplaySections[idx] = updatedDisplay;
+
+		const updatedPageData = { ...snap.pageData, sections: rawSections };
+		const next: GetPageSectionsOutput = {
+			...snap,
+			pageData: updatedPageData,
+			sections: newDisplaySections,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+
+		// Auto-save
+		setCmsAutoSaving(true);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			try {
+				const result = await app.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: next.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				setPreviewRefreshKey((k) => k + 1);
+			} catch {
+				toast.error("Auto-save failed");
+			} finally {
+				setCmsAutoSaving(false);
+			}
+		}, 300);
+	};
+
+	const handleAddFallback = () => {
+		const snap = cmsDataRef.current;
+		const idx = cmsSelectedSectionRef.current;
+		if (!snap || idx === null || !app || !userEnv) return;
+
+		const displaySection = snap.sections[idx];
+		if (!displaySection?.isMultivariate || !displaySection.variants) return;
+
+		// Check if already has fallback
+		const lastV = displaySection.variants[displaySection.variants.length - 1];
+		if (
+			lastV &&
+			(lastV.rule.__resolveType as string) ===
+				"website/matchers/always.ts"
+		)
+			return;
+
+		// Use first variant's resolveType as template
+		const firstValue = displaySection.variants[0]?.value ?? {};
+		const templateRt = (firstValue.__resolveType as string | undefined) ?? "";
+		const fallbackValue: Record<string, unknown> = templateRt
+			? { __resolveType: templateRt }
+			: {};
+		const fallbackRule: Record<string, unknown> = {
+			__resolveType: "website/matchers/always.ts",
+		};
+
+		// Update raw pageData
+		const rawSections = [
+			...(snap.pageData.sections as Record<string, unknown>[]),
+		];
+		const rawSection = { ...rawSections[idx] } as {
+			__resolveType: string;
+			variants: Array<{
+				value: Record<string, unknown>;
+				rule: Record<string, unknown>;
+			}>;
+		};
+		rawSection.variants = [
+			...rawSection.variants,
+			{ value: fallbackValue, rule: fallbackRule },
+		];
+		rawSections[idx] = rawSection;
+
+		// Update display sections
+		const newDisplaySections = [...snap.sections];
+		const updatedDisplay = { ...newDisplaySections[idx] };
+		updatedDisplay.variants = [
+			...(updatedDisplay.variants ?? []),
+			{ value: fallbackValue, rule: fallbackRule, label: "always" },
+		];
+		newDisplaySections[idx] = updatedDisplay;
+
+		const updatedPageData = { ...snap.pageData, sections: rawSections };
+		const next: GetPageSectionsOutput = {
+			...snap,
+			pageData: updatedPageData,
+			sections: newDisplaySections,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+
+		// Auto-save
+		setCmsAutoSaving(true);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			try {
+				const result = await app.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: next.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				setPreviewRefreshKey((k) => k + 1);
+			} catch {
+				toast.error("Auto-save failed");
+			} finally {
+				setCmsAutoSaving(false);
+			}
+		}, 300);
 	};
 
 	const handleSavedBlockSave = async () => {
@@ -4607,6 +5078,10 @@ function FileExplorerWorkspace({
 																availableMatchers={cmsAvailableMatchers}
 																onFetchMatchers={() => void fetchMatchersList()}
 																onChangeMatcherType={handleChangeMatcherType}
+																onWrapWithVariants={handleWrapWithVariants}
+																onAddVariant={handleAddVariant}
+																onRemoveVariant={handleRemoveVariant}
+																onAddFallback={handleAddFallback}
 															/>
 														)}
 
