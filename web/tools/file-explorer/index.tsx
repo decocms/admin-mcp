@@ -780,7 +780,7 @@ function MatcherPicker({
 
 	return (
 		<>
-			{/* Trigger button */}
+			{/* Trigger */}
 			<button
 				type="button"
 				onClick={handleOpen}
@@ -802,99 +802,96 @@ function MatcherPicker({
 						if (e.key === "Escape") setOpen(false);
 					}}
 				>
-					<div className="relative flex max-h-[70vh] w-80 flex-col overflow-hidden rounded-xl border bg-popover shadow-2xl">
-						{/* Header */}
-						<div className="flex shrink-0 items-center gap-2 border-b px-4 py-3">
-							<span className="flex-1 text-sm font-semibold">Segment Rule</span>
-							<button
-								type="button"
-								onClick={() => setOpen(false)}
-								className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-							>
-								<X className="h-3.5 w-3.5" />
-							</button>
-						</div>
-
-						{/* Search */}
-						<div className="shrink-0 px-3 pt-2.5 pb-1.5">
-							<div className="flex items-center gap-2 rounded-md border px-2.5 py-1.5">
+					<div className="relative flex max-h-[80vh] w-[620px] flex-col overflow-hidden rounded-xl border bg-popover shadow-2xl">
+						{/* Header + search */}
+						<div className="flex shrink-0 items-center gap-3 border-b px-4 py-3">
+							<span className="shrink-0 text-sm font-semibold">
+								Segment Rule
+							</span>
+							<div className="flex flex-1 items-center gap-2 rounded-md border px-2.5 py-1">
 								<Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
 								<input
 									autoFocus
 									value={search}
 									onChange={(e) => setSearch(e.target.value)}
-									placeholder="Search…"
+									placeholder="Search\u2026"
 									className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground/50"
 								/>
 							</div>
-						</div>
-
-						{/* List */}
-						<div className="min-h-0 flex-1 overflow-y-auto px-2 py-1.5">
-							{/* Always */}
 							<button
 								type="button"
-								onClick={() => {
-									onSelect("");
-									setOpen(false);
-								}}
-								className={cn(
-									"flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-accent/60",
-									!currentRt && "bg-accent",
-								)}
+								onClick={() => setOpen(false)}
+								className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
 							>
-								<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-background">
-									<Eye className="h-4 w-4 text-muted-foreground" />
-								</div>
-								<div className="min-w-0 flex-1">
-									<div className="truncate text-xs font-medium">Always</div>
-									<div className="truncate text-[10px] leading-snug text-muted-foreground">
-										Matches all visitors
-									</div>
-								</div>
+								<X className="h-3.5 w-3.5" />
 							</button>
+						</div>
 
+						{/* Grid */}
+						<div className="min-h-0 flex-1 overflow-y-auto p-3">
 							{!matchers ? (
-								<div className="flex items-center justify-center gap-2 py-10 text-xs text-muted-foreground">
+								<div className="flex items-center justify-center gap-2 py-16 text-xs text-muted-foreground">
 									<Loader2 className="h-4 w-4 animate-spin" />
-									Loading…
+									Loading matchers\u2026
 								</div>
-							) : filtered?.length === 0 ? (
+							) : (
+								<div className="grid grid-cols-3 gap-2">
+									{/* Always card */}
+									<button
+										type="button"
+										onClick={() => {
+											onSelect("");
+											setOpen(false);
+										}}
+										className={cn(
+											"flex flex-col gap-2 rounded-lg border p-3 text-left transition-colors hover:bg-accent/50",
+											!currentRt && "border-ring bg-accent/40",
+										)}
+									>
+										<Eye className="h-5 w-5 text-muted-foreground" />
+										<div>
+											<div className="text-xs font-medium">Always</div>
+											<div className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
+												Target all users
+											</div>
+										</div>
+									</button>
+
+									{(filtered ?? []).map((m) => {
+										const Icon = matcherIcon(m.icon);
+										return (
+											<button
+												key={m.resolveType}
+												type="button"
+												onClick={() => {
+													onSelect(m.resolveType);
+													setOpen(false);
+												}}
+												className={cn(
+													"flex flex-col gap-2 rounded-lg border p-3 text-left transition-colors hover:bg-accent/50",
+													currentRt === m.resolveType &&
+														"border-ring bg-accent/40",
+												)}
+											>
+												<Icon className="h-5 w-5 text-muted-foreground" />
+												<div>
+													<div className="text-xs font-medium">{m.title}</div>
+													{m.description && (
+														<div className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
+															{m.description}
+														</div>
+													)}
+												</div>
+											</button>
+										);
+									})}
+								</div>
+							)}
+
+							{matchers && filtered?.length === 0 && (
 								<div className="py-8 text-center text-xs text-muted-foreground">
 									No matchers found
 								</div>
-							) : (
-								filtered?.map((m) => {
-									const Icon = matcherIcon(m.icon);
-									return (
-										<button
-											key={m.resolveType}
-											type="button"
-											onClick={() => {
-												onSelect(m.resolveType);
-												setOpen(false);
-											}}
-											className={cn(
-												"flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-accent/60",
-												currentRt === m.resolveType && "bg-accent",
-											)}
-										>
-											<div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-background">
-												<Icon className="h-4 w-4 text-muted-foreground" />
-											</div>
-											<div className="min-w-0 flex-1">
-												<div className="truncate text-xs font-medium">
-													{m.title}
-												</div>
-												{m.description && (
-													<div className="line-clamp-1 text-[10px] leading-snug text-muted-foreground">
-														{m.description}
-													</div>
-												)}
-											</div>
-										</button>
-									);
-								})
 							)}
 						</div>
 					</div>

@@ -1376,6 +1376,11 @@ export const listMatchersTool = createTool({
 
 			const getDescription = (schema: RawSchema): string | undefined => {
 				if (typeof schema.description === "string") return schema.description;
+				if (typeof schema.$ref === "string") {
+					const resolved = resolveRef(schema.$ref);
+					if (typeof resolved.description === "string")
+						return resolved.description;
+				}
 				for (const key of ["allOf", "anyOf", "oneOf"] as const) {
 					const arr = schema[key];
 					if (!Array.isArray(arr)) continue;
