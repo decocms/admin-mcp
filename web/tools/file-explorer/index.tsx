@@ -595,12 +595,14 @@ function SortableSectionItem({
 	onDuplicate,
 	onRemove,
 	onToggleLazy,
+	onToggleHidden,
 }: {
 	section: {
 		index: number;
 		resolveType: string;
 		label: string;
 		isLazy?: boolean;
+		isHidden?: boolean;
 		isSavedBlock?: boolean;
 		isMultivariate?: boolean;
 	};
@@ -608,6 +610,7 @@ function SortableSectionItem({
 	onDuplicate: () => void;
 	onRemove: () => void;
 	onToggleLazy: () => void;
+	onToggleHidden: () => void;
 }) {
 	const {
 		attributes,
@@ -654,9 +657,36 @@ function SortableSectionItem({
 							: undefined
 				}
 			/>
-			<span className="flex-1 truncate text-xs font-medium" onClick={onSelect}>
+			<span
+				className={cn(
+					"flex-1 truncate text-xs font-medium",
+					section.isHidden && "line-through opacity-50",
+				)}
+				onClick={onSelect}
+			>
 				{section.label}
 			</span>
+			<button
+				type="button"
+				onPointerDown={(e) => e.stopPropagation()}
+				onClick={(e) => {
+					e.stopPropagation();
+					onToggleHidden();
+				}}
+				title={section.isHidden ? "Show section" : "Hide section"}
+				className={cn(
+					"shrink-0 rounded p-0.5 transition-colors hover:bg-background/80",
+					section.isHidden
+						? "text-muted-foreground/60"
+						: "text-muted-foreground/30 opacity-0 group-hover:opacity-100",
+				)}
+			>
+				{section.isHidden ? (
+					<EyeOff className="h-3 w-3" />
+				) : (
+					<Eye className="h-3 w-3" />
+				)}
+			</button>
 			<button
 				type="button"
 				onPointerDown={(e) => e.stopPropagation()}
@@ -817,7 +847,7 @@ function MatcherPicker({
 									autoFocus
 									value={search}
 									onChange={(e) => setSearch(e.target.value)}
-									placeholder="Search\u2026"
+									placeholder="Search…"
 									className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground/50"
 								/>
 							</div>
@@ -902,6 +932,138 @@ function MatcherPicker({
 			)}
 		</>
 	);
+}
+
+// ─── Matcher label formatter ─────────────────────────────────────────────────
+
+function formatMatcherRule(rule: Record<string, unknown>): string {
+	const rt = (rule.__resolveType as string) ?? "";
+	const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+
+	const alwaysTypes = [
+		"website/matchers/always.ts",
+		"$live/matchers/MatchAlways.ts",
+	];
+	if (alwaysTypes.includes(rt) || rt === "") return "Always";
+
+	const fallback = () => {
+		const parts = rt.split("/");
+		return parts[parts.length - 1].replace(/\.(tsx?|jsx?)$/, "") || rt;
+	};
+
+	switch (rt) {
+		case "website/matchers/never.ts":
+			return "Never";
+
+		case "website/matchers/device.ts":
+		case "$live/matchers/MatchDevice.ts": {
+			const { mobile, tablet, desktop, devices: devList = [] } = rule as {
+				mobile?: boolean;
+				tablet?: boolean;
+				desktop?: boolean;
+				devices?: string[];
+			};
+			const devices = [...(devList as string[])];
+			if (mobile) devices.push("Mobile");
+			if (tablet) devices.push("Tablet");
+			if (desktop) devices.push("Desktop");
+			return devices.length > 0 ? devices.map(cap).join(" & ") : fallback();
+		}
+
+		case "website/matchers/date.ts":
+		case "$live/matchers/MatchDate.ts": {
+			const { start, end } = rule as { start?: string; end?: string };
+			const fmt = new Intl.DateTimeFormat("en", {
+				dateStyle: "medium",
+				timeStyle: "short",
+			});
+			try {
+				if (start && end)
+					return `${fmt.format(new Date(start))} → ${fmt.format(new Date(end))}`;
+				if (start) return `From ${fmt.format(new Date(start))}`;
+				if (end) return `Until ${fmt.format(new Date(end))}`;
+			} catch {
+				// fall through
+			}
+			return fallback();
+		}
+
+		case "website/matchers/random.ts":
+		case "$live/matchers/MatchRandom.ts": {
+			const { traffic } = rule as { traffic?: number };
+			if (typeof traffic === "number")
+				return `${Math.ceil(traffic * 100)}% of sessions`;
+			return fallback();
+		}
+
+		case "website/matchers/host.ts":
+		case "$live/matchers/MatchHost.ts": {
+			const { includes, match } = rule as {
+				includes?: string;
+				match?: string;
+			};
+			const parts: string[] = [];
+			if (includes) parts.push(includes);
+			if (match) parts.push(match);
+			return parts.length > 0 ? parts.join(" - ") : fallback();
+		}
+
+		case "website/matchers/pathname.ts": {
+			const caseObj = rule.case as
+				| { type?: string; pathname?: string }
+				| undefined;
+			const { type, pathname } = caseObj ?? {};
+			if (type && pathname) return `Pathname ${type} ${pathname}`;
+			return fallback();
+		}
+
+		case "website/matchers/location.ts":
+		case "$live/matchers/MatchLocation.ts": {
+			const { includeLocations, excludeLocations } = rule as {
+				includeLocations?: Array<{
+					city?: string;
+					regionCode?: string;
+					country?: string;
+				}>;
+				excludeLocations?: Array<{
+					city?: string;
+					regionCode?: string;
+					country?: string;
+				}>;
+			};
+			const fmtLoc = (loc: {
+				city?: string;
+				regionCode?: string;
+				country?: string;
+			}) =>
+				[loc.city, loc.regionCode, loc.country].filter(Boolean).join(" - ");
+			const first = includeLocations?.[0];
+			if (first) {
+				const rest = (includeLocations?.length ?? 0) - 1;
+				return `${fmtLoc(first)}${rest > 0 ? ` +${rest}` : ""}`;
+			}
+			const firstEx = excludeLocations?.[0];
+			if (firstEx) {
+				const rest = (excludeLocations?.length ?? 0) - 1;
+				return `Except ${fmtLoc(firstEx)}${rest > 0 ? ` +${rest}` : ""}`;
+			}
+			return "Any location";
+		}
+
+		case "website/matchers/multi.ts":
+		case "$live/matchers/MatchMulti.ts": {
+			const { matchers, op = "AND" } = rule as {
+				matchers?: Array<Record<string, unknown>>;
+				op?: string;
+			};
+			if (matchers && matchers.length > 0)
+				return matchers.map(formatMatcherRule).join(` ${op} `);
+			return fallback();
+		}
+
+		default:
+			return fallback();
+	}
 }
 
 // ─── Sortable variant item ───────────────────────────────────────────────────
@@ -1166,6 +1328,7 @@ interface CmsPanelProps {
 	onDuplicateSection: (listIdx: number) => void;
 	onRemoveSection: (listIdx: number) => void;
 	onToggleLazySection: (listIdx: number) => void;
+	onToggleHiddenSection: (listIdx: number) => void;
 	onPageMetaChange: (name: string, path: string) => void;
 	onAddSection: () => void;
 	onClose: () => void;
@@ -1187,6 +1350,13 @@ interface CmsPanelProps {
 	onAddVariant: () => void;
 	onRemoveVariant: (variantIdx: number) => void;
 	onAddFallback: () => void;
+	pageVariants?: GetPageSectionsOutput["pageVariants"];
+	selectedPageVariant?: number | null;
+	onSelectPageVariant?: (idx: number) => void;
+	onDeselectPageVariant?: () => void;
+	pageVariantRuleSchema?: SchemaProperties | null;
+	onChangePageVariantRule?: (data: Record<string, unknown>) => void;
+	onChangePageVariantMatcherType?: (resolveType: string) => void;
 }
 
 function CmsPanel({
@@ -1206,6 +1376,7 @@ function CmsPanel({
 	onDuplicateSection,
 	onRemoveSection,
 	onToggleLazySection,
+	onToggleHiddenSection,
 	onPageMetaChange,
 	onAddSection,
 	onClose,
@@ -1226,6 +1397,13 @@ function CmsPanel({
 	onAddVariant,
 	onRemoveVariant,
 	onAddFallback,
+	pageVariants,
+	selectedPageVariant,
+	onSelectPageVariant,
+	onDeselectPageVariant,
+	pageVariantRuleSchema,
+	onChangePageVariantRule,
+	onChangePageVariantMatcherType,
 }: CmsPanelProps) {
 	const sensors = useSensors(
 		useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
@@ -1290,8 +1468,15 @@ function CmsPanel({
 
 	const [variantRuleOpen, setVariantRuleOpen] = useState(true);
 	const [variantSectionOpen, setVariantSectionOpen] = useState(true);
+	const [pageVariantRuleOpen, setPageVariantRuleOpen] = useState(true);
 
 	const editingGlobally = savedBlock === "editing";
+
+	// Page-level multivariate derived state
+	const hasPageVariants = !!pageVariants && pageVariants.length > 0;
+	const isPageVariantList = hasPageVariants && (selectedPageVariant === null || selectedPageVariant === undefined);
+	const isPageVariantSections = hasPageVariants && selectedPageVariant !== null && selectedPageVariant !== undefined;
+	const activePageVariant = isPageVariantSections ? pageVariants![selectedPageVariant!] : undefined;
 
 	return (
 		<div
@@ -1395,29 +1580,49 @@ function CmsPanel({
 						<Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
 					)}
 				</div>
-			) : (
-				<div className="shrink-0 border-b px-3 pb-2.5 pt-2.5">
-					<div className="flex items-center gap-2">
-						<div className="flex flex-1 flex-col">
-							<input
-								value={editName}
-								onChange={(e) => {
-									setEditName(e.target.value);
-									onPageMetaChange(e.target.value, editPath);
-								}}
-								className="truncate bg-transparent text-sm font-semibold outline-none placeholder:text-muted-foreground/50 hover:bg-accent/40 focus:bg-accent/60 rounded px-1 -mx-1"
-								placeholder="Page name"
-							/>
-							<input
-								value={editPath}
-								onChange={(e) => {
-									setEditPath(e.target.value);
-									onPageMetaChange(editName, e.target.value);
-								}}
-								className="-mt-1 truncate bg-transparent text-[10px] text-muted-foreground outline-none placeholder:text-muted-foreground/40 hover:bg-accent/40 focus:bg-accent/60 rounded px-1 -mx-1"
-								placeholder="/path"
-							/>
-						</div>
+		) : isPageVariantSections ? (
+			<div className="flex shrink-0 items-center gap-2 border-b px-3 py-2.5">
+				<button
+					type="button"
+					onClick={onDeselectPageVariant}
+					className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+					title="Back to page variants"
+				>
+					<ChevronLeft className="h-3.5 w-3.5" />
+				</button>
+				<span
+					className="flex-1 truncate text-sm font-semibold"
+					style={{ color: "oklch(0.45 0.15 160)" }}
+				>
+					{activePageVariant?.label ?? `Variant ${selectedPageVariant! + 1}`}
+				</span>
+				{autoSaving && (
+					<Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
+				)}
+			</div>
+		) : (
+			<div className="shrink-0 border-b px-3 pb-2.5 pt-2.5">
+				<div className="flex items-center gap-2">
+					<div className="flex flex-1 flex-col">
+						<input
+							value={editName}
+							onChange={(e) => {
+								setEditName(e.target.value);
+								onPageMetaChange(e.target.value, editPath);
+							}}
+							className="truncate bg-transparent text-sm font-semibold outline-none placeholder:text-muted-foreground/50 hover:bg-accent/40 focus:bg-accent/60 rounded px-1 -mx-1"
+							placeholder="Page name"
+						/>
+						<input
+							value={editPath}
+							onChange={(e) => {
+								setEditPath(e.target.value);
+								onPageMetaChange(editName, e.target.value);
+							}}
+							className="-mt-1 truncate bg-transparent text-[10px] text-muted-foreground outline-none placeholder:text-muted-foreground/40 hover:bg-accent/40 focus:bg-accent/60 rounded px-1 -mx-1"
+							placeholder="/path"
+						/>
+					</div>
 						<button
 							type="button"
 							onClick={onMinimize}
@@ -1663,49 +1868,189 @@ function CmsPanel({
 					onCancelGlobally={onSavedBlockCancel}
 					saving={autoSaving && savedBlock === "editing"}
 				/>
-			) : (
-				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-					<div className="min-h-0 flex-1 overflow-y-auto p-2">
-						{data.sections.length === 0 ? (
-							<div className="px-2 py-3 text-xs text-muted-foreground">
-								No sections on this page.
-							</div>
-						) : (
-							<DndContext
-								sensors={sensors}
-								modifiers={[restrictToVerticalAxis]}
-								onDragEnd={handleDragEnd}
-							>
-								<SortableContext
-									items={sortableIds}
-									strategy={verticalListSortingStrategy}
-								>
-									{data.sections.map((section) => (
-										<SortableSectionItem
-											key={String(section.index)}
-											section={section}
-											onSelect={() => onSelectSection(section.index)}
-											onDuplicate={() => onDuplicateSection(section.index)}
-											onRemove={() => onRemoveSection(section.index)}
-											onToggleLazy={() => onToggleLazySection(section.index)}
-										/>
-									))}
-								</SortableContext>
-							</DndContext>
-						)}
-					</div>
-					<div className="shrink-0 border-t p-2">
+		) : isPageVariantList ? (
+			/* ── Page-level variant list ─────────────────────────────── */
+			<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+				<div className="min-h-0 flex-1 overflow-y-auto p-2">
+					{pageVariants!.map((pv, i) => (
 						<button
+							key={i}
 							type="button"
-							onClick={onAddSection}
-							className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+							onClick={() => onSelectPageVariant?.(i)}
+							className="flex w-full cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-accent"
 						>
-							<Plus className="h-3.5 w-3.5" />
-							Add section
+							<Flag className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" style={{ color: "oklch(0.55 0.15 160)" }} />
+							<div className="flex flex-1 flex-col gap-0.5 overflow-hidden">
+								<span className="truncate text-xs font-medium">
+									{pv.label}
+								</span>
+								<span className="truncate text-[10px] text-muted-foreground">
+									{pv.sections.length === 1
+										? "1 section"
+										: `${pv.sections.length} sections`}
+								</span>
+							</div>
+							<ChevronLeft className="h-3.5 w-3.5 shrink-0 rotate-180 text-muted-foreground/40" />
 						</button>
-					</div>
+					))}
 				</div>
-			)}
+			</div>
+		) : isPageVariantSections ? (
+			/* ── Page-level variant sections with Segment Rule ───────── */
+			<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+				{/* Segment Rule collapsible */}
+				<div className="shrink-0 border-b">
+					<button
+						type="button"
+						onClick={() => setPageVariantRuleOpen((v) => !v)}
+						className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-accent/40"
+					>
+						<ChevronDown
+							className={cn(
+								"h-3 w-3 transition-transform",
+								!pageVariantRuleOpen && "-rotate-90",
+							)}
+						/>
+						Segment Rule
+					</button>
+					{pageVariantRuleOpen && (
+						<div className="px-1 pb-2">
+							{(() => {
+								const pvRule = activePageVariant?.rule ?? {};
+								const pvRuleRt = (pvRule.__resolveType as string) ?? "";
+								const pvRuleLabel = pvRuleRt
+									? pvRuleRt
+											.split("/")
+											.pop()
+											?.replace(/\.(tsx|ts)$/, "")
+									: "Always";
+								const isFallbackPv =
+									pvRuleRt === "website/matchers/always.ts" ||
+									pvRuleRt === "$live/matchers/MatchAlways.ts";
+								return (
+									<div className="space-y-1 px-2">
+										{isFallbackPv ? (
+											<div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1.5 text-[11px] text-muted-foreground">
+												<Lock className="h-3 w-3" />
+												Always (fallback — cannot change)
+											</div>
+										) : (
+											<MatcherPicker
+												currentRt={pvRuleRt}
+												currentLabel={pvRuleLabel ?? "Always"}
+												matchers={availableMatchers}
+												onFetchMatchers={onFetchMatchers}
+												onSelect={(rt) =>
+													onChangePageVariantMatcherType?.(rt)
+												}
+											/>
+										)}
+										{pageVariantRuleSchema ? (
+											<SectionForm
+												data={pvRule}
+												schema={pageVariantRuleSchema}
+												schemasMap={schemasMap}
+												onChange={(d) =>
+													onChangePageVariantRule?.(d)
+												}
+											/>
+										) : pvRuleRt ? (
+											<div className="text-[10px] text-muted-foreground/60 py-1">
+												Loading schema…
+											</div>
+										) : null}
+									</div>
+								);
+							})()}
+						</div>
+					)}
+				</div>
+				{/* Sections list */}
+				<div className="min-h-0 flex-1 overflow-y-auto p-2">
+					{data.sections.length === 0 ? (
+						<div className="px-2 py-3 text-xs text-muted-foreground">
+							No sections on this page.
+						</div>
+					) : (
+						<DndContext
+							sensors={sensors}
+							modifiers={[restrictToVerticalAxis]}
+							onDragEnd={handleDragEnd}
+						>
+							<SortableContext
+								items={sortableIds}
+								strategy={verticalListSortingStrategy}
+							>
+								{data.sections.map((section) => (
+									<SortableSectionItem
+										key={String(section.index)}
+										section={section}
+										onSelect={() => onSelectSection(section.index)}
+										onDuplicate={() => onDuplicateSection(section.index)}
+										onRemove={() => onRemoveSection(section.index)}
+										onToggleLazy={() => onToggleLazySection(section.index)}
+										onToggleHidden={() => onToggleHiddenSection(section.index)}
+									/>
+								))}
+							</SortableContext>
+						</DndContext>
+					)}
+				</div>
+				<div className="shrink-0 border-t p-2">
+					<button
+						type="button"
+						onClick={onAddSection}
+						className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+					>
+						<Plus className="h-3.5 w-3.5" />
+						Add section
+					</button>
+				</div>
+			</div>
+		) : (
+			<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+				<div className="min-h-0 flex-1 overflow-y-auto p-2">
+					{data.sections.length === 0 ? (
+						<div className="px-2 py-3 text-xs text-muted-foreground">
+							No sections on this page.
+						</div>
+					) : (
+						<DndContext
+							sensors={sensors}
+							modifiers={[restrictToVerticalAxis]}
+							onDragEnd={handleDragEnd}
+						>
+							<SortableContext
+								items={sortableIds}
+								strategy={verticalListSortingStrategy}
+							>
+								{data.sections.map((section) => (
+									<SortableSectionItem
+										key={String(section.index)}
+										section={section}
+										onSelect={() => onSelectSection(section.index)}
+										onDuplicate={() => onDuplicateSection(section.index)}
+										onRemove={() => onRemoveSection(section.index)}
+										onToggleLazy={() => onToggleLazySection(section.index)}
+										onToggleHidden={() => onToggleHiddenSection(section.index)}
+									/>
+								))}
+							</SortableContext>
+						</DndContext>
+					)}
+				</div>
+				<div className="shrink-0 border-t p-2">
+					<button
+						type="button"
+						onClick={onAddSection}
+						className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+					>
+						<Plus className="h-3.5 w-3.5" />
+						Add section
+					</button>
+				</div>
+			</div>
+		)}
 		</div>
 	);
 }
@@ -1803,6 +2148,42 @@ function FileExplorerWorkspace({
 	const [cmsAvailableMatchers, setCmsAvailableMatchers] = useState<
 		ListMatchersOutput["matchers"] | null
 	>(null);
+
+	// ── Page-level multivariate state ────────────────────────────────────────
+	const [cmsSelectedPageVariant, setCmsSelectedPageVariant] = useState<
+		number | null
+	>(null);
+	const cmsSelectedPageVariantRef = useRef<number | null>(null);
+	const [cmsPageVariantRuleSchema, setCmsPageVariantRuleSchema] =
+		useState<SchemaProperties | null>(null);
+
+	// Helpers to read/write the sections array from pageData regardless of
+	// whether the page uses a page-level multivariate sections object.
+	const getActiveSectionsArray = (
+		pageData: Record<string, unknown>,
+		pvIdx: number | null,
+	): unknown[] => {
+		if (pvIdx === null) return pageData.sections as unknown[];
+		const mv = pageData.sections as {
+			variants?: Array<{ value?: unknown[] }>;
+		};
+		return (mv.variants?.[pvIdx]?.value as unknown[]) ?? [];
+	};
+
+	const withSectionsArray = (
+		pageData: Record<string, unknown>,
+		pvIdx: number | null,
+		sections: unknown[],
+	): Record<string, unknown> => {
+		if (pvIdx === null) return { ...pageData, sections };
+		const mv = { ...(pageData.sections as Record<string, unknown>) };
+		const variants = [...((mv.variants as unknown[]) ?? [])];
+		variants[pvIdx] = {
+			...(variants[pvIdx] as Record<string, unknown>),
+			value: sections,
+		};
+		return { ...pageData, sections: { ...mv, variants } };
+	};
 
 	// ── CMS inspect state ────────────────────────────────────────────────────
 	const [cmsInspectActive, setCmsInspectActive] = useState(false);
@@ -2040,7 +2421,10 @@ function FileExplorerWorkspace({
 		if (!cmsData) return;
 		const { manifestKey, sectionIndex } = payload;
 		const sections = cmsData.sections;
-		const rawSections = cmsData.pageData.sections as Array<{
+		const rawSections = getActiveSectionsArray(
+			cmsData.pageData,
+			cmsSelectedPageVariantRef.current,
+		) as Array<{
 			__resolveType?: string;
 			section?: { __resolveType?: string };
 		}>;
@@ -2404,11 +2788,16 @@ function FileExplorerWorkspace({
 						}
 						throw new Error(msg);
 					}
-					const data = result?.structuredContent as
-						| GetPageSectionsOutput
-						| undefined;
-					setCmsData(data ?? null);
-					setCmsLoading(false);
+				const data = result?.structuredContent as
+					| GetPageSectionsOutput
+					| undefined;
+				setCmsData(data ?? null);
+				// If the page uses page-level multivariate sections, start at the
+				// variants list (null) so the user picks a variant before seeing sections.
+				const pvIdx = null;
+				setCmsSelectedPageVariant(pvIdx);
+				cmsSelectedPageVariantRef.current = pvIdx;
+				setCmsLoading(false);
 					return;
 				} catch (e) {
 					const msg =
@@ -2732,6 +3121,8 @@ function FileExplorerWorkspace({
 		setCmsInspectInput("");
 		setCmsPanelVisible(true);
 		setCmsSavedBlock(false);
+		setCmsSelectedPageVariant(null);
+		cmsSelectedPageVariantRef.current = null;
 		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
 	};
 
@@ -2740,6 +3131,128 @@ function FileExplorerWorkspace({
 		setCmsSelectedSection(null);
 		setCmsSectionData(null);
 		setCmsSavedBlock(false);
+	};
+
+	const handleSelectPageVariant = (pvIdx: number) => {
+		if (!cmsData?.pageVariants) return;
+		const variant = cmsData.pageVariants[pvIdx];
+		if (!variant) return;
+		setCmsSelectedPageVariant(pvIdx);
+		cmsSelectedPageVariantRef.current = pvIdx;
+		// Reset section selection when switching page variants
+		setCmsSelectedSection(null);
+		cmsSelectedSectionRef.current = null;
+		setCmsSectionData(null);
+		setCmsSectionSchema(null);
+		setCmsSchemasMap({});
+		setCmsSavedBlock(false);
+		setCmsSelectedVariant(null);
+		setCmsVariantRuleSchema(null);
+		// Fetch schema for the page variant's rule (matcher)
+		setCmsPageVariantRuleSchema(null);
+		const ruleRt = (variant.rule.__resolveType as string) ?? "";
+		if (ruleRt) {
+			void fetchBlockSchema(ruleRt).then((schema) => {
+				if (schema) setCmsPageVariantRuleSchema(schema);
+			});
+		}
+		// Update cmsData.sections to show the selected variant's sections
+		const next = { ...cmsData, sections: variant.sections };
+		setCmsData(next);
+		cmsDataRef.current = next;
+	};
+
+	const handleDeselectPageVariant = () => {
+		if (!cmsData?.pageVariants) return;
+		setCmsSelectedPageVariant(null);
+		cmsSelectedPageVariantRef.current = null;
+		setCmsSelectedSection(null);
+		cmsSelectedSectionRef.current = null;
+		setCmsSectionData(null);
+		setCmsSectionSchema(null);
+		setCmsSchemasMap({});
+		setCmsSavedBlock(false);
+		setCmsSelectedVariant(null);
+		setCmsVariantRuleSchema(null);
+		setCmsPageVariantRuleSchema(null);
+	};
+
+	const handleChangePageVariantMatcherType = (newResolveType: string) => {
+		const pvIdx = cmsSelectedPageVariantRef.current;
+		if (pvIdx === null || !cmsData) return;
+		const newRule: Record<string, unknown> = newResolveType
+			? { __resolveType: newResolveType }
+			: {};
+		handleChangePageVariantRule(newRule);
+		setCmsPageVariantRuleSchema(null);
+		if (newResolveType) {
+			void fetchBlockSchema(newResolveType).then((schema) => {
+				if (schema) setCmsPageVariantRuleSchema(schema);
+			});
+		}
+	};
+
+	const handleChangePageVariantRule = (
+		newRule: Record<string, unknown>,
+	) => {
+		const pvIdx = cmsSelectedPageVariantRef.current;
+		if (pvIdx === null || !cmsData) return;
+
+		// Update the raw rule in pageData.sections.variants[pvIdx].rule
+		const mv = {
+			...(cmsData.pageData.sections as Record<string, unknown>),
+		};
+		const variants = [...((mv.variants as unknown[]) ?? [])];
+		variants[pvIdx] = {
+			...(variants[pvIdx] as Record<string, unknown>),
+			rule: newRule,
+		};
+		const updatedPageData = {
+			...cmsData.pageData,
+			sections: { ...mv, variants },
+		};
+
+		// Update pageVariants display
+		const newPageVariants = cmsData.pageVariants
+			? [...cmsData.pageVariants]
+			: undefined;
+		if (newPageVariants && newPageVariants[pvIdx]) {
+			newPageVariants[pvIdx] = {
+				...newPageVariants[pvIdx],
+				rule: newRule,
+				label: formatMatcherRule(newRule),
+			};
+		}
+
+		const next: GetPageSectionsOutput = {
+			...cmsData,
+			pageData: updatedPageData,
+			...(newPageVariants ? { pageVariants: newPageVariants } : {}),
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+
+		// Auto-save
+		setCmsAutoSaving(true);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			try {
+				const result = await app?.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: next.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				setPreviewRefreshKey((k) => k + 1);
+			} catch {
+				toast.error("Auto-save failed");
+			} finally {
+				setCmsAutoSaving(false);
+			}
+		}, 800);
 	};
 
 	const handleCmsSelectSection = (idx: number) => {
@@ -2760,7 +3273,10 @@ function FileExplorerWorkspace({
 			return;
 		}
 
-		const sections = cmsData.pageData.sections as Record<string, unknown>[];
+		const sections = getActiveSectionsArray(
+			cmsData.pageData,
+			cmsSelectedPageVariantRef.current,
+		) as Record<string, unknown>[];
 		const raw = sections[idx] ?? null;
 
 		const isSaved = displaySection?.isSavedBlock === true;
@@ -2770,6 +3286,22 @@ function FileExplorerWorkspace({
 		if (isSaved) {
 			data = (displaySection as Record<string, unknown>)
 				.__resolvedData as Record<string, unknown> | null;
+		} else if (displaySection?.isHidden && raw) {
+			// Hidden section: unwrap from multivariate variants[0].value
+			const mvObj = raw as {
+				variants?: Array<{ value?: Record<string, unknown> }>;
+			};
+			const innerValue = mvObj.variants?.[0]?.value ?? raw;
+			// If also lazy, unwrap the lazy wrapper too
+			if (displaySection?.isLazy && innerValue) {
+				data =
+					((innerValue as Record<string, unknown>).section as Record<
+						string,
+						unknown
+					> | null) ?? innerValue;
+			} else {
+				data = innerValue;
+			}
 		} else if (displaySection?.isLazy && raw) {
 			data =
 				((raw as Record<string, unknown>).section as Record<
@@ -2786,11 +3318,15 @@ function FileExplorerWorkspace({
 
 		const resolveType = isSaved
 			? displaySection?.resolvedResolveType
-			: displaySection?.isLazy
+			: displaySection?.isHidden
 				? ((data as Record<string, unknown>)?.__resolveType as
 						| string
 						| undefined)
-				: displaySection?.resolveType;
+				: displaySection?.isLazy
+					? ((data as Record<string, unknown>)?.__resolveType as
+							| string
+							| undefined)
+					: displaySection?.resolveType;
 
 		if (!resolveType || !app || !userEnv) return;
 
@@ -2986,7 +3522,10 @@ function FileExplorerWorkspace({
 
 		// Update the raw section in pageData
 		const rawSections = [
-			...(cmsData.pageData.sections as Record<string, unknown>[]),
+			...(getActiveSectionsArray(
+				cmsData.pageData,
+				cmsSelectedPageVariantRef.current,
+			) as Record<string, unknown>[]),
 		];
 		const rawSection = { ...rawSections[sectionIdx] } as {
 			__resolveType: string;
@@ -3013,18 +3552,17 @@ function FileExplorerWorkspace({
 				[field]: newData,
 			};
 			if (field === "rule") {
-				const ruleRt = (newData.__resolveType as string) ?? "";
-				newVariants[cmsSelectedVariant].label =
-					ruleRt
-						.split("/")
-						.pop()
-						?.replace(/\.(tsx|ts)$/, "") || "Always";
+				newVariants[cmsSelectedVariant].label = formatMatcherRule(newData);
 			}
 			displaySection.variants = newVariants;
 		}
 		newDisplaySections[sectionIdx] = displaySection;
 
-		const updatedPageData = { ...cmsData.pageData, sections: rawSections };
+		const updatedPageData = withSectionsArray(
+			cmsData.pageData,
+			cmsSelectedPageVariantRef.current,
+			rawSections,
+		);
 		const next: GetPageSectionsOutput = {
 			...cmsData,
 			pageData: updatedPageData,
@@ -3067,7 +3605,10 @@ function FileExplorerWorkspace({
 
 		// Reorder in raw pageData
 		const rawSections = [
-			...(cmsData.pageData.sections as Record<string, unknown>[]),
+			...(getActiveSectionsArray(
+				cmsData.pageData,
+				cmsSelectedPageVariantRef.current,
+			) as Record<string, unknown>[]),
 		];
 		const rawSection = { ...rawSections[sectionIdx] } as {
 			__resolveType: string;
@@ -3090,7 +3631,11 @@ function FileExplorerWorkspace({
 		}
 		newDisplaySections[sectionIdx] = displaySection;
 
-		const updatedPageData = { ...cmsData.pageData, sections: rawSections };
+		const updatedPageData = withSectionsArray(
+			cmsData.pageData,
+			cmsSelectedPageVariantRef.current,
+			rawSections,
+		);
 		const next: GetPageSectionsOutput = {
 			...cmsData,
 			pageData: updatedPageData,
@@ -3128,7 +3673,10 @@ function FileExplorerWorkspace({
 		if (!snap || idx === null || !app || !userEnv) return;
 
 		const rawSections = [
-			...(snap.pageData.sections as Record<string, unknown>[]),
+			...(getActiveSectionsArray(
+				snap.pageData,
+				cmsSelectedPageVariantRef.current,
+			) as Record<string, unknown>[]),
 		];
 		const originalSection = rawSections[idx];
 		if (!originalSection) return;
@@ -3174,7 +3722,11 @@ function FileExplorerWorkspace({
 			variants: displayVariants,
 		};
 
-		const updatedPageData = { ...snap.pageData, sections: rawSections };
+		const updatedPageData = withSectionsArray(
+			snap.pageData,
+			cmsSelectedPageVariantRef.current,
+			rawSections,
+		);
 		const next: GetPageSectionsOutput = {
 			...snap,
 			pageData: updatedPageData,
@@ -3231,7 +3783,10 @@ function FileExplorerWorkspace({
 
 		// Update raw pageData
 		const rawSections = [
-			...(snap.pageData.sections as Record<string, unknown>[]),
+			...(getActiveSectionsArray(
+				snap.pageData,
+				cmsSelectedPageVariantRef.current,
+			) as Record<string, unknown>[]),
 		];
 		const rawSection = { ...rawSections[idx] } as {
 			__resolveType: string;
@@ -3274,7 +3829,11 @@ function FileExplorerWorkspace({
 		updatedDisplay.variants = displayVariants;
 		newDisplaySections[idx] = updatedDisplay;
 
-		const updatedPageData = { ...snap.pageData, sections: rawSections };
+		const updatedPageData = withSectionsArray(
+			snap.pageData,
+			cmsSelectedPageVariantRef.current,
+			rawSections,
+		);
 		const next: GetPageSectionsOutput = {
 			...snap,
 			pageData: updatedPageData,
@@ -3324,7 +3883,10 @@ function FileExplorerWorkspace({
 
 		// Update raw pageData
 		const rawSections = [
-			...(snap.pageData.sections as Record<string, unknown>[]),
+			...(getActiveSectionsArray(
+				snap.pageData,
+				cmsSelectedPageVariantRef.current,
+			) as Record<string, unknown>[]),
 		];
 		const rawSection = { ...rawSections[idx] } as {
 			__resolveType: string;
@@ -3343,7 +3905,11 @@ function FileExplorerWorkspace({
 		updatedDisplay.variants = newVariants;
 		newDisplaySections[idx] = updatedDisplay;
 
-		const updatedPageData = { ...snap.pageData, sections: rawSections };
+		const updatedPageData = withSectionsArray(
+			snap.pageData,
+			cmsSelectedPageVariantRef.current,
+			rawSections,
+		);
 		const next: GetPageSectionsOutput = {
 			...snap,
 			pageData: updatedPageData,
@@ -3404,7 +3970,10 @@ function FileExplorerWorkspace({
 
 		// Update raw pageData
 		const rawSections = [
-			...(snap.pageData.sections as Record<string, unknown>[]),
+			...(getActiveSectionsArray(
+				snap.pageData,
+				cmsSelectedPageVariantRef.current,
+			) as Record<string, unknown>[]),
 		];
 		const rawSection = { ...rawSections[idx] } as {
 			__resolveType: string;
@@ -3428,7 +3997,11 @@ function FileExplorerWorkspace({
 		];
 		newDisplaySections[idx] = updatedDisplay;
 
-		const updatedPageData = { ...snap.pageData, sections: rawSections };
+		const updatedPageData = withSectionsArray(
+			snap.pageData,
+			cmsSelectedPageVariantRef.current,
+			rawSections,
+		);
 		const next: GetPageSectionsOutput = {
 			...snap,
 			pageData: updatedPageData,
@@ -3511,21 +4084,50 @@ function FileExplorerWorkspace({
 				return;
 			}
 			try {
-				const sections = [...(snap.pageData.sections as unknown[])];
+				const sections = [
+					...getActiveSectionsArray(
+						snap.pageData,
+						cmsSelectedPageVariantRef.current,
+					),
+				];
 				const displaySection = snap.sections[idx];
-				if (displaySection?.isLazy) {
+				if (displaySection?.isHidden) {
+					// preserve the multivariate wrapper, update only variants[0].value
+					const wrapper = {
+						...(sections[idx] as Record<string, unknown>),
+					};
+					const variants = [
+						...((wrapper.variants as Array<Record<string, unknown>>) ?? []),
+					];
+					if (displaySection?.isLazy) {
+						// hidden + lazy: update the section inside the lazy wrapper
+						const lazyValue = {
+							...(variants[0].value as Record<string, unknown>),
+							section: updated,
+						};
+						variants[0] = { ...variants[0], value: lazyValue };
+					} else {
+						variants[0] = { ...variants[0], value: updated };
+					}
+					wrapper.variants = variants;
+					sections[idx] = wrapper;
+				} else if (displaySection?.isLazy) {
 					// preserve the lazy wrapper, update only the inner section
 					sections[idx] = {
 						...(sections[idx] as Record<string, unknown>),
 						section: updated,
 					};
-				} else {
-					sections[idx] = updated;
-				}
-				const updatedPageData = { ...snap.pageData, sections };
-				const result = await app.callServerTool({
-					name: "write_file",
-					arguments: {
+			} else {
+				sections[idx] = updated;
+			}
+			const updatedPageData = withSectionsArray(
+				snap.pageData,
+				cmsSelectedPageVariantRef.current,
+				sections,
+			);
+			const result = await app.callServerTool({
+				name: "write_file",
+				arguments: {
 						env: userEnv,
 						filepath: snap.filePath,
 						content: JSON.stringify(updatedPageData, null, 2),
@@ -3548,7 +4150,9 @@ function FileExplorerWorkspace({
 		const snap = cmsDataRef.current;
 		if (!snap || !app || !userEnv) return;
 
-		const rawSections = [...(snap.pageData.sections as unknown[])];
+		const rawSections = [
+			...getActiveSectionsArray(snap.pageData, cmsSelectedPageVariantRef.current),
+		];
 		const [movedRaw] = rawSections.splice(srcIdx, 1);
 		rawSections.splice(destIdx, 0, movedRaw);
 
@@ -3557,7 +4161,11 @@ function FileExplorerWorkspace({
 		displaySections.splice(destIdx, 0, movedDisplay);
 		const reindexed = displaySections.map((s, i) => ({ ...s, index: i }));
 
-		const updatedPageData = { ...snap.pageData, sections: rawSections };
+		const updatedPageData = withSectionsArray(
+			snap.pageData,
+			cmsSelectedPageVariantRef.current,
+			rawSections,
+		);
 		const next: GetPageSectionsOutput = {
 			...snap,
 			pageData: updatedPageData,
@@ -3642,9 +4250,16 @@ function FileExplorerWorkspace({
 		// Global sections are referenced by their blockId, component sections by resolveType
 		const sectionRef = blockId ?? resolveType;
 		const newSection = { __resolveType: sectionRef };
-		const rawSections = [...(snap.pageData.sections as unknown[]), newSection];
+		const rawSections = [
+			...getActiveSectionsArray(snap.pageData, cmsSelectedPageVariantRef.current),
+			newSection,
+		];
 		const newIndex = rawSections.length - 1;
-		const updatedPageData = { ...snap.pageData, sections: rawSections };
+		const updatedPageData = withSectionsArray(
+			snap.pageData,
+			cmsSelectedPageVariantRef.current,
+			rawSections,
+		);
 		const title =
 			(blockId ?? resolveType)
 				.split("/")
@@ -3687,7 +4302,9 @@ function FileExplorerWorkspace({
 	const handleCmsDuplicateSection = async (listIdx: number) => {
 		const snap = cmsDataRef.current;
 		if (!snap || !app || !userEnv) return;
-		const rawSections = [...(snap.pageData.sections as unknown[])];
+		const rawSections = [
+			...getActiveSectionsArray(snap.pageData, cmsSelectedPageVariantRef.current),
+		];
 		const copy = structuredClone(rawSections[listIdx]);
 		rawSections.splice(listIdx + 1, 0, copy);
 		const displaySections = [...snap.sections];
@@ -3704,7 +4321,11 @@ function FileExplorerWorkspace({
 				.slice(listIdx + 1)
 				.map((s, i) => ({ ...s, index: listIdx + 2 + i })),
 		];
-		const updatedPageData = { ...snap.pageData, sections: rawSections };
+		const updatedPageData = withSectionsArray(
+			snap.pageData,
+			cmsSelectedPageVariantRef.current,
+			rawSections,
+		);
 		const next: GetPageSectionsOutput = {
 			...snap,
 			pageData: updatedPageData,
@@ -3733,13 +4354,18 @@ function FileExplorerWorkspace({
 	const handleCmsRemoveSection = async (listIdx: number) => {
 		const snap = cmsDataRef.current;
 		if (!snap || !app || !userEnv) return;
-		const rawSections = (snap.pageData.sections as unknown[]).filter(
-			(_, i) => i !== listIdx,
-		);
+		const rawSections = getActiveSectionsArray(
+			snap.pageData,
+			cmsSelectedPageVariantRef.current,
+		).filter((_, i) => i !== listIdx);
 		const reindexed = snap.sections
 			.filter((_, i) => i !== listIdx)
 			.map((s, i) => ({ ...s, index: i }));
-		const updatedPageData = { ...snap.pageData, sections: rawSections };
+		const updatedPageData = withSectionsArray(
+			snap.pageData,
+			cmsSelectedPageVariantRef.current,
+			rawSections,
+		);
 		const next: GetPageSectionsOutput = {
 			...snap,
 			pageData: updatedPageData,
@@ -3776,7 +4402,10 @@ function FileExplorerWorkspace({
 		const snap = cmsDataRef.current;
 		if (!snap || !app || !userEnv) return;
 		const rawSections = [
-			...(snap.pageData.sections as Record<string, unknown>[]),
+			...(getActiveSectionsArray(
+				snap.pageData,
+				cmsSelectedPageVariantRef.current,
+			) as Record<string, unknown>[]),
 		];
 		const current = rawSections[listIdx];
 		const displaySection = snap.sections[listIdx];
@@ -3800,7 +4429,11 @@ function FileExplorerWorkspace({
 			i === listIdx ? updatedDisplaySection : s,
 		);
 
-		const updatedPageData = { ...snap.pageData, sections: rawSections };
+		const updatedPageData = withSectionsArray(
+			snap.pageData,
+			cmsSelectedPageVariantRef.current,
+			rawSections,
+		);
 		const next: GetPageSectionsOutput = {
 			...snap,
 			pageData: updatedPageData,
@@ -3825,6 +4458,93 @@ function FileExplorerWorkspace({
 			setPreviewRefreshKey((k) => k + 1);
 		} catch {
 			toast.error("Failed to toggle lazy");
+			setCmsData(snap);
+			cmsDataRef.current = snap;
+		}
+	};
+
+	const MULTIVARIATE_RESOLVE_TYPE =
+		"website/flags/multivariate/section.ts";
+	const NEVER_RESOLVE_TYPE = "website/matchers/never.ts";
+
+	const handleCmsToggleHiddenSection = async (listIdx: number) => {
+		const snap = cmsDataRef.current;
+		if (!snap || !app || !userEnv) return;
+		const rawSections = [
+			...(getActiveSectionsArray(
+				snap.pageData,
+				cmsSelectedPageVariantRef.current,
+			) as Record<string, unknown>[]),
+		];
+		const current = rawSections[listIdx];
+		const displaySection = snap.sections[listIdx];
+		const isHidden = displaySection?.isHidden;
+
+		if (isHidden) {
+			// Unwrap: extract the inner section from variants[0].value
+			const mvObj = current as {
+				variants?: Array<{ value?: Record<string, unknown> }>;
+			};
+			rawSections[listIdx] =
+				mvObj.variants?.[0]?.value ?? current;
+		} else {
+			// Wrap: create a multivariate with single "never" variant
+			rawSections[listIdx] = {
+				__resolveType: MULTIVARIATE_RESOLVE_TYPE,
+				variants: [
+					{
+						value: current,
+						rule: { __resolveType: NEVER_RESOLVE_TYPE },
+					},
+				],
+			};
+		}
+
+		const innerRt = isHidden
+			? ((rawSections[listIdx] as Record<string, unknown>)
+					.__resolveType as string) ?? ""
+			: (current.__resolveType as string) ?? "";
+
+		const updatedDisplaySection = {
+			...displaySection,
+			resolveType: isHidden
+				? innerRt
+				: MULTIVARIATE_RESOLVE_TYPE,
+			isHidden: !isHidden,
+			isMultivariate: false,
+		};
+		const updatedDisplaySections = snap.sections.map((s, i) =>
+			i === listIdx ? updatedDisplaySection : s,
+		);
+
+		const updatedPageData = withSectionsArray(
+			snap.pageData,
+			cmsSelectedPageVariantRef.current,
+			rawSections,
+		);
+		const next: GetPageSectionsOutput = {
+			...snap,
+			pageData: updatedPageData,
+			sections: updatedDisplaySections,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+		setCmsSelectedSection(null);
+		cmsSelectedSectionRef.current = null;
+		setCmsSectionData(null);
+		try {
+			const result = await app.callServerTool({
+				name: "write_file",
+				arguments: {
+					env: userEnv,
+					filepath: snap.filePath,
+					content: JSON.stringify(updatedPageData, null, 2),
+				},
+			});
+			if (result?.isError) throw new Error("write_file failed");
+			setPreviewRefreshKey((k) => k + 1);
+		} catch {
+			toast.error("Failed to toggle visibility");
 			setCmsData(snap);
 			cmsDataRef.current = snap;
 		}
@@ -5060,6 +5780,9 @@ function FileExplorerWorkspace({
 																onToggleLazySection={(idx) =>
 																	void handleCmsToggleLazySection(idx)
 																}
+																onToggleHiddenSection={(idx) =>
+																	void handleCmsToggleHiddenSection(idx)
+																}
 																onPageMetaChange={handleCmsPageMetaChange}
 																onAddSection={() => void handleCmsAddSection()}
 																onClose={handleCmsPanelClose}
@@ -5078,11 +5801,18 @@ function FileExplorerWorkspace({
 																availableMatchers={cmsAvailableMatchers}
 																onFetchMatchers={() => void fetchMatchersList()}
 																onChangeMatcherType={handleChangeMatcherType}
-																onWrapWithVariants={handleWrapWithVariants}
-																onAddVariant={handleAddVariant}
-																onRemoveVariant={handleRemoveVariant}
-																onAddFallback={handleAddFallback}
-															/>
+															onWrapWithVariants={handleWrapWithVariants}
+															onAddVariant={handleAddVariant}
+															onRemoveVariant={handleRemoveVariant}
+															onAddFallback={handleAddFallback}
+															pageVariants={cmsData?.pageVariants}
+															selectedPageVariant={cmsSelectedPageVariant}
+															onSelectPageVariant={handleSelectPageVariant}
+															onDeselectPageVariant={handleDeselectPageVariant}
+															pageVariantRuleSchema={cmsPageVariantRuleSchema}
+															onChangePageVariantRule={handleChangePageVariantRule}
+															onChangePageVariantMatcherType={handleChangePageVariantMatcherType}
+														/>
 														)}
 
 														{/* Minimized CMS restore button */}

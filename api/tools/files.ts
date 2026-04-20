@@ -686,6 +686,7 @@ export type CmsSection = {
 	resolveType: string;
 	label: string;
 	isLazy?: boolean;
+	isHidden?: boolean;
 	isSavedBlock?: boolean;
 	savedBlockKey?: string;
 	savedBlockFilePath?: string;
@@ -700,34 +701,44 @@ export const getPageSectionsInputSchema = z.object({
 });
 export type GetPageSectionsInput = z.infer<typeof getPageSectionsInputSchema>;
 
+const cmsSectionItemSchema = z.object({
+	index: z.number(),
+	resolveType: z.string(),
+	label: z.string(),
+	isLazy: z.boolean().optional(),
+	isHidden: z.boolean().optional(),
+	isSavedBlock: z.boolean().optional(),
+	savedBlockKey: z.string().optional(),
+	savedBlockFilePath: z.string().optional(),
+	resolvedResolveType: z.string().optional(),
+	isMultivariate: z.boolean().optional(),
+	variants: z
+		.array(
+			z.object({
+				value: z.record(z.string(), z.unknown()),
+				rule: z.record(z.string(), z.unknown()),
+				label: z.string(),
+			}),
+		)
+		.optional(),
+});
+
 export const getPageSectionsOutputSchema = z.object({
 	site: z.string(),
 	env: z.string(),
 	pageKey: z.string(),
 	filePath: z.string(),
 	pageData: z.record(z.string(), z.unknown()),
-	sections: z.array(
-		z.object({
-			index: z.number(),
-			resolveType: z.string(),
-			label: z.string(),
-			isLazy: z.boolean().optional(),
-			isSavedBlock: z.boolean().optional(),
-			savedBlockKey: z.string().optional(),
-			savedBlockFilePath: z.string().optional(),
-			resolvedResolveType: z.string().optional(),
-			isMultivariate: z.boolean().optional(),
-			variants: z
-				.array(
-					z.object({
-						value: z.record(z.string(), z.unknown()),
-						rule: z.record(z.string(), z.unknown()),
-						label: z.string(),
-					}),
-				)
-				.optional(),
-		}),
-	),
+	sections: z.array(cmsSectionItemSchema),
+	pageVariants: z
+		.array(
+			z.object({
+				label: z.string(),
+				rule: z.record(z.string(), z.unknown()),
+				sections: z.array(cmsSectionItemSchema),
+			}),
+		)
+		.optional(),
 });
 export type GetPageSectionsOutput = z.infer<typeof getPageSectionsOutputSchema>;
 
@@ -794,6 +805,156 @@ export const getPageSectionsTool = createTool({
 			return filename.replace(/\.(tsx|ts|jsx|js)$/, "") || rt;
 		};
 
+		const capitalize = (s: string) =>
+			s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+
+		const formatMatcher = (rule: Record<string, unknown>): string => {
+			const rt = (rule.__resolveType as string) ?? "";
+
+			const alwaysTypes = [
+				"website/matchers/always.ts",
+				"$live/matchers/MatchAlways.ts",
+			];
+			if (alwaysTypes.includes(rt) || rt === "") return "Always";
+
+			switch (rt) {
+				case "website/matchers/never.ts":
+					return "Never";
+
+				case "website/matchers/device.ts":
+				case "$live/matchers/MatchDevice.ts": {
+					const { mobile, tablet, desktop, devices: devList = [] } = rule as {
+						mobile?: boolean;
+						tablet?: boolean;
+						desktop?: boolean;
+						devices?: string[];
+					};
+					const devices = [...(devList as string[])];
+					mobile && devices.push("Mobile");
+					tablet && devices.push("Tablet");
+					desktop && devices.push("Desktop");
+					return devices.length > 0
+						? devices.map(capitalize).join(" & ")
+						: labelFromResolveType(rt);
+				}
+
+				case "website/matchers/date.ts":
+				case "$live/matchers/MatchDate.ts": {
+					const { start, end } = rule as {
+						start?: string;
+						end?: string;
+					};
+					if (!start && !end) return labelFromResolveType(rt);
+					const fmt = new Intl.DateTimeFormat("en", {
+						dateStyle: "medium",
+						timeStyle: "short",
+					});
+					if (start && end) {
+						try {
+							return `${fmt.format(new Date(start))} → ${fmt.format(new Date(end))}`;
+						} catch {
+							return labelFromResolveType(rt);
+						}
+					}
+					if (start) {
+						try {
+							return `From ${fmt.format(new Date(start))}`;
+						} catch {
+							return labelFromResolveType(rt);
+						}
+					}
+					if (end) {
+						try {
+							return `Until ${fmt.format(new Date(end))}`;
+						} catch {
+							return labelFromResolveType(rt);
+						}
+					}
+					return labelFromResolveType(rt);
+				}
+
+				case "website/matchers/random.ts":
+				case "$live/matchers/MatchRandom.ts": {
+					const { traffic } = rule as { traffic?: number };
+					if (typeof traffic === "number") {
+						return `${Math.ceil(traffic * 100)}% of sessions`;
+					}
+					return labelFromResolveType(rt);
+				}
+
+				case "website/matchers/host.ts":
+				case "$live/matchers/MatchHost.ts": {
+					const { includes, match } = rule as {
+						includes?: string;
+						match?: string;
+					};
+					const parts: string[] = [];
+					includes && parts.push(includes);
+					match && parts.push(match);
+					return parts.length > 0 ? parts.join(" - ") : labelFromResolveType(rt);
+				}
+
+				case "website/matchers/pathname.ts": {
+					const caseObj = rule.case as
+						| { type?: string; pathname?: string }
+						| undefined;
+					const { type, pathname } = caseObj ?? {};
+					if (type && pathname) return `Pathname ${type} ${pathname}`;
+					return labelFromResolveType(rt);
+				}
+
+				case "website/matchers/location.ts":
+				case "$live/matchers/MatchLocation.ts": {
+					const { includeLocations, excludeLocations } = rule as {
+						includeLocations?: Array<{
+							city?: string;
+							regionCode?: string;
+							country?: string;
+						}>;
+						excludeLocations?: Array<{
+							city?: string;
+							regionCode?: string;
+							country?: string;
+						}>;
+					};
+					const fmtLoc = (loc: {
+						city?: string;
+						regionCode?: string;
+						country?: string;
+					}) =>
+						[loc.city, loc.regionCode, loc.country]
+							.filter(Boolean)
+							.join(" - ");
+					const first = includeLocations?.[0];
+					if (first) {
+						const rest = (includeLocations?.length ?? 0) - 1;
+						return `${fmtLoc(first)}${rest > 0 ? ` +${rest}` : ""}`;
+					}
+					const firstEx = excludeLocations?.[0];
+					if (firstEx) {
+						const rest = (excludeLocations?.length ?? 0) - 1;
+						return `Except ${fmtLoc(firstEx)}${rest > 0 ? ` +${rest}` : ""}`;
+					}
+					return "Any location";
+				}
+
+				case "website/matchers/multi.ts":
+				case "$live/matchers/MatchMulti.ts": {
+					const { matchers, op = "AND" } = rule as {
+						matchers?: Array<Record<string, unknown>>;
+						op?: string;
+					};
+					if (matchers && matchers.length > 0) {
+						return matchers.map(formatMatcher).join(` ${op} `);
+					}
+					return labelFromResolveType(rt);
+				}
+
+				default:
+					return labelFromResolveType(rt) || "Always";
+			}
+		};
+
 		const LAZY_RESOLVE_SUFFIXES = [
 			"website/sections/Rendering/Lazy.tsx",
 			"website/sections/Rendering/SingleDeferred.tsx",
@@ -804,89 +965,176 @@ export const getPageSectionsTool = createTool({
 		const isSavedBlockRef = (rt: string) =>
 			rt !== "" && !rt.includes("/") && rt in decofile;
 
-		const rawSections = Array.isArray(pageBlock.sections)
-			? pageBlock.sections
-			: [];
-
-		const resolvedSections: unknown[] = [];
-
-		const sections: CmsSection[] = rawSections.map((s, idx) => {
-			const sectionObj = s as {
-				__resolveType?: string;
-				section?: { __resolveType?: string };
-			};
-			const rt = sectionObj.__resolveType ?? "";
-			const isLazy = isLazyResolveType(rt);
-
-			if (!isLazy && isSavedBlockRef(rt)) {
-				const resolvedBlock = decofile[rt] as Block;
-				const resolvedRt = resolvedBlock?.__resolveType ?? rt;
-				resolvedSections.push(sectionObj);
-				return {
-					index: idx,
-					resolveType: rt,
-					label: labelFromResolveType(resolvedRt) || `Section ${idx + 1}`,
-					isLazy,
-					isSavedBlock: true,
-					savedBlockKey: rt,
-					savedBlockFilePath: `/.deco/blocks/${rt}.json`,
-					resolvedResolveType: resolvedRt,
-					__resolvedData: resolvedBlock,
+		// ── Section parsing helper (closure over decofile + helpers) ──────
+		const parseSectionsFromArray = (
+			rawArr: unknown[],
+		): { sections: CmsSection[]; resolvedSections: unknown[] } => {
+			const resolvedSections: unknown[] = [];
+			const sections: CmsSection[] = rawArr.map((s, idx) => {
+				const sectionObj = s as {
+					__resolveType?: string;
+					section?: { __resolveType?: string };
 				};
-			}
+				const rt = sectionObj.__resolveType ?? "";
+				const isLazy = isLazyResolveType(rt);
 
-			// ── multivariate flag detection ─────────────────────────
-			if (rt.includes("flags/multivariate")) {
-				const mvObj = sectionObj as {
-					__resolveType: string;
-					variants?: Array<{
-						value?: Record<string, unknown>;
-						rule?: Record<string, unknown>;
-					}>;
-				};
-				const rawVariants = Array.isArray(mvObj.variants) ? mvObj.variants : [];
-				const variants: CmsVariant[] = rawVariants.map((v) => {
-					const value = (v.value ?? {}) as Record<string, unknown>;
-					const rule = (v.rule ?? {}) as Record<string, unknown>;
-					const ruleRt = (rule.__resolveType as string) ?? "";
+				if (!isLazy && isSavedBlockRef(rt)) {
+					const resolvedBlock = decofile[rt] as Block;
+					const resolvedRt = resolvedBlock?.__resolveType ?? rt;
+					resolvedSections.push(sectionObj);
 					return {
-						value,
-						rule,
-						label: labelFromResolveType(ruleRt) || "Always",
+						index: idx,
+						resolveType: rt,
+						label: labelFromResolveType(resolvedRt) || `Section ${idx + 1}`,
+						isLazy,
+						isSavedBlock: true,
+						savedBlockKey: rt,
+						savedBlockFilePath: `/.deco/blocks/${rt}.json`,
+						resolvedResolveType: resolvedRt,
+						__resolvedData: resolvedBlock,
 					};
-				});
-				const firstValueRt = (
-					rawVariants[0]?.value as Record<string, unknown> | undefined
-				)?.__resolveType as string | undefined;
-				const sectionLabel = firstValueRt
-					? labelFromResolveType(firstValueRt)
-					: "Section";
+				}
+
+				// ── section-level multivariate flag detection ────────
+				if (rt.includes("flags/multivariate")) {
+					const mvObj = sectionObj as {
+						__resolveType: string;
+						variants?: Array<{
+							value?: Record<string, unknown>;
+							rule?: Record<string, unknown>;
+						}>;
+					};
+					const rawVariants = Array.isArray(mvObj.variants)
+						? mvObj.variants
+						: [];
+
+					// ── Hidden section: single variant with "never" matcher ──
+					const NEVER_RESOLVE_TYPES = [
+						"website/matchers/never.ts",
+					];
+					if (
+						rawVariants.length === 1 &&
+						NEVER_RESOLVE_TYPES.includes(
+							(rawVariants[0].rule?.__resolveType as string) ?? "",
+						)
+					) {
+						const innerValue = (rawVariants[0].value ?? {}) as Record<
+							string,
+							unknown
+						>;
+						let innerRt =
+							(innerValue.__resolveType as string) ?? "";
+						// If the inner value is a Lazy wrapper, use the nested section's resolveType
+						const innerIsLazy = isLazyResolveType(innerRt);
+						if (innerIsLazy) {
+							const nestedSection = innerValue.section as
+								| Record<string, unknown>
+								| undefined;
+							innerRt =
+								(nestedSection?.__resolveType as string) ?? innerRt;
+						}
+						resolvedSections.push(sectionObj);
+						return {
+							index: idx,
+							resolveType: rt,
+							label:
+								labelFromResolveType(innerRt) ||
+								`Section ${idx + 1}`,
+							isHidden: true,
+							isLazy: innerIsLazy,
+						};
+					}
+
+					const variants: CmsVariant[] = rawVariants.map((v) => {
+						const value = (v.value ?? {}) as Record<string, unknown>;
+						const rule = (v.rule ?? {}) as Record<string, unknown>;
+						return {
+							value,
+							rule,
+							label: formatMatcher(rule),
+						};
+					});
+					const firstValueRt = (
+						rawVariants[0]?.value as Record<string, unknown> | undefined
+					)?.__resolveType as string | undefined;
+					const sectionLabel = firstValueRt
+						? labelFromResolveType(firstValueRt)
+						: "Section";
+					resolvedSections.push(sectionObj);
+					return {
+						index: idx,
+						resolveType: rt,
+						label: `Variants of ${sectionLabel}`,
+						isMultivariate: true,
+						variants,
+					};
+				}
+
+				const effectiveRt = isLazy
+					? (sectionObj.section?.__resolveType ?? rt)
+					: rt;
 				resolvedSections.push(sectionObj);
 				return {
 					index: idx,
 					resolveType: rt,
-					label: `Variants of ${sectionLabel}`,
-					isMultivariate: true,
-					variants,
+					label: labelFromResolveType(effectiveRt) || `Section ${idx + 1}`,
+					isLazy,
 				};
-			}
+			});
+			return { sections, resolvedSections };
+		};
 
-			const effectiveRt = isLazy
-				? (sectionObj.section?.__resolveType ?? rt)
-				: rt;
-			resolvedSections.push(sectionObj);
-			return {
-				index: idx,
-				resolveType: rt,
-				label: labelFromResolveType(effectiveRt) || `Section ${idx + 1}`,
-				isLazy,
+		// ── Detect page-level multivariate sections ──────────────────────
+		const sectionsField = pageBlock.sections;
+		type PageVariantEntry = {
+			label: string;
+			rule: Record<string, unknown>;
+			sections: CmsSection[];
+		};
+
+		let pageVariants: PageVariantEntry[] | undefined;
+		let rawSections: unknown[];
+
+		const isPageMultivariate =
+			!Array.isArray(sectionsField) &&
+			sectionsField !== null &&
+			typeof sectionsField === "object" &&
+			((sectionsField as { __resolveType?: string }).__resolveType ?? "").includes(
+				"flags/multivariate",
+			);
+
+		if (isPageMultivariate) {
+			const mvField = sectionsField as {
+				variants?: Array<{
+					value?: unknown[];
+					rule?: Record<string, unknown>;
+				}>;
 			};
-		});
+			const mvVariants = Array.isArray(mvField.variants)
+				? mvField.variants
+				: [];
+			pageVariants = mvVariants.map((v) => {
+				const varSections = Array.isArray(v.value) ? v.value : [];
+				const rule = (v.rule ?? {}) as Record<string, unknown>;
+				const label = formatMatcher(rule);
+				const { sections } = parseSectionsFromArray(varSections);
+				return { label, rule, sections };
+			});
+			// Default display: first variant's sections
+			rawSections = Array.isArray(mvVariants[0]?.value)
+				? (mvVariants[0].value as unknown[])
+				: [];
+		} else {
+			rawSections = Array.isArray(sectionsField) ? sectionsField : [];
+		}
 
-		const pageDataWithResolved = {
-			...pageBlock,
-			sections: resolvedSections,
-		} as Record<string, unknown>;
+		const { sections, resolvedSections } = parseSectionsFromArray(rawSections);
+
+		// For page-multivariate pages, keep the raw multivariate object in
+		// pageData so write-back via write_file preserves the correct structure.
+		const pageDataWithResolved = isPageMultivariate
+			? ({ ...pageBlock } as Record<string, unknown>)
+			: ({ ...pageBlock, sections: resolvedSections } as Record<string, unknown>);
 
 		return {
 			site,
@@ -895,6 +1143,7 @@ export const getPageSectionsTool = createTool({
 			filePath,
 			pageData: pageDataWithResolved,
 			sections,
+			...(pageVariants ? { pageVariants } : {}),
 		};
 	},
 });
