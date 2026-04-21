@@ -2439,6 +2439,19 @@ function FileExplorerWorkspace({
 				return sec.resolvedResolveType;
 			}
 			const r = rawSections[i];
+			if (sec.isHidden) {
+				// Hidden: unwrap multivariate → variants[0].value
+				const mvObj = r as {
+					variants?: Array<{
+						value?: { __resolveType?: string; section?: { __resolveType?: string } };
+					}>;
+				};
+				const inner = mvObj?.variants?.[0]?.value;
+				if (sec.isLazy) {
+					return inner?.section?.__resolveType ?? inner?.__resolveType ?? sec.resolveType;
+				}
+				return inner?.__resolveType ?? sec.resolveType;
+			}
 			if (sec.isLazy) {
 				return r?.section?.__resolveType ?? sec.resolveType;
 			}
