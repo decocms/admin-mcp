@@ -20,6 +20,7 @@ import {
 	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
+	Copy,
 	CircleHelp,
 	Clock,
 	CloudLightning,
@@ -1364,6 +1365,9 @@ interface CmsPanelProps {
 	pageVariantRuleSchema?: SchemaProperties | null;
 	onChangePageVariantRule?: (data: Record<string, unknown>) => void;
 	onChangePageVariantMatcherType?: (resolveType: string) => void;
+	onAddPageVariant?: () => void;
+	onDuplicatePageVariant?: (idx: number) => void;
+	onRemovePageVariant?: (idx: number) => void;
 }
 
 function CmsPanel({
@@ -1411,6 +1415,9 @@ function CmsPanel({
 	pageVariantRuleSchema,
 	onChangePageVariantRule,
 	onChangePageVariantMatcherType,
+	onAddPageVariant,
+	onDuplicatePageVariant,
+	onRemovePageVariant,
 }: CmsPanelProps) {
 	const sensors = useSensors(
 		useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
@@ -1811,17 +1818,18 @@ function CmsPanel({
 				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 					<div className="min-h-0 flex-1 overflow-y-auto p-2">
 						{pageVariants!.map((pv, i) => (
-							<button
+							<div
 								key={i}
-								type="button"
-								onClick={() => onSelectPageVariant?.(i)}
-								className="flex w-full cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-accent"
+								className="group flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-accent"
 							>
 								<Flag
 									className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
 									style={{ color: "oklch(0.55 0.15 160)" }}
 								/>
-								<div className="flex flex-1 flex-col gap-0.5 overflow-hidden">
+								<div
+									className="flex flex-1 flex-col gap-0.5 overflow-hidden"
+									onClick={() => onSelectPageVariant?.(i)}
+								>
 									<span className="truncate text-xs font-medium">
 										{pv.label}
 									</span>
@@ -1831,9 +1839,47 @@ function CmsPanel({
 											: `${pv.sections.length} sections`}
 									</span>
 								</div>
-								<ChevronLeft className="h-3.5 w-3.5 shrink-0 rotate-180 text-muted-foreground/40" />
-							</button>
+								<DropdownMenu>
+									<DropdownMenuTrigger asChild>
+										<button
+											type="button"
+											onPointerDown={(e) => e.stopPropagation()}
+											onClick={(e) => e.stopPropagation()}
+											className="shrink-0 rounded p-0.5 text-muted-foreground/30 opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+										>
+											<MoreHorizontal className="h-3.5 w-3.5" />
+										</button>
+									</DropdownMenuTrigger>
+									<DropdownMenuContent align="end" className="w-36">
+										<DropdownMenuItem
+											onClick={() => onDuplicatePageVariant?.(i)}
+											className="cursor-pointer"
+										>
+											<Copy className="mr-2 h-3.5 w-3.5" />
+											Duplicate
+										</DropdownMenuItem>
+										<DropdownMenuItem
+											onClick={() => onRemovePageVariant?.(i)}
+											className="cursor-pointer text-destructive focus:text-destructive"
+										>
+											<Trash2 className="mr-2 h-3.5 w-3.5" />
+											Remove
+										</DropdownMenuItem>
+									</DropdownMenuContent>
+								</DropdownMenu>
+							</div>
 						))}
+					</div>
+					<div className="shrink-0 border-t p-2">
+						<button
+							type="button"
+							onClick={onAddPageVariant}
+							className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-[oklch(0.65_0.15_160/0.12)]"
+							style={{ color: "oklch(0.45 0.15 160)" }}
+						>
+							<Plus className="h-3.5 w-3.5" />
+							Add variant
+						</button>
 					</div>
 				</div>
 			) : isPageVariantSections ? (
@@ -3363,6 +3409,184 @@ function FileExplorerWorkspace({
 				setCmsAutoSaving(false);
 			}
 		}, 800);
+	};
+
+	const handleAddPageVariant = () => {
+		const snap = cmsDataRef.current;
+		if (!snap?.pageVariants || !app || !userEnv) return;
+
+		const mv = {
+			...(snap.pageData.sections as Record<string, unknown>),
+		};
+		const rawVariants = [...((mv.variants as unknown[]) ?? [])];
+
+		// Clone the last variant as template
+		const lastIdx = rawVariants.length - 1;
+		const lastRaw = rawVariants[lastIdx] as
+			| {
+					value?: unknown[];
+					rule?: Record<string, unknown>;
+			  }
+			| undefined;
+		const clonedRaw = lastRaw
+			? JSON.parse(JSON.stringify(lastRaw))
+			: { value: [], rule: {} };
+		rawVariants.push(clonedRaw);
+
+		const updatedPageData = {
+			...snap.pageData,
+			sections: { ...mv, variants: rawVariants },
+		};
+
+		// Clone the last display entry
+		const lastDisplay = snap.pageVariants[snap.pageVariants.length - 1];
+		const clonedDisplay = lastDisplay
+			? (JSON.parse(
+					JSON.stringify(lastDisplay),
+				) as (typeof snap.pageVariants)[number])
+			: {
+					label: formatMatcherRule({}),
+					rule: {} as Record<string, unknown>,
+					sections: [] as GetPageSectionsOutput["sections"],
+				};
+		const newPageVariants = [...snap.pageVariants];
+		newPageVariants.push(clonedDisplay);
+
+		const next: GetPageSectionsOutput = {
+			...snap,
+			pageData: updatedPageData,
+			pageVariants: newPageVariants,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+
+		// Auto-save
+		setCmsAutoSaving(true);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			try {
+				const result = await app.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: next.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				setPreviewRefreshKey((k) => k + 1);
+			} catch {
+				toast.error("Auto-save failed");
+			} finally {
+				setCmsAutoSaving(false);
+			}
+		}, 300);
+	};
+
+	const handleDuplicatePageVariant = (pvIdx: number) => {
+		const snap = cmsDataRef.current;
+		if (!snap?.pageVariants || !app || !userEnv) return;
+
+		const mv = {
+			...(snap.pageData.sections as Record<string, unknown>),
+		};
+		const rawVariants = [...((mv.variants as unknown[]) ?? [])];
+
+		// Deep-clone the selected variant's raw data
+		const clonedRaw = JSON.parse(JSON.stringify(rawVariants[pvIdx]));
+		rawVariants.splice(pvIdx + 1, 0, clonedRaw);
+
+		const updatedPageData = {
+			...snap.pageData,
+			sections: { ...mv, variants: rawVariants },
+		};
+
+		// Deep-clone the display entry
+		const clonedDisplay = JSON.parse(
+			JSON.stringify(snap.pageVariants[pvIdx]),
+		) as (typeof snap.pageVariants)[number];
+		const newPageVariants = [...snap.pageVariants];
+		newPageVariants.splice(pvIdx + 1, 0, clonedDisplay);
+
+		const next: GetPageSectionsOutput = {
+			...snap,
+			pageData: updatedPageData,
+			pageVariants: newPageVariants,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+
+		// Auto-save
+		setCmsAutoSaving(true);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			try {
+				const result = await app.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: next.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				setPreviewRefreshKey((k) => k + 1);
+			} catch {
+				toast.error("Auto-save failed");
+			} finally {
+				setCmsAutoSaving(false);
+			}
+		}, 300);
+	};
+
+	const handleRemovePageVariant = (pvIdx: number) => {
+		const snap = cmsDataRef.current;
+		if (!snap?.pageVariants || !app || !userEnv) return;
+		if (snap.pageVariants.length <= 1) return; // keep at least 1
+
+		const mv = {
+			...(snap.pageData.sections as Record<string, unknown>),
+		};
+		const rawVariants = [...((mv.variants as unknown[]) ?? [])];
+		rawVariants.splice(pvIdx, 1);
+
+		const updatedPageData = {
+			...snap.pageData,
+			sections: { ...mv, variants: rawVariants },
+		};
+
+		const newPageVariants = [...snap.pageVariants];
+		newPageVariants.splice(pvIdx, 1);
+
+		const next: GetPageSectionsOutput = {
+			...snap,
+			pageData: updatedPageData,
+			pageVariants: newPageVariants,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+
+		// Auto-save
+		setCmsAutoSaving(true);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			try {
+				const result = await app.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: next.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				setPreviewRefreshKey((k) => k + 1);
+			} catch {
+				toast.error("Auto-save failed");
+			} finally {
+				setCmsAutoSaving(false);
+			}
+		}, 300);
 	};
 
 	const handleCmsSelectSection = (idx: number) => {
@@ -5195,6 +5419,12 @@ function FileExplorerWorkspace({
 
 				<div className="min-h-0 flex-1 overflow-hidden rounded-lg border bg-card">
 					<div className="flex h-full min-h-0 flex-col">
+						{/* ── preview mode banner ── */}
+						<div className="flex items-center justify-center gap-2 border-b bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+							<Eye className="h-3 w-3" />
+							Preview mode — changes won't affect production unless you publish
+						</div>
+
 						{/* ── toolbar ── */}
 						<div className="flex items-center justify-between gap-3 border-b px-3 py-2">
 							{/* View mode switcher */}
@@ -5249,22 +5479,20 @@ function FileExplorerWorkspace({
 								>
 									<FileCode2 className="h-3.5 w-3.5" />
 								</button>
-								{(viewMode === "preview" || viewMode === "visual") && (
-									<button
-										type="button"
-										className={cn(
-											"flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 text-sm transition-colors",
-											cmsOpen
-												? "bg-primary/10 text-primary"
-												: "text-muted-foreground hover:text-foreground",
-										)}
-										onClick={handleCmsToggle}
-										disabled={envStatus !== "ready"}
-										title="CMS — browse and edit page sections"
-									>
-										<LayersIcon className="h-3.5 w-3.5" />
-									</button>
-								)}
+								<button
+									type="button"
+									className={cn(
+										"flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 text-sm transition-colors",
+										cmsOpen
+											? "bg-primary/10 text-primary"
+											: "text-muted-foreground hover:text-foreground",
+									)}
+									onClick={handleCmsToggle}
+									disabled={envStatus !== "ready"}
+									title="CMS — browse and edit page sections"
+								>
+									<LayersIcon className="h-3.5 w-3.5" />
+								</button>
 								{/* More options */}
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
@@ -5982,6 +6210,11 @@ function FileExplorerWorkspace({
 																onChangePageVariantMatcherType={
 																	handleChangePageVariantMatcherType
 																}
+																onAddPageVariant={handleAddPageVariant}
+																onDuplicatePageVariant={
+																	handleDuplicatePageVariant
+																}
+																onRemovePageVariant={handleRemovePageVariant}
 															/>
 														)}
 
