@@ -1653,14 +1653,6 @@ function CmsPanel({
 						</div>
 						<button
 							type="button"
-							onClick={onMinimize}
-							className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-							title="Minimize panel"
-						>
-							<Minus className="h-3.5 w-3.5" />
-						</button>
-						<button
-							type="button"
 							onClick={onClose}
 							className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
 							title="Exit CMS mode"
