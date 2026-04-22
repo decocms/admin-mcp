@@ -823,7 +823,12 @@ export const getPageSectionsTool = createTool({
 
 				case "website/matchers/device.ts":
 				case "$live/matchers/MatchDevice.ts": {
-					const { mobile, tablet, desktop, devices: devList = [] } = rule as {
+					const {
+						mobile,
+						tablet,
+						desktop,
+						devices: devList = [],
+					} = rule as {
 						mobile?: boolean;
 						tablet?: boolean;
 						desktop?: boolean;
@@ -891,7 +896,9 @@ export const getPageSectionsTool = createTool({
 					const parts: string[] = [];
 					includes && parts.push(includes);
 					match && parts.push(match);
-					return parts.length > 0 ? parts.join(" - ") : labelFromResolveType(rt);
+					return parts.length > 0
+						? parts.join(" - ")
+						: labelFromResolveType(rt);
 				}
 
 				case "website/matchers/pathname.ts": {
@@ -922,9 +929,7 @@ export const getPageSectionsTool = createTool({
 						regionCode?: string;
 						country?: string;
 					}) =>
-						[loc.city, loc.regionCode, loc.country]
-							.filter(Boolean)
-							.join(" - ");
+						[loc.city, loc.regionCode, loc.country].filter(Boolean).join(" - ");
 					const first = includeLocations?.[0];
 					if (first) {
 						const rest = (includeLocations?.length ?? 0) - 1;
@@ -995,36 +1000,36 @@ export const getPageSectionsTool = createTool({
 					};
 				}
 
-			// ── section-level multivariate flag detection ────────
-			// Also handles lazy-wrapped multivariates: { __resolveType: Lazy, section: { __resolveType: flags/multivariate, variants: [...] } }
-			const innerSectionObj = isLazy
-				? (sectionObj.section as {
-						__resolveType?: string;
+				// ── section-level multivariate flag detection ────────
+				// Also handles lazy-wrapped multivariates: { __resolveType: Lazy, section: { __resolveType: flags/multivariate, variants: [...] } }
+				const innerSectionObj = isLazy
+					? (sectionObj.section as
+							| {
+									__resolveType?: string;
+									variants?: Array<{
+										value?: Record<string, unknown>;
+										rule?: Record<string, unknown>;
+									}>;
+							  }
+							| undefined)
+					: undefined;
+				const multivariateRt = isLazy
+					? (innerSectionObj?.__resolveType ?? "")
+					: rt;
+				if (multivariateRt.includes("flags/multivariate")) {
+					const mvObj = (isLazy ? innerSectionObj : sectionObj) as {
+						__resolveType: string;
 						variants?: Array<{
 							value?: Record<string, unknown>;
 							rule?: Record<string, unknown>;
 						}>;
-					} | undefined)
-				: undefined;
-			const multivariateRt = isLazy
-				? (innerSectionObj?.__resolveType ?? "")
-				: rt;
-			if (multivariateRt.includes("flags/multivariate")) {
-				const mvObj = (isLazy ? innerSectionObj : sectionObj) as {
-					__resolveType: string;
-					variants?: Array<{
-						value?: Record<string, unknown>;
-						rule?: Record<string, unknown>;
-					}>;
-				};
-				const rawVariants = Array.isArray(mvObj.variants)
-					? mvObj.variants
-					: [];
+					};
+					const rawVariants = Array.isArray(mvObj.variants)
+						? mvObj.variants
+						: [];
 
 					// ── Hidden section: single variant with "never" matcher ──
-					const NEVER_RESOLVE_TYPES = [
-						"website/matchers/never.ts",
-					];
+					const NEVER_RESOLVE_TYPES = ["website/matchers/never.ts"];
 					if (
 						rawVariants.length === 1 &&
 						NEVER_RESOLVE_TYPES.includes(
@@ -1035,24 +1040,20 @@ export const getPageSectionsTool = createTool({
 							string,
 							unknown
 						>;
-						let innerRt =
-							(innerValue.__resolveType as string) ?? "";
+						let innerRt = (innerValue.__resolveType as string) ?? "";
 						// If the inner value is a Lazy wrapper, use the nested section's resolveType
 						const innerIsLazy = isLazyResolveType(innerRt);
 						if (innerIsLazy) {
 							const nestedSection = innerValue.section as
 								| Record<string, unknown>
 								| undefined;
-							innerRt =
-								(nestedSection?.__resolveType as string) ?? innerRt;
+							innerRt = (nestedSection?.__resolveType as string) ?? innerRt;
 						}
 						resolvedSections.push(sectionObj);
 						return {
 							index: idx,
 							resolveType: rt,
-							label:
-								labelFromResolveType(innerRt) ||
-								`Section ${idx + 1}`,
+							label: labelFromResolveType(innerRt) || `Section ${idx + 1}`,
 							isHidden: true,
 							isLazy: innerIsLazy,
 						};
@@ -1073,15 +1074,15 @@ export const getPageSectionsTool = createTool({
 					const sectionLabel = firstValueRt
 						? labelFromResolveType(firstValueRt)
 						: "Section";
-				resolvedSections.push(sectionObj);
-				return {
-					index: idx,
-					resolveType: rt,
-					label: `Variants of ${sectionLabel}`,
-					isMultivariate: true,
-					isLazy,
-					variants,
-				};
+					resolvedSections.push(sectionObj);
+					return {
+						index: idx,
+						resolveType: rt,
+						label: `Variants of ${sectionLabel}`,
+						isMultivariate: true,
+						isLazy,
+						variants,
+					};
 				}
 
 				const effectiveRt = isLazy
@@ -1113,9 +1114,9 @@ export const getPageSectionsTool = createTool({
 			!Array.isArray(sectionsField) &&
 			sectionsField !== null &&
 			typeof sectionsField === "object" &&
-			((sectionsField as { __resolveType?: string }).__resolveType ?? "").includes(
-				"flags/multivariate",
-			);
+			(
+				(sectionsField as { __resolveType?: string }).__resolveType ?? ""
+			).includes("flags/multivariate");
 
 		if (isPageMultivariate) {
 			const mvField = sectionsField as {
@@ -1148,7 +1149,10 @@ export const getPageSectionsTool = createTool({
 		// pageData so write-back via write_file preserves the correct structure.
 		const pageDataWithResolved = isPageMultivariate
 			? ({ ...pageBlock } as Record<string, unknown>)
-			: ({ ...pageBlock, sections: resolvedSections } as Record<string, unknown>);
+			: ({ ...pageBlock, sections: resolvedSections } as Record<
+					string,
+					unknown
+				>);
 
 		return {
 			site,
@@ -1704,6 +1708,10 @@ export interface SchemaProperty {
 	format?: string;
 	/** Nested properties for object-type fields */
 	properties?: Record<string, SchemaProperty>;
+	/** Item schema for array-type fields */
+	items?: SchemaProperty;
+	/** Property name used as the display label for array items (from schema `titleBy`) */
+	titleBy?: string;
 	/**
 	 * Present on "block-ref" fields — a union of multiple compatible block
 	 * types (loaders, sections, etc.).  The UI renders a loader-selector
@@ -1725,6 +1733,8 @@ export const schemaPropertySchema: z.ZodType<SchemaProperty> = z.object({
 	format: z.string().optional(),
 	// Not deeply validated by Zod – typed via the interface above
 	properties: z.record(z.string(), z.unknown()).optional(),
+	items: z.unknown().optional(),
+	titleBy: z.string().optional(),
 }) as z.ZodType<SchemaProperty>;
 
 export const getBlockSchemaInputSchema = z.object({
@@ -1854,11 +1864,12 @@ export const getBlockSchemaTool = createTool({
 					resolved = resolveRef(v.$ref);
 				}
 
-				// ── Pre-extract enum values from anyOf/oneOf const branches ──────────
-				// TypeScript string/number unions compile to:
-				//   { "type": "string", "anyOf": [{ "type": "string", "const": "X" }, ...] }
-				// resolved.type is already "string" so we'd never enter the anyOf branch —
-				// extract enum values here so they survive regardless of how type is set.
+				// ── Pre-extract enum values from anyOf/oneOf const/enum branches ─────
+				// TypeScript string/number unions compile to either:
+				//   { "anyOf": [{ "const": "X" }, { "const": "Y" }] }       — const form
+				//   { "anyOf": [{ "enum": ["X"] }, { "enum": ["Y"] }] }     — enum form
+				// resolved.type is often already "string" so we'd never enter the anyOf
+				// branch — extract enum values here so they survive regardless.
 				let enumFromConsts: unknown[] | undefined;
 				{
 					const unionArr = (resolved.anyOf ?? resolved.oneOf) as
@@ -1868,14 +1879,23 @@ export const getBlockSchemaTool = createTool({
 						const nonNullUnion = unionArr.filter(
 							(a) => !(a.type === "null" || a.type === null),
 						);
+						// Helper: extract the scalar value from a branch (const or single-element enum)
+						const getScalar = (a: RawSchema): unknown => {
+							if (typeof a.const === "string" || typeof a.const === "number")
+								return a.const;
+							if (
+								Array.isArray(a.enum) &&
+								a.enum.length === 1 &&
+								(typeof a.enum[0] === "string" || typeof a.enum[0] === "number")
+							)
+								return a.enum[0];
+							return undefined;
+						};
 						if (
 							nonNullUnion.length > 0 &&
-							nonNullUnion.every(
-								(a) =>
-									typeof a.const === "string" || typeof a.const === "number",
-							)
+							nonNullUnion.every((a) => getScalar(a) !== undefined)
 						) {
-							enumFromConsts = nonNullUnion.map((a) => a.const);
+							enumFromConsts = nonNullUnion.map((a) => getScalar(a));
 						}
 					}
 				}
@@ -2053,24 +2073,36 @@ export const getBlockSchemaTool = createTool({
 					}
 				}
 
-			return {
-				type: type ?? "string",
-				// Prefer the property-level title (v.title) over the resolved $ref
-				// title (resolved.title). In deco.cx schemas, the JSDoc @title
-				// annotation is placed on the property entry itself, not inside the
-				// $defs object that the $ref points to.
-				title:
-					typeof v.title === "string"
-						? v.title
-						: typeof resolved.title === "string"
-							? resolved.title
-							: undefined,
-				description:
-					typeof v.description === "string"
-						? v.description
-						: typeof resolved.description === "string"
-							? resolved.description
-							: undefined,
+				// For array-type properties, extract the item schema
+				let itemsSchema: SchemaProperty | undefined;
+				if ((type === "array" || resolved.type === "array") && depth < 3) {
+					let rawItems = resolved.items as RawSchema | undefined;
+					if (rawItems) {
+						if (typeof rawItems.$ref === "string") {
+							rawItems = resolveRef(rawItems.$ref);
+						}
+						itemsSchema = buildProperty(rawItems, depth + 1);
+					}
+				}
+
+				return {
+					type: type ?? "string",
+					// Prefer the property-level title (v.title) over the resolved $ref
+					// title (resolved.title). In deco.cx schemas, the JSDoc @title
+					// annotation is placed on the property entry itself, not inside the
+					// $defs object that the $ref points to.
+					title:
+						typeof v.title === "string"
+							? v.title
+							: typeof resolved.title === "string"
+								? resolved.title
+								: undefined,
+					description:
+						typeof v.description === "string"
+							? v.description
+							: typeof resolved.description === "string"
+								? resolved.description
+								: undefined,
 					default: v.default ?? resolved.default,
 					enum: Array.isArray(resolved.enum)
 						? resolved.enum
@@ -2078,6 +2110,9 @@ export const getBlockSchemaTool = createTool({
 					format:
 						typeof resolved.format === "string" ? resolved.format : undefined,
 					properties: nestedProperties,
+					items: itemsSchema,
+					titleBy:
+						typeof resolved.titleBy === "string" ? resolved.titleBy : undefined,
 				};
 			};
 

@@ -108,24 +108,8 @@ function beautifyTitle(title: string | undefined): string | undefined {
 	return noExt.charAt(0).toUpperCase() + noExt.slice(1);
 }
 
-function isImageField(name: string, value: unknown): boolean {
+function looksLikeImageUrl(value: unknown): boolean {
 	if (typeof value !== "string") return false;
-	const n = name.toLowerCase();
-	if (
-		n.includes("image") ||
-		n.includes("img") ||
-		n.includes("photo") ||
-		n.includes("poster") ||
-		n.includes("logo") ||
-		n.includes("banner") ||
-		n.includes("thumbnail") ||
-		n.includes("cover") ||
-		n.includes("avatar") ||
-		n.includes("picture") ||
-		n.includes("desktop") ||
-		n.includes("mobile")
-	)
-		return true;
 	return /\.(jpg|jpeg|png|gif|webp|svg|avif)(\?.*)?$/i.test(value);
 }
 
@@ -1391,12 +1375,40 @@ function emptyItemFrom(template: FormValue): FormValue {
 	return "";
 }
 
-function getItemLabel(value: FormValue, index: number): string {
+function renderSimpleMustache(
+	template: string,
+	data: Record<string, FormValue>,
+): string | undefined {
+	if (!template.includes("{")) return undefined;
+	const result = template.replace(/\{\{([^}]+)\}\}/g, (_, key: string) => {
+		const v = data[key.trim()];
+		return v != null ? String(v) : "";
+	});
+	return result.trim() || undefined;
+}
+
+function getItemLabel(
+	value: FormValue,
+	index: number,
+	titleBy?: string,
+	schemaTitle?: string,
+): string {
 	if (typeof value === "string") return value || `Item ${index + 1}`;
 	if (typeof value === "number") return String(value);
 	if (value !== null && typeof value === "object" && !Array.isArray(value)) {
 		const obj = value as Record<string, FormValue>;
-		for (const key of ["name", "label", "title", "type"]) {
+		// 1. Use titleBy from schema (e.g. "alt" for Banner items)
+		if (titleBy) {
+			const v = obj[titleBy];
+			if (typeof v === "string" && v) return v;
+		}
+		// 2. Try Mustache-style rendering of schema title (e.g. "{{name}} - {{price}}")
+		if (schemaTitle) {
+			const rendered = renderSimpleMustache(schemaTitle, obj);
+			if (rendered) return rendered;
+		}
+		// 3. Fallback heuristics
+		for (const key of ["label", "title", "name", "type"]) {
 			const v = obj[key];
 			if (typeof v === "string" && v) return v;
 		}
@@ -1416,6 +1428,8 @@ function SortableArrayRow({
 	onSelect,
 	onDuplicate,
 	onRemove,
+	titleBy,
+	schemaTitle,
 }: {
 	id: string;
 	index: number;
@@ -1423,6 +1437,8 @@ function SortableArrayRow({
 	onSelect: () => void;
 	onDuplicate: () => void;
 	onRemove: () => void;
+	titleBy?: string;
+	schemaTitle?: string;
 }) {
 	const {
 		attributes,
@@ -1452,7 +1468,7 @@ function SortableArrayRow({
 				<GripVertical className="h-3 w-3" />
 			</span>
 			<span className="flex-1 truncate text-xs" onClick={onSelect}>
-				{getItemLabel(value, index)}
+				{getItemLabel(value, index, titleBy, schemaTitle)}
 			</span>
 			<DropdownMenu>
 				<DropdownMenuTrigger asChild>
@@ -1495,12 +1511,16 @@ function ArrayField({
 	value,
 	onChange,
 	depth,
+	itemSchema,
+	schemasMap,
 }: {
 	label: string;
 	description?: string;
 	value: FormValue[];
 	onChange: (v: FormValue[]) => void;
 	depth: number;
+	itemSchema?: SchemaProperty;
+	schemasMap?: Record<string, SchemaProperties>;
 }) {
 	const [open, setOpen] = useState(false);
 	const [editIndex, setEditIndex] = useState<number | null>(null);
@@ -1588,6 +1608,13 @@ function ArrayField({
 						}}
 						depth={depth + 1}
 						hideLabel
+						schemaType={itemSchema?.type}
+						schemaDefault={itemSchema?.default}
+						schemaEnum={itemSchema?.enum}
+						schemaFormat={itemSchema?.format}
+						fieldSchema={itemSchema?.properties}
+						anyOfRefs={itemSchema?.anyOfRefs}
+						schemasMap={schemasMap ?? {}}
 					/>
 				</div>
 			) : open ? (
@@ -1611,6 +1638,8 @@ function ArrayField({
 										onChange(next);
 									}}
 									onRemove={() => onChange(value.filter((_, j) => j !== i))}
+									titleBy={itemSchema?.titleBy}
+									schemaTitle={itemSchema?.title}
 								/>
 							))}
 						</SortableContext>
@@ -1704,6 +1733,7 @@ function ObjectField({
 								schemaEnum={prop?.enum}
 								schemaFormat={prop?.format}
 								fieldSchema={prop?.properties}
+								itemSchema={prop?.items}
 								anyOfRefs={prop?.anyOfRefs}
 								schemasMap={schemasMap}
 								value={value[k] as FormValue}
@@ -2379,6 +2409,7 @@ function BlockRefField({
 								schemaEnum={prop?.enum}
 								schemaFormat={prop?.format}
 								fieldSchema={prop?.properties}
+								itemSchema={prop?.items}
 								anyOfRefs={prop?.anyOfRefs}
 								schemasMap={schemasMap}
 								value={value[k] as FormValue}
@@ -2408,6 +2439,7 @@ function FormField({
 	schemaFormat,
 	description,
 	fieldSchema,
+	itemSchema,
 	anyOfRefs,
 	schemasMap = {},
 }: {
@@ -2429,6 +2461,8 @@ function FormField({
 	description?: string;
 	/** Nested schema properties for object-type fields */
 	fieldSchema?: SchemaProperties;
+	/** Item schema for array-type fields */
+	itemSchema?: import("../../../api/tools/files.ts").SchemaProperty;
 	/** Block-ref options for loader-selector fields */
 	anyOfRefs?: AnyOfRef[];
 	/** Schemas for nested block types, keyed by resolveType */
@@ -2497,6 +2531,8 @@ function FormField({
 				value={effectiveValue as FormValue[]}
 				onChange={onChange as (v: FormValue[]) => void}
 				depth={depth}
+				itemSchema={itemSchema}
+				schemasMap={schemasMap}
 			/>
 		);
 	}
@@ -2639,17 +2675,6 @@ function FormField({
 						value={effectiveValue as string}
 						onChange={onChange as (v: string) => void}
 						inline
-					/>
-				);
-			}
-			// ── name heuristic fallback ──────────────────────────────
-			if (isImageField(name, effectiveValue)) {
-				return (
-					<ImageField
-						label={label}
-						description={description}
-						value={effectiveValue as string}
-						onChange={onChange as (v: string) => void}
 					/>
 				);
 			}
@@ -2817,17 +2842,18 @@ export function SectionForm({
 			>
 				{keys.map((key) => {
 					const prop = schema?.[key];
-				return (
-					<FormField
-						key={key}
-						name={key}
-						label={beautifyTitle(prop?.title)}
+					return (
+						<FormField
+							key={key}
+							name={key}
+							label={beautifyTitle(prop?.title)}
 							description={prop?.description}
 							schemaType={prop?.type}
 							schemaDefault={prop?.default}
 							schemaEnum={prop?.enum}
 							schemaFormat={prop?.format}
 							fieldSchema={prop?.properties}
+							itemSchema={prop?.items}
 							anyOfRefs={prop?.anyOfRefs}
 							schemasMap={schemasMap}
 							value={data[key] as FormValue}
