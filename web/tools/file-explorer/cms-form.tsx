@@ -93,6 +93,21 @@ function humanize(key: string): string {
 		.trim();
 }
 
+// Mirrors the admin's beautifySchemaTitle: takes the last path segment,
+// strips the file extension, and capitalizes. Also strips deco.cx
+// responsive breakpoint annotations like "tl@1008-1110" or "sm@768".
+function beautifyTitle(title: string | undefined): string | undefined {
+	if (!title) return title;
+	// Strip path prefix (e.g. "site/sections/Foo.tsx" → "Foo.tsx")
+	const segment = title.split("/").pop() ?? title;
+	// Strip file extension (e.g. "Foo.tsx" → "Foo")
+	const noExt = segment.split(".")[0] ?? segment;
+	// If the result looks like a breakpoint annotation (e.g. "tl@1008-1110"),
+	// return undefined so the caller falls back to humanize(key)
+	if (/^[a-z]{1,4}@[\d]/.test(noExt)) return undefined;
+	return noExt.charAt(0).toUpperCase() + noExt.slice(1);
+}
+
 function isImageField(name: string, value: unknown): boolean {
 	if (typeof value !== "string") return false;
 	const n = name.toLowerCase();
@@ -1682,7 +1697,7 @@ function ObjectField({
 							<FormField
 								key={k}
 								name={k}
-								label={prop?.title}
+								label={beautifyTitle(prop?.title)}
 								description={prop?.description}
 								schemaType={prop?.type}
 								schemaDefault={prop?.default}
@@ -2357,7 +2372,7 @@ function BlockRefField({
 							<FormField
 								key={k}
 								name={k}
-								label={prop?.title}
+								label={beautifyTitle(prop?.title)}
 								description={prop?.description}
 								schemaType={prop?.type}
 								schemaDefault={prop?.default}
@@ -2802,11 +2817,11 @@ export function SectionForm({
 			>
 				{keys.map((key) => {
 					const prop = schema?.[key];
-					return (
-						<FormField
-							key={key}
-							name={key}
-							label={prop?.title}
+				return (
+					<FormField
+						key={key}
+						name={key}
+						label={beautifyTitle(prop?.title)}
 							description={prop?.description}
 							schemaType={prop?.type}
 							schemaDefault={prop?.default}

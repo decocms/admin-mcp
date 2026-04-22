@@ -16,7 +16,6 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
-	AlertTriangle,
 	Calendar,
 	ChevronDown,
 	ChevronLeft,
@@ -38,7 +37,6 @@ import {
 	GitFork,
 	Globe,
 	GripVertical,
-	Lock,
 	type LucideIcon,
 	LayersIcon,
 	LayoutTemplate,
@@ -1349,7 +1347,6 @@ interface CmsPanelProps {
 	onWrapWithVariants: () => void;
 	onAddVariant: () => void;
 	onRemoveVariant: (variantIdx: number) => void;
-	onAddFallback: () => void;
 	pageVariants?: GetPageSectionsOutput["pageVariants"];
 	selectedPageVariant?: number | null;
 	onSelectPageVariant?: (idx: number) => void;
@@ -1396,7 +1393,6 @@ function CmsPanel({
 	onWrapWithVariants,
 	onAddVariant,
 	onRemoveVariant,
-	onAddFallback,
 	pageVariants,
 	selectedPageVariant,
 	onSelectPageVariant,
@@ -1433,21 +1429,10 @@ function CmsPanel({
 		isMultivariate && selectedVariant !== null && sectionData !== null;
 	const sortableIds = data?.sections.map((s) => String(s.index)) ?? [];
 
-	// Fallback detection: last variant with "website/matchers/always.ts" rule
-	const variants = activeSection?.variants ?? [];
-	const lastIdx = variants.length - 1;
-	const fallbackIdx =
-		lastIdx >= 0 &&
-		(variants[lastIdx].rule.__resolveType as string) ===
-			"website/matchers/always.ts"
-			? lastIdx
-			: -1;
-	const hasFallback = fallbackIdx >= 0;
-
-	// Exclude fallback from sortable IDs
-	const variantSortableIds = variants
-		.map((_, i) => String(i))
-		.filter((_, i) => i !== fallbackIdx);
+	// Variant sortable IDs — all variants are sortable
+	const variantSortableIds = (activeSection?.variants ?? []).map(
+		(_, i) => String(i),
+	);
 
 	const handleDragEnd = ({ active, over }: DragEndEvent) => {
 		if (!over || active.id === over.id || !data) return;
@@ -1503,18 +1488,11 @@ function CmsPanel({
 					>
 						<ChevronLeft className="h-3.5 w-3.5" />
 					</button>
-					<span className="flex-1 truncate text-sm font-semibold">
-						{selectedVariant === fallbackIdx
-							? "Fallback"
-							: (activeSection?.variants?.[selectedVariant ?? 0]?.label ??
-								`Variant ${(selectedVariant ?? 0) + 1}`)}
-					</span>
-					{selectedVariant === fallbackIdx && (
-						<span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">
-							always
-						</span>
-					)}
-					{autoSaving && (
+				<span className="flex-1 truncate text-sm font-semibold">
+					{activeSection?.variants?.[selectedVariant ?? 0]?.label ??
+						`Variant ${(selectedVariant ?? 0) + 1}`}
+				</span>
+				{autoSaving && (
 						<Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
 					)}
 				</div>
@@ -1529,11 +1507,11 @@ function CmsPanel({
 						<ChevronLeft className="h-3.5 w-3.5" />
 					</button>
 					<span
-						className="flex-1 truncate text-sm font-semibold"
-						style={{ color: "oklch(0.45 0.15 160)" }}
-					>
-						{activeSection?.label ?? "Variants"}
-					</span>
+					className="flex-1 truncate text-sm font-semibold"
+					style={{ color: "oklch(0.45 0.15 160)" }}
+				>
+					{activeSection?.label ?? "Variants"}
+				</span>
 				</div>
 			) : isEditing ? (
 				<div
@@ -1678,33 +1656,23 @@ function CmsPanel({
 								{(() => {
 									const variant =
 										activeSection?.variants?.[selectedVariant ?? 0];
-									const ruleData = variant?.rule ?? {};
-									const ruleRt = (ruleData.__resolveType as string) ?? "";
-									const ruleLabel = ruleRt
-										? ruleRt
-												.split("/")
-												.pop()
-												?.replace(/\.(tsx|ts)$/, "")
-										: "Always";
-									const isFallbackVariant =
-										selectedVariant === fallbackIdx;
-									return (
-										<div className="space-y-1 px-2">
-											{/* Matcher type selector (hidden for fallback) */}
-											{isFallbackVariant ? (
-												<div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1.5 text-[11px] text-muted-foreground">
-													<Lock className="h-3 w-3" />
-													Always (fallback — cannot change)
-												</div>
-											) : (
-												<MatcherPicker
-													currentRt={ruleRt}
-													currentLabel={ruleLabel ?? "Always"}
-													matchers={availableMatchers}
-													onFetchMatchers={onFetchMatchers}
-													onSelect={onChangeMatcherType}
-												/>
-											)}
+								const ruleData = variant?.rule ?? {};
+								const ruleRt = (ruleData.__resolveType as string) ?? "";
+								const ruleLabel = ruleRt
+									? ruleRt
+											.split("/")
+											.pop()
+											?.replace(/\.(tsx|ts)$/, "")
+									: "Always";
+								return (
+									<div className="space-y-1 px-2">
+										<MatcherPicker
+											currentRt={ruleRt}
+											currentLabel={ruleLabel ?? "Always"}
+											matchers={availableMatchers}
+											onFetchMatchers={onFetchMatchers}
+											onSelect={onChangeMatcherType}
+										/>
 											{variantRuleSchema ? (
 												<SectionForm
 													data={ruleData}
@@ -1751,96 +1719,41 @@ function CmsPanel({
 					</div>
 				</div>
 			) : isMultivariate && activeSection?.variants ? (
-				/* ── Variant list (DnD reorderable) ── */
-				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-					{!hasFallback && (
-						<div className="mx-2 mt-2 flex items-start gap-2 rounded-md border border-amber-300/50 bg-amber-50 px-3 py-2 dark:border-amber-500/30 dark:bg-amber-950/30">
-							<AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-							<div className="flex flex-col gap-1">
-								<span className="text-[11px] font-medium text-amber-800 dark:text-amber-300">
-									No fallback variant
-								</span>
-								<span className="text-[10px] text-amber-700/80 dark:text-amber-400/70">
-									A fallback ensures a default section is always shown.
-								</span>
-								<button
-									type="button"
-									onClick={onAddFallback}
-									className="mt-0.5 self-start rounded px-2 py-0.5 text-[10px] font-medium text-amber-800 transition-colors hover:bg-amber-200/60 dark:text-amber-300 dark:hover:bg-amber-800/40"
-								>
-									Add fallback variant
-								</button>
-							</div>
-						</div>
-					)}
-					<div className="min-h-0 flex-1 overflow-y-auto p-2">
-						<DndContext
-							sensors={sensors}
-							modifiers={[restrictToVerticalAxis]}
-							onDragEnd={handleVariantDragEnd}
+			/* ── Variant list (DnD reorderable) ── */
+			<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+				<div className="min-h-0 flex-1 overflow-y-auto p-2">
+					<DndContext
+						sensors={sensors}
+						modifiers={[restrictToVerticalAxis]}
+						onDragEnd={handleVariantDragEnd}
+					>
+						<SortableContext
+							items={variantSortableIds}
+							strategy={verticalListSortingStrategy}
 						>
-							<SortableContext
-								items={variantSortableIds}
-								strategy={verticalListSortingStrategy}
-							>
-								{activeSection.variants
-									.map((variant, vIdx) => ({ variant, vIdx }))
-									.filter(({ vIdx }) => vIdx !== fallbackIdx)
-									.map(({ variant, vIdx }) => {
-										const valueRt =
-											(variant.value.__resolveType as string) ?? "";
-										const valueLabel = valueRt
-											? (valueRt
-													.split("/")
-													.pop()
-													?.replace(/\.(tsx|ts)$/, "") ?? "Section")
-											: "Section";
-										return (
-											<SortableVariantItem
-												key={String(vIdx)}
-												id={String(vIdx)}
-												label={variant.label}
-												valueLabel={valueLabel}
-												onSelect={() => onSelectVariant(vIdx)}
-												onRemove={() => onRemoveVariant(vIdx)}
-											/>
-										);
-									})}
-							</SortableContext>
-						</DndContext>
-						{/* Fallback variant (not draggable, not removable) */}
-						{hasFallback && (() => {
-							const fbVariant = activeSection.variants[fallbackIdx];
-							const fbValueRt =
-								(fbVariant.value.__resolveType as string) ?? "";
-							const fbValueLabel = fbValueRt
-								? (fbValueRt
-										.split("/")
-										.pop()
-										?.replace(/\.(tsx|ts)$/, "") ?? "Section")
-								: "Section";
-							return (
-								<div
-									className="mt-1 flex cursor-pointer select-none items-center gap-2 rounded-md border border-dashed border-muted-foreground/20 bg-muted/30 px-2 py-2 hover:bg-muted/50"
-									onClick={() => onSelectVariant(fallbackIdx)}
-									onKeyDown={(e) => {
-										if (e.key === "Enter" || e.key === " ")
-											onSelectVariant(fallbackIdx);
-									}}
-								>
-									<Lock className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
-									<div className="flex flex-1 flex-col gap-0.5 overflow-hidden">
-										<span className="truncate text-xs font-medium">
-											{fbValueLabel}
-										</span>
-										<span className="truncate text-[10px] text-muted-foreground">
-											Fallback (always)
-										</span>
-									</div>
-								</div>
-							);
-						})()}
-					</div>
+							{activeSection.variants.map((variant, vIdx) => {
+								const valueRt =
+									(variant.value.__resolveType as string) ?? "";
+								const valueLabel = valueRt
+									? (valueRt
+											.split("/")
+											.pop()
+											?.replace(/\.(tsx|ts)$/, "") ?? "Section")
+									: "Section";
+								return (
+									<SortableVariantItem
+										key={String(vIdx)}
+										id={String(vIdx)}
+										label={variant.label}
+										valueLabel={valueLabel}
+										onSelect={() => onSelectVariant(vIdx)}
+										onRemove={() => onRemoveVariant(vIdx)}
+									/>
+								);
+							})}
+						</SortableContext>
+					</DndContext>
+				</div>
 					<div className="shrink-0 border-t p-2">
 						<button
 							type="button"
@@ -1916,35 +1829,25 @@ function CmsPanel({
 					{pageVariantRuleOpen && (
 						<div className="px-1 pb-2">
 							{(() => {
-								const pvRule = activePageVariant?.rule ?? {};
-								const pvRuleRt = (pvRule.__resolveType as string) ?? "";
-								const pvRuleLabel = pvRuleRt
-									? pvRuleRt
-											.split("/")
-											.pop()
-											?.replace(/\.(tsx|ts)$/, "")
-									: "Always";
-								const isFallbackPv =
-									pvRuleRt === "website/matchers/always.ts" ||
-									pvRuleRt === "$live/matchers/MatchAlways.ts";
-								return (
-									<div className="space-y-1 px-2">
-										{isFallbackPv ? (
-											<div className="flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1.5 text-[11px] text-muted-foreground">
-												<Lock className="h-3 w-3" />
-												Always (fallback — cannot change)
-											</div>
-										) : (
-											<MatcherPicker
-												currentRt={pvRuleRt}
-												currentLabel={pvRuleLabel ?? "Always"}
-												matchers={availableMatchers}
-												onFetchMatchers={onFetchMatchers}
-												onSelect={(rt) =>
-													onChangePageVariantMatcherType?.(rt)
-												}
-											/>
-										)}
+							const pvRule = activePageVariant?.rule ?? {};
+							const pvRuleRt = (pvRule.__resolveType as string) ?? "";
+							const pvRuleLabel = pvRuleRt
+								? pvRuleRt
+										.split("/")
+										.pop()
+										?.replace(/\.(tsx|ts)$/, "")
+								: "Always";
+							return (
+								<div className="space-y-1 px-2">
+									<MatcherPicker
+										currentRt={pvRuleRt}
+										currentLabel={pvRuleLabel ?? "Always"}
+										matchers={availableMatchers}
+										onFetchMatchers={onFetchMatchers}
+										onSelect={(rt) =>
+											onChangePageVariantMatcherType?.(rt)
+										}
+									/>
 										{pageVariantRuleSchema ? (
 											<SectionForm
 												data={pvRule}
@@ -3540,26 +3443,30 @@ function FileExplorerWorkspace({
 				cmsSelectedPageVariantRef.current,
 			) as Record<string, unknown>[]),
 		];
-		const rawSection = { ...rawSections[sectionIdx] } as {
+		const rawSection = { ...rawSections[sectionIdx] } as Record<string, unknown>;
+		const displaySection = cmsData.sections[sectionIdx]!;
+		const mvContainer = {
+			...getMultivariateContainer(rawSection, displaySection),
+		} as {
 			__resolveType: string;
 			variants: Array<{
 				value: Record<string, unknown>;
 				rule: Record<string, unknown>;
 			}>;
 		};
-		const variants = [...(rawSection.variants ?? [])];
+		const variants = [...(mvContainer.variants ?? [])];
 		variants[cmsSelectedVariant] = {
 			...variants[cmsSelectedVariant],
 			[field]: newData,
 		};
-		rawSection.variants = variants;
-		rawSections[sectionIdx] = rawSection;
+		mvContainer.variants = variants;
+		rawSections[sectionIdx] = rebuildRawSection(rawSection, mvContainer, displaySection);
 
 		// Also update the display section's variant data
 		const newDisplaySections = [...cmsData.sections];
-		const displaySection = { ...newDisplaySections[sectionIdx] };
-		if (displaySection.variants) {
-			const newVariants = [...displaySection.variants];
+		const updatedDisplaySection = { ...newDisplaySections[sectionIdx] };
+		if (updatedDisplaySection.variants) {
+			const newVariants = [...updatedDisplaySection.variants];
 			newVariants[cmsSelectedVariant] = {
 				...newVariants[cmsSelectedVariant],
 				[field]: newData,
@@ -3567,9 +3474,9 @@ function FileExplorerWorkspace({
 			if (field === "rule") {
 				newVariants[cmsSelectedVariant].label = formatMatcherRule(newData);
 			}
-			displaySection.variants = newVariants;
+			updatedDisplaySection.variants = newVariants;
 		}
-		newDisplaySections[sectionIdx] = displaySection;
+		newDisplaySections[sectionIdx] = updatedDisplaySection;
 
 		const updatedPageData = withSectionsArray(
 			cmsData.pageData,
@@ -3611,6 +3518,36 @@ function FileExplorerWorkspace({
 		}, 800);
 	};
 
+	/**
+	 * Returns the object containing the `variants` array for a raw section.
+	 * For lazy-wrapped multivariates the variants live in rawSection.section,
+	 * not at the top level.
+	 */
+	const getMultivariateContainer = (
+		rawSection: Record<string, unknown>,
+		displaySection: { isLazy?: boolean },
+	): Record<string, unknown> => {
+		if (displaySection.isLazy) {
+			return (rawSection.section as Record<string, unknown>) ?? rawSection;
+		}
+		return rawSection;
+	};
+
+	/**
+	 * Rebuilds a raw section after its variants container was mutated.
+	 * For lazy-wrapped sections this re-nests the container back under `.section`.
+	 */
+	const rebuildRawSection = (
+		originalRaw: Record<string, unknown>,
+		mutatedContainer: Record<string, unknown>,
+		displaySection: { isLazy?: boolean },
+	): Record<string, unknown> => {
+		if (displaySection.isLazy) {
+			return { ...originalRaw, section: mutatedContainer };
+		}
+		return mutatedContainer;
+	};
+
 	const handleReorderVariants = (srcIdx: number, destIdx: number) => {
 		if (!cmsData) return;
 		const sectionIdx = cmsSelectedSectionRef.current;
@@ -3623,19 +3560,19 @@ function FileExplorerWorkspace({
 				cmsSelectedPageVariantRef.current,
 			) as Record<string, unknown>[]),
 		];
-		const rawSection = { ...rawSections[sectionIdx] } as {
-			__resolveType: string;
-			variants: Array<unknown>;
-		};
-		const rawVariants = [...(rawSection.variants ?? [])];
+		const rawSection = { ...rawSections[sectionIdx] } as Record<string, unknown>;
+		const displaySection = { ...cmsData.sections[sectionIdx]! };
+		const mvContainer = {
+			...getMultivariateContainer(rawSection, displaySection),
+		} as { variants: Array<unknown> };
+		const rawVariants = [...(mvContainer.variants ?? [])];
 		const [moved] = rawVariants.splice(srcIdx, 1);
 		rawVariants.splice(destIdx, 0, moved);
-		rawSection.variants = rawVariants;
-		rawSections[sectionIdx] = rawSection;
+		mvContainer.variants = rawVariants;
+		rawSections[sectionIdx] = rebuildRawSection(rawSection, mvContainer, displaySection);
 
 		// Reorder in display sections
 		const newDisplaySections = [...cmsData.sections];
-		const displaySection = { ...newDisplaySections[sectionIdx] };
 		if (displaySection.variants) {
 			const newVariants = [...displaySection.variants];
 			const [movedV] = newVariants.splice(srcIdx, 1);
@@ -3801,15 +3738,17 @@ function FileExplorerWorkspace({
 				cmsSelectedPageVariantRef.current,
 			) as Record<string, unknown>[]),
 		];
-		const rawSection = { ...rawSections[idx] } as {
-			__resolveType: string;
+		const rawSection = { ...rawSections[idx] } as Record<string, unknown>;
+		const mvContainer = {
+			...getMultivariateContainer(rawSection, displaySection),
+		} as {
 			variants: Array<{
 				value: Record<string, unknown>;
 				rule: Record<string, unknown>;
 			}>;
 		};
 		// Insert before fallback (last variant with always.ts) if it exists
-		const rawVariants = [...rawSection.variants];
+		const rawVariants = [...(mvContainer.variants ?? [])];
 		const lastRaw = rawVariants[rawVariants.length - 1];
 		const lastIsAlways =
 			lastRaw &&
@@ -3823,8 +3762,8 @@ function FileExplorerWorkspace({
 		} else {
 			rawVariants.push({ value: newValue, rule: newRule });
 		}
-		rawSection.variants = rawVariants;
-		rawSections[idx] = rawSection;
+		mvContainer.variants = rawVariants;
+		rawSections[idx] = rebuildRawSection(rawSection, mvContainer, displaySection);
 
 		// Update display sections
 		const newDisplaySections = [...snap.sections];
@@ -3887,13 +3826,6 @@ function FileExplorerWorkspace({
 		if (!displaySection?.isMultivariate || !displaySection.variants) return;
 		if (displaySection.variants.length <= 1) return; // keep at least 1
 
-		// Don't allow removing the fallback variant
-		const lastV = displaySection.variants[displaySection.variants.length - 1];
-		const isFallback =
-			(lastV.rule.__resolveType as string) ===
-			"website/matchers/always.ts";
-		if (isFallback && variantIdx === displaySection.variants.length - 1) return;
-
 		// Update raw pageData
 		const rawSections = [
 			...(getActiveSectionsArray(
@@ -3901,14 +3833,14 @@ function FileExplorerWorkspace({
 				cmsSelectedPageVariantRef.current,
 			) as Record<string, unknown>[]),
 		];
-		const rawSection = { ...rawSections[idx] } as {
-			__resolveType: string;
-			variants: Array<unknown>;
-		};
-		const rawVariants = [...rawSection.variants];
+		const rawSection = { ...rawSections[idx] } as Record<string, unknown>;
+		const mvContainer = {
+			...getMultivariateContainer(rawSection, displaySection),
+		} as { variants: Array<unknown> };
+		const rawVariants = [...(mvContainer.variants ?? [])];
 		rawVariants.splice(variantIdx, 1);
-		rawSection.variants = rawVariants;
-		rawSections[idx] = rawSection;
+		mvContainer.variants = rawVariants;
+		rawSections[idx] = rebuildRawSection(rawSection, mvContainer, displaySection);
 
 		// Update display sections
 		const newDisplaySections = [...snap.sections];
@@ -3916,98 +3848,6 @@ function FileExplorerWorkspace({
 		const newVariants = [...(updatedDisplay.variants ?? [])];
 		newVariants.splice(variantIdx, 1);
 		updatedDisplay.variants = newVariants;
-		newDisplaySections[idx] = updatedDisplay;
-
-		const updatedPageData = withSectionsArray(
-			snap.pageData,
-			cmsSelectedPageVariantRef.current,
-			rawSections,
-		);
-		const next: GetPageSectionsOutput = {
-			...snap,
-			pageData: updatedPageData,
-			sections: newDisplaySections,
-		};
-		setCmsData(next);
-		cmsDataRef.current = next;
-
-		// Auto-save
-		setCmsAutoSaving(true);
-		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
-		cmsAutoSaveTimerRef.current = setTimeout(async () => {
-			try {
-				const result = await app.callServerTool({
-					name: "write_file",
-					arguments: {
-						env: userEnv,
-						filepath: next.filePath,
-						content: JSON.stringify(updatedPageData, null, 2),
-					},
-				});
-				if (result?.isError) throw new Error("write_file failed");
-				setPreviewRefreshKey((k) => k + 1);
-			} catch {
-				toast.error("Auto-save failed");
-			} finally {
-				setCmsAutoSaving(false);
-			}
-		}, 300);
-	};
-
-	const handleAddFallback = () => {
-		const snap = cmsDataRef.current;
-		const idx = cmsSelectedSectionRef.current;
-		if (!snap || idx === null || !app || !userEnv) return;
-
-		const displaySection = snap.sections[idx];
-		if (!displaySection?.isMultivariate || !displaySection.variants) return;
-
-		// Check if already has fallback
-		const lastV = displaySection.variants[displaySection.variants.length - 1];
-		if (
-			lastV &&
-			(lastV.rule.__resolveType as string) ===
-				"website/matchers/always.ts"
-		)
-			return;
-
-		// Use first variant's resolveType as template
-		const firstValue = displaySection.variants[0]?.value ?? {};
-		const templateRt = (firstValue.__resolveType as string | undefined) ?? "";
-		const fallbackValue: Record<string, unknown> = templateRt
-			? { __resolveType: templateRt }
-			: {};
-		const fallbackRule: Record<string, unknown> = {
-			__resolveType: "website/matchers/always.ts",
-		};
-
-		// Update raw pageData
-		const rawSections = [
-			...(getActiveSectionsArray(
-				snap.pageData,
-				cmsSelectedPageVariantRef.current,
-			) as Record<string, unknown>[]),
-		];
-		const rawSection = { ...rawSections[idx] } as {
-			__resolveType: string;
-			variants: Array<{
-				value: Record<string, unknown>;
-				rule: Record<string, unknown>;
-			}>;
-		};
-		rawSection.variants = [
-			...rawSection.variants,
-			{ value: fallbackValue, rule: fallbackRule },
-		];
-		rawSections[idx] = rawSection;
-
-		// Update display sections
-		const newDisplaySections = [...snap.sections];
-		const updatedDisplay = { ...newDisplaySections[idx] };
-		updatedDisplay.variants = [
-			...(updatedDisplay.variants ?? []),
-			{ value: fallbackValue, rule: fallbackRule, label: "always" },
-		];
 		newDisplaySections[idx] = updatedDisplay;
 
 		const updatedPageData = withSectionsArray(
@@ -5817,7 +5657,6 @@ function FileExplorerWorkspace({
 															onWrapWithVariants={handleWrapWithVariants}
 															onAddVariant={handleAddVariant}
 															onRemoveVariant={handleRemoveVariant}
-															onAddFallback={handleAddFallback}
 															pageVariants={cmsData?.pageVariants}
 															selectedPageVariant={cmsSelectedPageVariant}
 															onSelectPageVariant={handleSelectPageVariant}

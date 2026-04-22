@@ -995,18 +995,31 @@ export const getPageSectionsTool = createTool({
 					};
 				}
 
-				// ── section-level multivariate flag detection ────────
-				if (rt.includes("flags/multivariate")) {
-					const mvObj = sectionObj as {
-						__resolveType: string;
+			// ── section-level multivariate flag detection ────────
+			// Also handles lazy-wrapped multivariates: { __resolveType: Lazy, section: { __resolveType: flags/multivariate, variants: [...] } }
+			const innerSectionObj = isLazy
+				? (sectionObj.section as {
+						__resolveType?: string;
 						variants?: Array<{
 							value?: Record<string, unknown>;
 							rule?: Record<string, unknown>;
 						}>;
-					};
-					const rawVariants = Array.isArray(mvObj.variants)
-						? mvObj.variants
-						: [];
+					} | undefined)
+				: undefined;
+			const multivariateRt = isLazy
+				? (innerSectionObj?.__resolveType ?? "")
+				: rt;
+			if (multivariateRt.includes("flags/multivariate")) {
+				const mvObj = (isLazy ? innerSectionObj : sectionObj) as {
+					__resolveType: string;
+					variants?: Array<{
+						value?: Record<string, unknown>;
+						rule?: Record<string, unknown>;
+					}>;
+				};
+				const rawVariants = Array.isArray(mvObj.variants)
+					? mvObj.variants
+					: [];
 
 					// ── Hidden section: single variant with "never" matcher ──
 					const NEVER_RESOLVE_TYPES = [
@@ -1060,14 +1073,15 @@ export const getPageSectionsTool = createTool({
 					const sectionLabel = firstValueRt
 						? labelFromResolveType(firstValueRt)
 						: "Section";
-					resolvedSections.push(sectionObj);
-					return {
-						index: idx,
-						resolveType: rt,
-						label: `Variants of ${sectionLabel}`,
-						isMultivariate: true,
-						variants,
-					};
+				resolvedSections.push(sectionObj);
+				return {
+					index: idx,
+					resolveType: rt,
+					label: `Variants of ${sectionLabel}`,
+					isMultivariate: true,
+					isLazy,
+					variants,
+				};
 				}
 
 				const effectiveRt = isLazy
@@ -2039,12 +2053,22 @@ export const getBlockSchemaTool = createTool({
 					}
 				}
 
-				return {
-					type: type ?? "string",
-					title:
-						typeof resolved.title === "string" ? resolved.title : undefined,
-					description:
-						typeof resolved.description === "string"
+			return {
+				type: type ?? "string",
+				// Prefer the property-level title (v.title) over the resolved $ref
+				// title (resolved.title). In deco.cx schemas, the JSDoc @title
+				// annotation is placed on the property entry itself, not inside the
+				// $defs object that the $ref points to.
+				title:
+					typeof v.title === "string"
+						? v.title
+						: typeof resolved.title === "string"
+							? resolved.title
+							: undefined,
+				description:
+					typeof v.description === "string"
+						? v.description
+						: typeof resolved.description === "string"
 							? resolved.description
 							: undefined,
 					default: v.default ?? resolved.default,
