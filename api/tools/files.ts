@@ -1044,7 +1044,13 @@ export const getPageSectionsTool = createTool({
 					return {
 						index: idx,
 						resolveType: rt,
-						label: labelFromResolveType(resolvedRt) || `Section ${idx + 1}`,
+						label:
+							(typeof resolvedBlock?.name === "string" && resolvedBlock.name
+								? resolvedBlock.name
+								: rt
+										.replace(/[-_]/g, " ")
+										.replace(/\b\w/g, (c) => c.toUpperCase())) ||
+							`Section ${idx + 1}`,
 						isLazy,
 						isSavedBlock: true,
 						savedBlockKey: rt,
