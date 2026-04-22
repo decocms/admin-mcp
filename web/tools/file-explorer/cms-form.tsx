@@ -1408,7 +1408,7 @@ function getItemLabel(
 			if (rendered) return rendered;
 		}
 		// 3. Fallback heuristics
-		for (const key of ["label", "title", "name", "type"]) {
+		for (const key of ["label", "title", "name", "id", "type"]) {
 			const v = obj[key];
 			if (typeof v === "string" && v) return v;
 		}
@@ -1587,7 +1587,12 @@ function ArrayField({
 							<ChevronLeft className="h-3.5 w-3.5" />
 						</button>
 						<span className="flex-1 truncate text-xs font-medium">
-							{getItemLabel(value[editIndex], editIndex)}
+							{getItemLabel(
+								value[editIndex],
+								editIndex,
+								itemSchema?.titleBy,
+								itemSchema?.title,
+							)}
 						</span>
 						<button
 							type="button"

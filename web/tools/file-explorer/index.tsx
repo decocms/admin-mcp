@@ -124,6 +124,7 @@ import type {
 	GetBlockSchemaOutput,
 	GetPageSectionsOutput,
 	GetPagesOutput,
+	GlobalSectionInfo,
 	ListAppsOutput,
 	ListFilesOutput,
 	ListMatchersOutput,
@@ -2027,6 +2028,7 @@ function FileExplorerWorkspace({
 
 	// ── pages / url bar state ───────────────────────────────────────────────────
 	const [pages, setPages] = useState<PageInfo[]>([]);
+	const [globalSections, setGlobalSections] = useState<GlobalSectionInfo[]>([]);
 	const [pagesLoaded, setPagesLoaded] = useState(false);
 	const [pagesLoading, setPagesLoading] = useState(false);
 	const [pagesOpen, setPagesOpen] = useState(false);
@@ -2167,6 +2169,9 @@ function FileExplorerWorkspace({
 	const [previewPathInput, setPreviewPathInput] = useState("/");
 	const [previewPath, setPreviewPath] = useState("/");
 	const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+	const [directPreviewUrl, setDirectPreviewUrl] = useState<string | null>(null);
+	const [activeGlobalSection, setActiveGlobalSection] =
+		useState<GlobalSectionInfo | null>(null);
 	const [previewError, setPreviewError] = useState<string>();
 	const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 	const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
@@ -2225,6 +2230,16 @@ function FileExplorerWorkspace({
 				p.name.toLowerCase().includes(term.toLowerCase()),
 		);
 	}, [pages, previewPathInput]);
+
+	const filteredGlobalSections = useMemo(() => {
+		const term = previewPathInput.trim();
+		if (!term || term === "/") return globalSections;
+		return globalSections.filter(
+			(s) =>
+				s.name.toLowerCase().includes(term.toLowerCase()) ||
+				s.resolveType.toLowerCase().includes(term.toLowerCase()),
+		);
+	}, [globalSections, previewPathInput]);
 
 	// ── effects ─────────────────────────────────────────────────────────────────
 
@@ -2580,6 +2595,14 @@ function FileExplorerWorkspace({
 		)
 			return;
 
+		// When a direct preview URL is set (e.g. global section), use it directly
+		if (directPreviewUrl) {
+			setPreviewError(undefined);
+			setPreviewUrl(directPreviewUrl);
+			setIsLoadingPreview(false);
+			return;
+		}
+
 		const refreshKey = previewRefreshKey;
 		let cancelled = false;
 
@@ -2633,7 +2656,15 @@ function FileExplorerWorkspace({
 		return () => {
 			cancelled = true;
 		};
-	}, [app, envStatus, previewPath, previewRefreshKey, userEnv, viewMode]);
+	}, [
+		app,
+		directPreviewUrl,
+		envStatus,
+		previewPath,
+		previewRefreshKey,
+		userEnv,
+		viewMode,
+	]);
 
 	// Compute final preview src with matcher overrides for variant selection
 	const MATCHER_OVERRIDE_QS = "x-deco-matchers-override";
@@ -2750,6 +2781,77 @@ function FileExplorerWorkspace({
 	useEffect(() => {
 		if (!cmsOpen || !app || !userEnv || envStatus !== "ready") return;
 		let cancelled = false;
+
+		// ── Global section: read block file directly ──
+		if (activeGlobalSection) {
+			const fetchGlobalSection = async () => {
+				setCmsLoading(true);
+				setCmsError(undefined);
+				setCmsData(null);
+				setCmsSelectedSection(null);
+				setCmsSectionData(null);
+				try {
+					const filePath = `/.deco/blocks/${activeGlobalSection.key}.json`;
+					const result = await app.callServerTool({
+						name: "read_file",
+						arguments: { env: userEnv, filepath: filePath },
+					});
+					if (cancelled) return;
+					if (result?.isError) {
+						throw new Error("Failed to read global section block");
+					}
+					const readData = result?.structuredContent as
+						| ReadFileOutput
+						| undefined;
+					const content = readData?.content;
+					if (!content) throw new Error("Empty block content");
+					const blockData = JSON.parse(content) as Record<string, unknown>;
+					const rt = (blockData.__resolveType as string) ?? "";
+					const label =
+						rt
+							.split("/")
+							.pop()
+							?.replace(/\.tsx?$/, "") ?? "Section";
+
+					const syntheticCmsData: GetPageSectionsOutput = {
+						site: site ?? "",
+						env: userEnv,
+						pageKey: activeGlobalSection.key,
+						filePath,
+						pageData: blockData,
+						sections: [
+							{
+								index: 0,
+								resolveType: rt,
+								label,
+							},
+						],
+					};
+					setCmsData(syntheticCmsData);
+					cmsDataRef.current = syntheticCmsData;
+					setCmsSelectedPageVariant(null);
+					cmsSelectedPageVariantRef.current = null;
+					// Auto-select the single section so the form opens directly
+					setCmsSelectedSection(0);
+					cmsSelectedSectionRef.current = 0;
+					setCmsSectionData(blockData);
+					setCmsLoading(false);
+				} catch (e) {
+					if (!cancelled) {
+						setCmsError(
+							e instanceof Error ? e.message : "Failed to load global section",
+						);
+						setCmsLoading(false);
+					}
+				}
+			};
+			void fetchGlobalSection();
+			return () => {
+				cancelled = true;
+			};
+		}
+
+		// ── Normal page: fetch via get_page_sections ──
 		const fetch = async () => {
 			setCmsLoading(true);
 			setCmsError(undefined);
@@ -2817,7 +2919,15 @@ function FileExplorerWorkspace({
 		return () => {
 			cancelled = true;
 		};
-	}, [cmsOpen, previewPath, userEnv, envStatus, app]);
+	}, [
+		activeGlobalSection,
+		cmsOpen,
+		previewPath,
+		userEnv,
+		envStatus,
+		app,
+		site,
+	]);
 
 	// ── handlers ────────────────────────────────────────────────────────────────
 
@@ -2938,6 +3048,8 @@ function FileExplorerWorkspace({
 
 	const handlePreviewPathSubmit = (event: FormEvent<HTMLFormElement>) => {
 		event.preventDefault();
+		setDirectPreviewUrl(null);
+		setActiveGlobalSection(null);
 		setPreviewPath(normalizePath(previewPathInput));
 	};
 
@@ -2946,6 +3058,10 @@ function FileExplorerWorkspace({
 	};
 
 	const handleOpenPreviewInNewTab = () => {
+		if (previewUrl) {
+			window.open(previewUrl, "_blank", "noopener,noreferrer");
+			return;
+		}
 		if (!envUrl) return;
 		const nextPath = normalizePath(previewPathInput);
 		const sep = nextPath.includes("?") ? "&" : "?";
@@ -4036,7 +4152,7 @@ function FileExplorerWorkspace({
 			isMultivariate: false,
 			variants: undefined,
 			resolveType: displaySection.isLazy
-				? (rawSection.__resolveType as string) ?? displaySection.resolveType
+				? ((rawSection.__resolveType as string) ?? displaySection.resolveType)
 				: valueRt,
 			label:
 				valueRt
@@ -4135,6 +4251,24 @@ function FileExplorerWorkspace({
 				return;
 			}
 			try {
+				// ── Global section: write the block data directly ──
+				if (activeGlobalSection) {
+					const result = await app.callServerTool({
+						name: "write_file",
+						arguments: {
+							env: userEnv,
+							filepath: snap.filePath,
+							content: JSON.stringify(updated, null, 2),
+						},
+					});
+					if (result?.isError) throw new Error("write_file failed");
+					const next = { ...snap, pageData: updated };
+					setCmsData(next);
+					cmsDataRef.current = next;
+					setPreviewRefreshKey((k) => k + 1);
+					return;
+				}
+
 				const sections = [
 					...getActiveSectionsArray(
 						snap.pageData,
@@ -4957,6 +5091,7 @@ function FileExplorerWorkspace({
 			if (!result?.isError) {
 				const data = result?.structuredContent as GetPagesOutput | undefined;
 				setPages(data?.pages ?? []);
+				setGlobalSections(data?.globalSections ?? []);
 				setPagesLoaded(true);
 			}
 		} catch {
@@ -5258,37 +5393,89 @@ function FileExplorerWorkspace({
 												<Loader2 className="h-3.5 w-3.5 animate-spin" />
 												Loading pages…
 											</div>
-										) : filteredPages.length === 0 ? (
+										) : filteredPages.length === 0 &&
+											filteredGlobalSections.length === 0 ? (
 											<div className="px-3 py-3 text-xs text-muted-foreground">
-												{pages.length === 0
+												{pages.length === 0 && globalSections.length === 0
 													? "No pages found in this environment."
-													: "No pages match your search."}
+													: "No results match your search."}
 											</div>
 										) : (
 											<ScrollArea className="max-h-64">
-												<div className="p-1">
-													{filteredPages.map((page) => (
-														<button
-															key={page.key}
-															type="button"
-															className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
-															onMouseDown={(e) => {
-																e.preventDefault();
-																setPreviewPathInput(page.path);
-																setPreviewPath(page.path);
-																setPagesOpen(false);
-															}}
-														>
-															<LayoutTemplate className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-															<span className="flex-1 truncate font-medium">
-																{page.name}
-															</span>
-															<span className="shrink-0 text-xs text-muted-foreground">
-																{page.path}
-															</span>
-														</button>
-													))}
-												</div>
+												{filteredPages.length > 0 && (
+													<div className="p-1">
+														{filteredPages.map((page) => (
+															<button
+																key={page.key}
+																type="button"
+																className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+																onMouseDown={(e) => {
+																	e.preventDefault();
+																	setDirectPreviewUrl(null);
+																	setActiveGlobalSection(null);
+																	setPreviewPathInput(page.path);
+																	setPreviewPath(page.path);
+																	setPagesOpen(false);
+																}}
+															>
+																<LayoutTemplate className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+																<span className="flex-1 truncate font-medium">
+																	{page.name}
+																</span>
+																<span className="shrink-0 text-xs text-muted-foreground">
+																	{page.path}
+																</span>
+															</button>
+														))}
+													</div>
+												)}
+												{filteredGlobalSections.length > 0 && (
+													<div
+														className={cn(
+															"p-1",
+															filteredPages.length > 0 && "border-t",
+														)}
+													>
+														<div className="px-2 py-1 text-xs font-medium text-muted-foreground">
+															Global components
+														</div>
+														{filteredGlobalSections.map((section) => (
+															<button
+																key={section.key}
+																type="button"
+																className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+																onMouseDown={(e) => {
+																	e.preventDefault();
+																	if (!envUrl) return;
+																	const props = btoa(
+																		JSON.stringify({
+																			path: "/",
+																			sections: [
+																				{ __resolveType: section.key },
+																			],
+																		}),
+																	);
+																	const url = `${envUrl}/live/previews/website/pages/Page.tsx?props=${encodeURIComponent(props)}&path=/&pathTemplate=/&__cb=${crypto.randomUUID()}`;
+																	setDirectPreviewUrl(url);
+																	setActiveGlobalSection(section);
+																	setPreviewPathInput(section.name);
+																	setPagesOpen(false);
+																}}
+															>
+																<Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+																<span className="flex-1 truncate font-medium">
+																	{section.name}
+																</span>
+																<span className="shrink-0 text-xs text-muted-foreground truncate max-w-[180px]">
+																	{section.resolveType
+																		.split("/")
+																		.pop()
+																		?.replace(/\.tsx?$/, "")}
+																</span>
+															</button>
+														))}
+													</div>
+												)}
 											</ScrollArea>
 										)}
 									</div>

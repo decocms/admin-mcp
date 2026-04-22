@@ -595,6 +595,12 @@ export type PageInfo = {
 	path: string;
 };
 
+export type GlobalSectionInfo = {
+	key: string;
+	name: string;
+	resolveType: string;
+};
+
 export const getPagesInputSchema = z.object({
 	env: z.string().describe("Sandbox environment name"),
 });
@@ -608,6 +614,13 @@ export const getPagesOutputSchema = z.object({
 			key: z.string(),
 			name: z.string(),
 			path: z.string(),
+		}),
+	),
+	globalSections: z.array(
+		z.object({
+			key: z.string(),
+			name: z.string(),
+			resolveType: z.string(),
 		}),
 	),
 });
@@ -641,11 +654,13 @@ export const getPagesTool = createTool({
 		// URL pattern: https://sites-{site}--{consistentHash(envName)}.decocdn.com
 		const envUrl = `https://sites-${site}--${consistentHash(context.env)}.decocdn.com`;
 
-		// Fetch the .decofile — same approach used by the admin SDK.
-		// This is an object keyed by block ID with the full block content.
-		const decofileRes = await fetch(`${envUrl}/.decofile`);
+		// Fetch the .decofile and _meta manifest in parallel
+		const [decofileRes, metaRes] = await Promise.all([
+			fetch(`${envUrl}/.decofile`),
+			fetch(`${envUrl}/live/_meta`),
+		]);
 		if (!decofileRes.ok) {
-			return { site, env: context.env, pages: [] };
+			return { site, env: context.env, pages: [], globalSections: [] };
 		}
 
 		type Block = {
@@ -669,7 +684,44 @@ export const getPagesTool = createTool({
 			}))
 			.sort((a, b) => a.path.localeCompare(b.path));
 
-		return { site, env: context.env, pages };
+		// Extract global sections: blocks whose __resolveType is a known section
+		// type (from _meta manifest) and that have no `path` (not a page).
+		const globalSections: GlobalSectionInfo[] = [];
+		if (metaRes.ok) {
+			try {
+				type RawSchema = Record<string, unknown>;
+				const meta = (await metaRes.json()) as {
+					manifest?: {
+						blocks?: Record<string, Record<string, RawSchema>>;
+					};
+				};
+				const sectionTypeSet = new Set(
+					Object.keys(meta.manifest?.blocks?.["sections"] ?? {}),
+				);
+
+				for (const [blockId, block] of Object.entries(decofile)) {
+					const rt = block.__resolveType ?? "";
+					if (!sectionTypeSet.has(rt)) continue;
+					if (block.path) continue; // skip pages
+					const label =
+						typeof block.name === "string" && block.name
+							? block.name
+							: blockId
+									.replace(/[-_]/g, " ")
+									.replace(/\b\w/g, (c) => c.toUpperCase());
+					globalSections.push({
+						key: blockId,
+						name: label,
+						resolveType: rt,
+					});
+				}
+				globalSections.sort((a, b) => a.name.localeCompare(b.name));
+			} catch {
+				// proceed without global sections
+			}
+		}
+
+		return { site, env: context.env, pages, globalSections };
 	},
 });
 
