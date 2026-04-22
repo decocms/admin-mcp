@@ -1384,10 +1384,14 @@ function renderSimpleMustache(
 	data: Record<string, FormValue>,
 ): string | undefined {
 	if (!template.includes("{")) return undefined;
-	const result = template.replace(/\{\{([^}]+)\}\}/g, (_, key: string) => {
-		const v = data[key.trim()];
-		return v != null ? String(v) : "";
-	});
+	const result = template.replace(
+		/\{\{\{([^}]+)\}\}\}|\{\{([^}]+)\}\}/g,
+		(_, tripleKey: string | undefined, doubleKey: string | undefined) => {
+			const key = (tripleKey ?? doubleKey ?? "").trim();
+			const v = data[key];
+			return v != null ? String(v) : "";
+		},
+	);
 	return result.trim() || undefined;
 }
 
