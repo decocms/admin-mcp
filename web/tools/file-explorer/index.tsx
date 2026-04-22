@@ -1355,6 +1355,7 @@ interface CmsPanelProps {
 	onWrapWithVariants: () => void;
 	onAddVariant: () => void;
 	onRemoveVariant: (variantIdx: number) => void;
+	onRemoveAllVariants: () => void;
 	pageVariants?: GetPageSectionsOutput["pageVariants"];
 	selectedPageVariant?: number | null;
 	onSelectPageVariant?: (idx: number) => void;
@@ -1401,6 +1402,7 @@ function CmsPanel({
 	onWrapWithVariants,
 	onAddVariant,
 	onRemoveVariant,
+	onRemoveAllVariants,
 	pageVariants,
 	selectedPageVariant,
 	onSelectPageVariant,
@@ -1527,6 +1529,14 @@ function CmsPanel({
 					>
 						{activeSection?.label ?? "Variants"}
 					</span>
+					<button
+						type="button"
+						onClick={onRemoveAllVariants}
+						className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+						title="Remove all variants"
+					>
+						<Trash2 className="h-3.5 w-3.5" />
+					</button>
 				</div>
 			) : isEditing ? (
 				<div
@@ -3975,6 +3985,105 @@ function FileExplorerWorkspace({
 		}, 300);
 	};
 
+	const handleRemoveAllVariants = () => {
+		const snap = cmsDataRef.current;
+		const idx = cmsSelectedSectionRef.current;
+		if (!snap || idx === null || !app || !userEnv) return;
+
+		const displaySection = snap.sections[idx];
+		if (!displaySection?.isMultivariate || !displaySection.variants) return;
+
+		// Find the "Always" variant value, or fall back to the last variant (default)
+		const ALWAYS_TYPES = [
+			"website/matchers/always.ts",
+			"$live/matchers/MatchAlways.ts",
+		];
+		const alwaysVariant = displaySection.variants.find((v) => {
+			const rt = (v.rule.__resolveType as string) ?? "";
+			return ALWAYS_TYPES.includes(rt) || rt === "";
+		});
+		const unwrappedValue =
+			alwaysVariant?.value ??
+			displaySection.variants[displaySection.variants.length - 1]?.value ??
+			{};
+
+		// Replace multivariate section with unwrapped value in raw pageData
+		const rawSections = [
+			...(getActiveSectionsArray(
+				snap.pageData,
+				cmsSelectedPageVariantRef.current,
+			) as Record<string, unknown>[]),
+		];
+		const rawSection = rawSections[idx] as Record<string, unknown>;
+
+		// For lazy-wrapped sections, keep the Lazy wrapper but replace the inner section
+		let replacementSection: Record<string, unknown>;
+		if (displaySection.isLazy) {
+			replacementSection = {
+				__resolveType: rawSection.__resolveType,
+				section: unwrappedValue,
+			};
+		} else {
+			replacementSection = unwrappedValue as Record<string, unknown>;
+		}
+		rawSections[idx] = replacementSection;
+
+		// Update display sections — no longer multivariate
+		const newDisplaySections = [...snap.sections];
+		const valueRt = (unwrappedValue.__resolveType as string) ?? "";
+		newDisplaySections[idx] = {
+			...displaySection,
+			isMultivariate: false,
+			variants: undefined,
+			resolveType: displaySection.isLazy
+				? (rawSection.__resolveType as string) ?? displaySection.resolveType
+				: valueRt,
+			label:
+				valueRt
+					.split("/")
+					.pop()
+					?.replace(/\.(tsx|ts)$/, "") ?? displaySection.label,
+		};
+
+		const updatedPageData = withSectionsArray(
+			snap.pageData,
+			cmsSelectedPageVariantRef.current,
+			rawSections,
+		);
+		const next: GetPageSectionsOutput = {
+			...snap,
+			pageData: updatedPageData,
+			sections: newDisplaySections,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+
+		// Deselect variant and go to section editing
+		setCmsSelectedVariant(null);
+
+		// Auto-save
+		setCmsAutoSaving(true);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			try {
+				const result = await app.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: next.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				setPreviewRefreshKey((k) => k + 1);
+			} catch {
+				toast.error("Auto-save failed");
+			} finally {
+				setCmsAutoSaving(false);
+			}
+		}, 300);
+	};
+
 	const handleSavedBlockSave = async () => {
 		const snap = cmsDataRef.current;
 		const idx = cmsSelectedSectionRef.current;
@@ -5672,6 +5781,7 @@ function FileExplorerWorkspace({
 																onWrapWithVariants={handleWrapWithVariants}
 																onAddVariant={handleAddVariant}
 																onRemoveVariant={handleRemoveVariant}
+																onRemoveAllVariants={handleRemoveAllVariants}
 																pageVariants={cmsData?.pageVariants}
 																selectedPageVariant={cmsSelectedPageVariant}
 																onSelectPageVariant={handleSelectPageVariant}
