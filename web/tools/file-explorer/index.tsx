@@ -1081,12 +1081,14 @@ function SortableVariantItem({
 	label,
 	valueLabel,
 	onSelect,
+	onDuplicate,
 	onRemove,
 }: {
 	id: string;
 	label: string;
 	valueLabel: string;
 	onSelect: () => void;
+	onDuplicate: () => void;
 	onRemove: () => void;
 }) {
 	const {
@@ -1123,18 +1125,31 @@ function SortableVariantItem({
 					{label}
 				</span>
 			</div>
-			<button
-				type="button"
-				onPointerDown={(e) => e.stopPropagation()}
-				onClick={(e) => {
-					e.stopPropagation();
-					onRemove();
-				}}
-				className="shrink-0 rounded p-0.5 text-muted-foreground/30 opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-				title="Remove variant"
-			>
-				<Trash2 className="h-3 w-3" />
-			</button>
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<button
+						type="button"
+						onPointerDown={(e) => e.stopPropagation()}
+						onClick={(e) => e.stopPropagation()}
+						className="shrink-0 rounded p-0.5 text-muted-foreground/30 opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
+					>
+						<MoreHorizontal className="h-3.5 w-3.5" />
+					</button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end" className="w-36">
+					<DropdownMenuItem onClick={onDuplicate} className="cursor-pointer">
+						<Copy className="mr-2 h-3.5 w-3.5" />
+						Duplicate
+					</DropdownMenuItem>
+					<DropdownMenuItem
+						onClick={onRemove}
+						className="cursor-pointer text-destructive focus:text-destructive"
+					>
+						<Trash2 className="mr-2 h-3.5 w-3.5" />
+						Remove
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
 		</div>
 	);
 }
@@ -1356,6 +1371,7 @@ interface CmsPanelProps {
 	onChangeMatcherType: (resolveType: string) => void;
 	onWrapWithVariants: () => void;
 	onAddVariant: () => void;
+	onDuplicateVariant: (variantIdx: number) => void;
 	onRemoveVariant: (variantIdx: number) => void;
 	onRemoveAllVariants: () => void;
 	pageVariants?: GetPageSectionsOutput["pageVariants"];
@@ -1406,6 +1422,7 @@ function CmsPanel({
 	onChangeMatcherType,
 	onWrapWithVariants,
 	onAddVariant,
+	onDuplicateVariant,
 	onRemoveVariant,
 	onRemoveAllVariants,
 	pageVariants,
@@ -1779,6 +1796,7 @@ function CmsPanel({
 											label={variant.label}
 											valueLabel={valueLabel}
 											onSelect={() => onSelectVariant(vIdx)}
+											onDuplicate={() => onDuplicateVariant(vIdx)}
 											onRemove={() => onRemoveVariant(vIdx)}
 										/>
 									);
@@ -4155,15 +4173,7 @@ function FileExplorerWorkspace({
 		const displaySection = snap.sections[idx];
 		if (!displaySection?.isMultivariate || !displaySection.variants) return;
 
-		// Get the resolveType from the first variant's value as template
-		const firstValue = displaySection.variants[0]?.value ?? {};
-		const templateRt = (firstValue.__resolveType as string | undefined) ?? "";
-		const newValue: Record<string, unknown> = templateRt
-			? { __resolveType: templateRt }
-			: {};
-		const newRule: Record<string, unknown> = {};
-
-		// Update raw pageData
+		// Clone the last variant (value + rule)
 		const rawSections = [
 			...(getActiveSectionsArray(
 				snap.pageData,
@@ -4179,20 +4189,11 @@ function FileExplorerWorkspace({
 				rule: Record<string, unknown>;
 			}>;
 		};
-		// Insert before fallback (last variant with always.ts) if it exists
 		const rawVariants = [...(mvContainer.variants ?? [])];
-		const lastRaw = rawVariants[rawVariants.length - 1];
-		const lastIsAlways =
-			lastRaw &&
-			(lastRaw.rule.__resolveType as string) === "website/matchers/always.ts";
-		if (lastIsAlways) {
-			rawVariants.splice(rawVariants.length - 1, 0, {
-				value: newValue,
-				rule: newRule,
-			});
-		} else {
-			rawVariants.push({ value: newValue, rule: newRule });
-		}
+		const clonedRaw = JSON.parse(
+			JSON.stringify(rawVariants[rawVariants.length - 1]),
+		);
+		rawVariants.push(clonedRaw);
 		mvContainer.variants = rawVariants;
 		rawSections[idx] = rebuildRawSection(
 			rawSection,
@@ -4200,19 +4201,89 @@ function FileExplorerWorkspace({
 			displaySection,
 		);
 
-		// Update display sections
+		// Clone last display variant
 		const newDisplaySections = [...snap.sections];
 		const updatedDisplay = { ...newDisplaySections[idx] };
 		const displayVariants = [...(updatedDisplay.variants ?? [])];
-		if (lastIsAlways) {
-			displayVariants.splice(displayVariants.length - 1, 0, {
-				value: newValue,
-				rule: newRule,
-				label: "",
-			});
-		} else {
-			displayVariants.push({ value: newValue, rule: newRule, label: "" });
-		}
+		const lastDisplay = displayVariants[displayVariants.length - 1];
+		const clonedDisplay = JSON.parse(JSON.stringify(lastDisplay));
+		displayVariants.push(clonedDisplay);
+		updatedDisplay.variants = displayVariants;
+		newDisplaySections[idx] = updatedDisplay;
+
+		const updatedPageData = withSectionsArray(
+			snap.pageData,
+			cmsSelectedPageVariantRef.current,
+			rawSections,
+		);
+		const next: GetPageSectionsOutput = {
+			...snap,
+			pageData: updatedPageData,
+			sections: newDisplaySections,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+
+		// Auto-save
+		setCmsAutoSaving(true);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			try {
+				const result = await app.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: next.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				setPreviewRefreshKey((k) => k + 1);
+			} catch {
+				toast.error("Auto-save failed");
+			} finally {
+				setCmsAutoSaving(false);
+			}
+		}, 300);
+	};
+
+	const handleDuplicateVariant = (variantIdx: number) => {
+		const snap = cmsDataRef.current;
+		const idx = cmsSelectedSectionRef.current;
+		if (!snap || idx === null || !app || !userEnv) return;
+
+		const displaySection = snap.sections[idx];
+		if (!displaySection?.isMultivariate || !displaySection.variants) return;
+
+		// Clone raw variant
+		const rawSections = [
+			...(getActiveSectionsArray(
+				snap.pageData,
+				cmsSelectedPageVariantRef.current,
+			) as Record<string, unknown>[]),
+		];
+		const rawSection = { ...rawSections[idx] } as Record<string, unknown>;
+		const mvContainer = {
+			...getMultivariateContainer(rawSection, displaySection),
+		} as { variants: Array<unknown> };
+		const rawVariants = [...(mvContainer.variants ?? [])];
+		const clonedRaw = JSON.parse(JSON.stringify(rawVariants[variantIdx]));
+		rawVariants.splice(variantIdx + 1, 0, clonedRaw);
+		mvContainer.variants = rawVariants;
+		rawSections[idx] = rebuildRawSection(
+			rawSection,
+			mvContainer,
+			displaySection,
+		);
+
+		// Clone display variant
+		const newDisplaySections = [...snap.sections];
+		const updatedDisplay = { ...newDisplaySections[idx] };
+		const displayVariants = [...(updatedDisplay.variants ?? [])];
+		const clonedDisplay = JSON.parse(
+			JSON.stringify(displayVariants[variantIdx]),
+		);
+		displayVariants.splice(variantIdx + 1, 0, clonedDisplay);
 		updatedDisplay.variants = displayVariants;
 		newDisplaySections[idx] = updatedDisplay;
 
@@ -6195,6 +6266,7 @@ function FileExplorerWorkspace({
 																onChangeMatcherType={handleChangeMatcherType}
 																onWrapWithVariants={handleWrapWithVariants}
 																onAddVariant={handleAddVariant}
+																onDuplicateVariant={handleDuplicateVariant}
 																onRemoveVariant={handleRemoveVariant}
 																onRemoveAllVariants={handleRemoveAllVariants}
 																pageVariants={cmsData?.pageVariants}
