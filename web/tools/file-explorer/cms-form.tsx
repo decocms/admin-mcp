@@ -33,7 +33,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Input } from "@/components/ui/input.tsx";
 import { Textarea } from "@/components/ui/textarea.tsx";
-import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import {
 	Select,
 	SelectContent,
@@ -63,6 +62,11 @@ import type {
 	UploadAssetOutput,
 } from "../../../api/tools/assets.ts";
 import type { SchemaProperty } from "../../../api/tools/files.ts";
+import {
+	isVtexLoader,
+	VtexLoaderButton,
+	VtexLoaderModal,
+} from "./vtex/index.tsx";
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -136,7 +140,7 @@ function defaultForSchemaType(
 
 // ─── field label ──────────────────────────────────────────────────────────────
 
-function FieldLabel({
+export function FieldLabel({
 	label,
 	description,
 }: {
@@ -160,7 +164,7 @@ function FieldLabel({
 
 // ─── text field ───────────────────────────────────────────────────────────────
 
-function TextField({
+export function TextField({
 	label,
 	description,
 	value,
@@ -774,7 +778,7 @@ function TiptapSep() {
 
 // ─── number field ─────────────────────────────────────────────────────────────
 
-function NumberField({
+export function NumberField({
 	label,
 	description,
 	value,
@@ -800,7 +804,7 @@ function NumberField({
 
 // ─── checkbox field ───────────────────────────────────────────────────────────
 
-function CheckboxField({
+export function CheckboxField({
 	label,
 	description,
 	value,
@@ -1801,385 +1805,6 @@ function SelectField({
 	);
 }
 
-// ─── vtex product list modal ──────────────────────────────────────────────────
-
-const VTEX_LOADER_RESOLVE_TYPE = "vtex/loaders/legacy/productList.ts";
-
-type VtexMode = "term" | "collection" | "fq" | "ids" | "productIds";
-
-const VTEX_MODES: Array<{
-	id: VtexMode;
-	label: string;
-	description: string;
-}> = [
-	{
-		id: "term",
-		label: "Keyword Search",
-		description: "Find products by a search term.",
-	},
-	{
-		id: "collection",
-		label: "Collection ID",
-		description: "Fetch products from a VTEX collection or product cluster.",
-	},
-	{
-		id: "fq",
-		label: "Advanced Facets",
-		description:
-			"Filter via VTEX fq query parameters (e.g. specificationFilter).",
-	},
-	{
-		id: "ids",
-		label: "SKU IDs",
-		description: "Retrieve specific products by their SKU identifiers.",
-	},
-	{
-		id: "productIds",
-		label: "Product IDs",
-		description: "Retrieve specific products by their product identifiers.",
-	},
-];
-
-const LEGACY_SORT_OPTIONS: Array<{ value: string; label: string }> = [
-	{ value: "", label: "Relevance" },
-	{ value: "OrderByScoreDESC", label: "Score" },
-	{ value: "OrderByPriceDESC", label: "Price: High → Low" },
-	{ value: "OrderByPriceASC", label: "Price: Low → High" },
-	{ value: "OrderByTopSaleDESC", label: "Top Sales" },
-	{ value: "OrderByReviewRateDESC", label: "Review Rate" },
-	{ value: "OrderByNameDESC", label: "Name: Z → A" },
-	{ value: "OrderByNameASC", label: "Name: A → Z" },
-	{ value: "OrderByReleaseDateDESC", label: "Release Date" },
-	{ value: "OrderByBestDiscountDESC", label: "Best Discount" },
-];
-
-function detectVtexMode(props: Record<string, FormValue>): VtexMode {
-	if ("collection" in props) return "collection";
-	if ("fq" in props) return "fq";
-	if ("ids" in props) return "ids";
-	if ("productIds" in props) return "productIds";
-	return "term";
-}
-
-function emptyPropsForMode(mode: VtexMode): Record<string, FormValue> {
-	switch (mode) {
-		case "term":
-			return { term: "", sort: "", count: 12 };
-		case "collection":
-			return { collection: "", sort: "", count: 12 };
-		case "fq":
-			return { fq: [], sort: "", count: 12 };
-		case "ids":
-			return { ids: [], similars: false };
-		case "productIds":
-			return { productIds: [], similars: false };
-	}
-}
-
-function vtexModeSummary(
-	mode: VtexMode,
-	props: Record<string, FormValue>,
-): string {
-	switch (mode) {
-		case "term": {
-			const term = props.term as string | undefined;
-			return term ? `"${term}"` : "No term set";
-		}
-		case "collection": {
-			const col = props.collection as string | undefined;
-			return col ? `Collection ${col}` : "No collection set";
-		}
-		case "fq": {
-			const fq = (props.fq as string[] | undefined) ?? [];
-			return fq.length > 0
-				? `${fq.length} filter${fq.length > 1 ? "s" : ""}`
-				: "No filters set";
-		}
-		case "ids": {
-			const ids = (props.ids as string[] | undefined) ?? [];
-			return ids.length > 0
-				? `${ids.length} SKU${ids.length > 1 ? "s" : ""}`
-				: "No SKUs set";
-		}
-		case "productIds": {
-			const pids = (props.productIds as string[] | undefined) ?? [];
-			return pids.length > 0
-				? `${pids.length} product${pids.length > 1 ? "s" : ""}`
-				: "No products set";
-		}
-	}
-}
-
-function VtexStringArrayEditor({
-	label,
-	description,
-	value,
-	placeholder,
-	onChange,
-}: {
-	label: string;
-	description?: string;
-	value: string[];
-	placeholder?: string;
-	onChange: (v: string[]) => void;
-}) {
-	return (
-		<div className="space-y-1.5">
-			<FieldLabel label={label} description={description} />
-			<div className="space-y-1.5">
-				{value.map((item, i) => (
-					<div key={i} className="flex gap-1.5 items-center">
-						<Input
-							value={item}
-							onChange={(e) => {
-								const next = [...value];
-								next[i] = e.target.value;
-								onChange(next);
-							}}
-							placeholder={placeholder}
-							className="h-7 text-xs flex-1"
-						/>
-						<button
-							type="button"
-							onClick={() => onChange(value.filter((_, j) => j !== i))}
-							className="shrink-0 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-						>
-							<Trash2 className="h-3 w-3" />
-						</button>
-					</div>
-				))}
-				<button
-					type="button"
-					onClick={() => onChange([...value, ""])}
-					className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mt-0.5"
-				>
-					<Plus className="h-3 w-3" />
-					Add item
-				</button>
-			</div>
-		</div>
-	);
-}
-
-function VtexLogo() {
-	return (
-		<img
-			src="https://assets.decocache.com/admin/ebf5f465-021c-4279-ad6f-f2789d103cd4/vtex.png"
-			alt="VTEX"
-			className="h-5 shrink-0 object-contain"
-		/>
-	);
-}
-
-function VtexProductListModal({
-	open,
-	onClose,
-	props,
-	onSave,
-}: {
-	open: boolean;
-	onClose: () => void;
-	props: Record<string, FormValue>;
-	onSave: (newProps: Record<string, FormValue>) => void;
-}) {
-	const [mode, setMode] = useState<VtexMode>(() => detectVtexMode(props));
-	const [draft, setDraft] = useState<Record<string, FormValue>>(() => ({
-		...props,
-	}));
-
-	useEffect(() => {
-		if (open) {
-			const m = detectVtexMode(props);
-			setMode(m);
-			setDraft({ ...props });
-		}
-	}, [open]); // eslint-disable-line react-hooks/exhaustive-deps
-
-	const handleModeChange = (newMode: VtexMode) => {
-		if (newMode === mode) return;
-		const next = emptyPropsForMode(newMode);
-		// carry over shared fields
-		if ("sort" in draft && "sort" in next) next.sort = draft.sort ?? "";
-		if ("count" in draft && "count" in next)
-			next.count = (draft.count as number) ?? 12;
-		setMode(newMode);
-		setDraft(next);
-	};
-
-	const update = (key: string, val: FormValue) =>
-		setDraft((d) => ({ ...d, [key]: val }));
-
-	const sortVal = (draft.sort as string) ?? "";
-	const countVal = (draft.count as number) ?? 12;
-	const similarsVal = (draft.similars as boolean) ?? false;
-	const hasSort = mode === "term" || mode === "collection" || mode === "fq";
-	const hasCount = hasSort;
-	const hasSimilars = mode === "ids" || mode === "productIds";
-
-	return (
-		<Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-			<DialogContent className="flex max-h-[85vh] w-[500px] flex-col gap-0 p-0 overflow-hidden">
-				{/* Header */}
-				<div className="shrink-0 border-b px-5 py-4 bg-[#F71963]/5">
-					<div className="flex items-center gap-3">
-						<VtexLogo />
-						<div className="min-w-0">
-							<p className="text-sm font-semibold leading-none text-foreground">
-								Product List
-							</p>
-							<p className="text-[10px] font-mono text-muted-foreground mt-1 truncate">
-								vtex/loaders/legacy/productList.ts
-							</p>
-						</div>
-					</div>
-				</div>
-
-				{/* Mode tabs */}
-				<div className="shrink-0 border-b bg-muted/30 px-5">
-					<div className="flex gap-0 overflow-x-auto">
-						{VTEX_MODES.map((m) => (
-							<button
-								key={m.id}
-								type="button"
-								onClick={() => handleModeChange(m.id)}
-								className={cn(
-									"shrink-0 border-b-2 px-3 py-2.5 text-[11px] font-medium transition-colors whitespace-nowrap",
-									mode === m.id
-										? "border-[#F71963] text-[#F71963]"
-										: "border-transparent text-muted-foreground hover:text-foreground",
-								)}
-							>
-								{m.label}
-							</button>
-						))}
-					</div>
-				</div>
-
-				{/* Fields */}
-				<ScrollArea className="flex-1 min-h-0">
-					<div className="px-5 py-4 space-y-4">
-						<p className="text-[11px] text-muted-foreground leading-snug -mt-1">
-							{VTEX_MODES.find((m) => m.id === mode)?.description}
-						</p>
-
-						{mode === "term" && (
-							<TextField
-								label="Search Term"
-								description='Keyword to search for products (e.g. "case", "shirt")'
-								value={(draft.term as string) ?? ""}
-								onChange={(v) => update("term", v)}
-							/>
-						)}
-
-						{mode === "collection" && (
-							<TextField
-								label="Collection ID"
-								description="Collection ID or Product Cluster ID from your VTEX catalog"
-								value={(draft.collection as string) ?? ""}
-								onChange={(v) => update("collection", v)}
-							/>
-						)}
-
-						{mode === "fq" && (
-							<VtexStringArrayEditor
-								label="Facet Queries (fq)"
-								description='VTEX filter queries, e.g. "C:/1/2/" or "specificationFilter_123:value"'
-								value={(draft.fq as string[]) ?? []}
-								placeholder="e.g. C:/1/2/"
-								onChange={(v) => update("fq", v)}
-							/>
-						)}
-
-						{mode === "ids" && (
-							<VtexStringArrayEditor
-								label="SKU IDs"
-								description="List of SKU identifiers to retrieve"
-								value={(draft.ids as string[]) ?? []}
-								placeholder="e.g. 12345"
-								onChange={(v) => update("ids", v)}
-							/>
-						)}
-
-						{mode === "productIds" && (
-							<VtexStringArrayEditor
-								label="Product IDs"
-								description="List of product identifiers to retrieve"
-								value={(draft.productIds as string[]) ?? []}
-								placeholder="e.g. 12345"
-								onChange={(v) => update("productIds", v)}
-							/>
-						)}
-
-						{hasSort && (
-							<div className="space-y-1">
-								<FieldLabel label="Sort" description="Product sort order" />
-								<Select
-									value={sortVal === "" ? EMPTY_SENTINEL : sortVal}
-									onValueChange={(v) =>
-										update("sort", v === EMPTY_SENTINEL ? "" : v)
-									}
-								>
-									<SelectTrigger className="h-7 text-xs">
-										<SelectValue placeholder="Relevance" />
-									</SelectTrigger>
-									<SelectContent>
-										{LEGACY_SORT_OPTIONS.map((opt) => (
-											<SelectItem
-												key={opt.value === "" ? EMPTY_SENTINEL : opt.value}
-												value={opt.value === "" ? EMPTY_SENTINEL : opt.value}
-												className="text-xs"
-											>
-												{opt.label}
-											</SelectItem>
-										))}
-									</SelectContent>
-								</Select>
-							</div>
-						)}
-
-						{hasCount && (
-							<NumberField
-								label="Count"
-								description="Total number of products to display"
-								value={countVal}
-								onChange={(v) => update("count", v)}
-							/>
-						)}
-
-						{hasSimilars && (
-							<CheckboxField
-								label="Include Similar Products"
-								description="Include similar / related products (deprecated — prefer product extensions)"
-								value={similarsVal}
-								onChange={(v) => update("similars", v)}
-							/>
-						)}
-					</div>
-				</ScrollArea>
-
-				{/* Footer */}
-				<DialogFooter className="shrink-0 border-t px-5 py-3">
-					<Button
-						variant="outline"
-						size="sm"
-						onClick={onClose}
-						className="h-7 text-xs"
-					>
-						Cancel
-					</Button>
-					<Button
-						size="sm"
-						onClick={() => onSave(draft)}
-						className="h-7 text-xs bg-[#F71963] hover:bg-[#F71963]/90 text-white"
-					>
-						Save changes
-					</Button>
-				</DialogFooter>
-			</DialogContent>
-		</Dialog>
-	);
-}
-
 // ─── block-ref field ──────────────────────────────────────────────────────────
 
 type AnyOfRef = { resolveType: string; title: string; description?: string };
@@ -2226,10 +1851,7 @@ function BlockRefField({
 		setSearch("");
 	};
 
-	const isVtexProductList =
-		currentResolveType === VTEX_LOADER_RESOLVE_TYPE ||
-		currentResolveType?.endsWith(`/${VTEX_LOADER_RESOLVE_TYPE}`) ||
-		false;
+	const isVtex = currentResolveType ? isVtexLoader(currentResolveType) : false;
 
 	const loaderSchema = currentResolveType
 		? (schemasMap[currentResolveType] ?? null)
@@ -2357,40 +1979,39 @@ function BlockRefField({
 				</DialogContent>
 			</Dialog>
 
-			{/* VTEX product list — dedicated configure button + modal */}
-			{isVtexProductList &&
+			{/* VTEX loader — dedicated configure button + modal */}
+			{isVtex &&
+				currentResolveType &&
 				(() => {
-					const vtexProps = (value.props as Record<string, FormValue>) ?? {};
-					const vtexMode = detectVtexMode(vtexProps);
-					const summary = vtexModeSummary(vtexMode, vtexProps);
-					const modeLabel =
-						VTEX_MODES.find((m) => m.id === vtexMode)?.label ?? vtexMode;
+					// VTEX config fields live at the top level of `value` (alongside __resolveType),
+					// not inside a nested `props` key.
+					const vtexProps: Record<string, FormValue> = {};
+					for (const [k, v] of Object.entries(value)) {
+						if (!k.startsWith("__") && k !== "@type") {
+							vtexProps[k] = v;
+						}
+					}
 					return (
 						<>
-							<button
-								type="button"
+							<VtexLoaderButton
+								resolveType={currentResolveType}
+								props={vtexProps}
 								onClick={() => setVtexModalOpen(true)}
-								className="group flex w-full items-center gap-2.5 rounded-md border border-[#F71963]/30 bg-[#F71963]/5 px-3 py-2 text-left transition-colors hover:bg-[#F71963]/10"
-							>
-								<VtexLogo />
-								<div className="min-w-0 flex-1">
-									<p className="text-[11px] font-medium text-foreground leading-none">
-										{modeLabel}
-									</p>
-									<p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-										{summary}
-									</p>
-								</div>
-								<span className="shrink-0 text-[10px] text-[#F71963]/70 group-hover:text-[#F71963] transition-colors">
-									configure ↗
-								</span>
-							</button>
-							<VtexProductListModal
+							/>
+							<VtexLoaderModal
+								resolveType={currentResolveType}
 								open={vtexModalOpen}
 								onClose={() => setVtexModalOpen(false)}
 								props={vtexProps}
 								onSave={(newProps) => {
-									onChange({ ...value, props: newProps as FormValue });
+									// Merge saved props back at the top level, preserving __resolveType
+									const updated: Record<string, FormValue> = {
+										__resolveType: value.__resolveType,
+									};
+									for (const [k, v] of Object.entries(newProps)) {
+										updated[k] = v;
+									}
+									onChange(updated);
 									setVtexModalOpen(false);
 								}}
 							/>
@@ -2399,7 +2020,7 @@ function BlockRefField({
 				})()}
 
 			{/* Inner config for the selected loader (generic) */}
-			{!isVtexProductList && innerKeys.length > 0 && (
+			{!isVtex && innerKeys.length > 0 && (
 				<div className={cn("space-y-3", nestClass(depth))}>
 					{innerKeys.map((k) => {
 						const prop = loaderSchema?.[k];

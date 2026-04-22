@@ -753,27 +753,29 @@ export const getPageSectionsInputSchema = z.object({
 });
 export type GetPageSectionsInput = z.infer<typeof getPageSectionsInputSchema>;
 
-const cmsSectionItemSchema = z.object({
-	index: z.number(),
-	resolveType: z.string(),
-	label: z.string(),
-	isLazy: z.boolean().optional(),
-	isHidden: z.boolean().optional(),
-	isSavedBlock: z.boolean().optional(),
-	savedBlockKey: z.string().optional(),
-	savedBlockFilePath: z.string().optional(),
-	resolvedResolveType: z.string().optional(),
-	isMultivariate: z.boolean().optional(),
-	variants: z
-		.array(
-			z.object({
-				value: z.record(z.string(), z.unknown()),
-				rule: z.record(z.string(), z.unknown()),
-				label: z.string(),
-			}),
-		)
-		.optional(),
-});
+const cmsSectionItemSchema = z
+	.object({
+		index: z.number(),
+		resolveType: z.string(),
+		label: z.string(),
+		isLazy: z.boolean().optional(),
+		isHidden: z.boolean().optional(),
+		isSavedBlock: z.boolean().optional(),
+		savedBlockKey: z.string().optional(),
+		savedBlockFilePath: z.string().optional(),
+		resolvedResolveType: z.string().optional(),
+		isMultivariate: z.boolean().optional(),
+		variants: z
+			.array(
+				z.object({
+					value: z.record(z.string(), z.unknown()),
+					rule: z.record(z.string(), z.unknown()),
+					label: z.string(),
+				}),
+			)
+			.optional(),
+	})
+	.passthrough();
 
 export const getPageSectionsOutputSchema = z.object({
 	site: z.string(),
