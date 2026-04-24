@@ -2729,6 +2729,11 @@ function FileExplorerWorkspace({
 
 		const url = new URL(previewUrl);
 		url.searchParams.delete(MATCHER_OVERRIDE_QS);
+		url.searchParams.delete("deviceHint");
+
+		if (previewViewport === "mobile") {
+			url.searchParams.set("deviceHint", "mobile");
+		}
 
 		if (!cmsData) return url.href;
 
@@ -2770,6 +2775,7 @@ function FileExplorerWorkspace({
 		return url.href;
 	}, [
 		previewUrl,
+		previewViewport,
 		cmsData,
 		cmsSelectedPageVariant,
 		cmsSelectedVariant,
