@@ -52,6 +52,11 @@ import {
 	openPullRequestTool,
 } from "./pull-requests.ts";
 import {
+	getErrorPatternsTool,
+	getErrorRateSeriesTool,
+	getErrorsOverTimeTool,
+} from "./hyperdx.ts";
+import {
 	getProductionShaTool,
 	listReleasesTool,
 	promoteToProductionTool,
@@ -108,4 +113,7 @@ export const tools = [
 	promoteToProductionTool,
 	revertCommitTool,
 	getProductionShaTool,
+	getErrorPatternsTool,
+	getErrorsOverTimeTool,
+	getErrorRateSeriesTool,
 ];
