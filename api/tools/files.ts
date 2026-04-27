@@ -130,9 +130,15 @@ export const fileExplorerTool = createTool({
 		}
 
 		const productionUrl = `https://${site}.deco.site`;
+		const userEnvUrl = userEnvEntry?.url ?? null;
 
-		const response = await fetch(productionUrl);
-		const status = response.status;
+		// Fetch to wake up the environment
+		const [productionResponse, _userEnvResponse] = await Promise.all([
+			fetch(productionUrl),
+			userEnvUrl ? fetch(userEnvUrl) : null,
+		]);
+
+		const status = productionResponse.status;
 
 		return {
 			site,

@@ -51,6 +51,7 @@ import {
 	mergePullRequestTool,
 	openPullRequestTool,
 } from "./pull-requests.ts";
+import { getIssueDetailsTool, listIssuesTool } from "./issues.ts";
 import {
 	getErrorPatternsTool,
 	getErrorRateSeriesTool,
@@ -105,6 +106,8 @@ export const tools = [
 	getMonitorCacheStatusTool,
 	getMonitorStatusCodesTool,
 	getAnalyticsDataTool,
+	getIssueDetailsTool,
+	listIssuesTool,
 	listPullRequestsTool,
 	mergePullRequestTool,
 	openPullRequestTool,

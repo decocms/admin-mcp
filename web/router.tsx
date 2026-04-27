@@ -9,6 +9,7 @@ import {
 import { useMcpHostContext, useMcpState } from "./context.tsx";
 import AssetsPage from "./tools/assets/index.tsx";
 import FileExplorerPage from "./tools/file-explorer/index.tsx";
+import IssuesPage from "./tools/issues/index.tsx";
 import MonitorPage from "./tools/monitor/index.tsx";
 import PullRequestsPage from "./tools/pull-requests/index.tsx";
 import ReleasesPage from "./tools/releases/index.tsx";
@@ -17,6 +18,7 @@ const TOOL_PAGES: Record<string, React.ComponentType> = {
 	fetch_assets: AssetsPage,
 	file_explorer: FileExplorerPage,
 	get_monitor_data: MonitorPage,
+	list_issues: IssuesPage,
 	list_pull_requests: PullRequestsPage,
 	list_releases: ReleasesPage,
 };

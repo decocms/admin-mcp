@@ -3,6 +3,7 @@ import { storefrontSkillsPrompts } from "./prompts/storefront-skills.ts";
 import { assetsAppResource } from "./resources/assets.ts";
 import { environmentsAppResource } from "./resources/environments.ts";
 import { fileExplorerAppResource } from "./resources/file-explorer.ts";
+import { issuesAppResource } from "./resources/issues.ts";
 import { monitorAppResource } from "./resources/monitor.ts";
 import { pullRequestsAppResource } from "./resources/pull-requests.ts";
 import { releasesAppResource } from "./resources/releases.ts";
@@ -51,6 +52,7 @@ const runtime = withRuntime<Env, typeof StateSchema>({
 		assetsAppResource,
 		environmentsAppResource,
 		fileExplorerAppResource,
+		issuesAppResource,
 		monitorAppResource,
 		pullRequestsAppResource,
 		releasesAppResource,
