@@ -1,5 +1,5 @@
 import { CircleDot, ExternalLink, Loader2, Search, Wrench } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
@@ -91,12 +91,30 @@ function IssueRow({
 function IssuesList({
 	initialIssues,
 	site,
+	userEnv,
 }: {
 	initialIssues: Issue[];
 	site: string;
+	userEnv: string;
 }) {
 	const app = useMcpApp();
 	const [search, setSearch] = useState("");
+
+	useEffect(() => {
+		if (!app) return;
+		const parts = [];
+		if (site) parts.push(`Current site: **${site}**`);
+		parts.push(`Environment: **${userEnv}**`);
+		app
+			.updateModelContext({
+				content:
+					parts.length > 0 ? [{ type: "text", text: parts.join("\n\n") }] : [],
+			})
+			.catch(() => {});
+		return () => {
+			app.updateModelContext({ content: [] }).catch(() => {});
+		};
+	}, [app, userEnv, site]);
 
 	const handleFix = async (issue: Issue) => {
 		// Fetch full issue details (body + comments)
@@ -303,14 +321,15 @@ export default function IssuesPage() {
 	}
 
 	// tool-result
-	const { issues, site } = state.toolResult ?? {
+	const { issues, site, userEnv } = state.toolResult ?? {
 		issues: [],
 		site: "",
+		userEnv: "",
 	};
 
 	return (
 		<div className="p-5">
-			<IssuesList initialIssues={issues} site={site} />
+			<IssuesList initialIssues={issues} site={site} userEnv={userEnv} />
 		</div>
 	);
 }

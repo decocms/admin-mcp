@@ -14,7 +14,7 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 	}
 }
 
-async function getUserEnvName(apiKey: string): Promise<string> {
+export async function getUserEnvName(apiKey: string): Promise<string> {
 	const payload = decodeJwtPayload(apiKey);
 	const userId =
 		(payload?.user as Record<string, unknown> | undefined)?.id ??

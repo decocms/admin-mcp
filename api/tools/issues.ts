@@ -1,6 +1,7 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
-import { callAdmin, getConfig } from "../lib/admin.ts";
+import { callAdmin, getConfig, getEnv } from "../lib/admin.ts";
+import { getUserEnvName } from "./files.ts";
 
 export const ISSUES_RESOURCE_URI = "ui://mcp-app/issues";
 
@@ -53,6 +54,7 @@ export type ListIssuesInput = z.infer<typeof listIssuesInputSchema>;
 export const listIssuesOutputSchema = z.object({
 	issues: z.array(issueSchema),
 	site: z.string(),
+	userEnv: z.string(),
 });
 export type ListIssuesOutput = z.infer<typeof listIssuesOutputSchema>;
 
@@ -71,6 +73,9 @@ export const listIssuesTool = createTool({
 	},
 	execute: async (_input, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = getEnv(ctx);
+		const tokenToDecode = env.MESH_REQUEST_CONTEXT?.token;
+		const userEnv = await getUserEnvName(tokenToDecode);
 		const maxRetries = 3;
 		for (let attempt = 0; attempt < maxRetries; attempt++) {
 			const data = await callAdmin(
@@ -81,11 +86,11 @@ export const listIssuesTool = createTool({
 			const raw = Array.isArray(data) ? data : [];
 			if (raw.length > 0 || attempt === maxRetries - 1) {
 				const issues = raw.map((issue) => issueSchema.parse(issue));
-				return { issues, site };
+				return { issues, site, userEnv };
 			}
 			await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
 		}
-		return { issues: [], site };
+		return { issues: [], site, userEnv };
 	},
 });
 

@@ -734,6 +734,18 @@ export default function MonitorPage() {
 
 	const hostname = initialResult?.hostname ?? "";
 
+	useEffect(() => {
+		if (!app || !hostname) return;
+		app
+			.updateModelContext({
+				content: [{ type: "text", text: `Domain: **${hostname}**` }],
+			})
+			.catch(() => {});
+		return () => {
+			app.updateModelContext({ content: [] }).catch(() => {});
+		};
+	}, [app, hostname]);
+
 	// ── per-section state ──────────────────────────────────────────────────────
 	const [summary, setSummary] = useState<LoadState<SummaryData>>(idle());
 	const [timeline, setTimeline] = useState<LoadState<TimelineDataPoint[]>>(
