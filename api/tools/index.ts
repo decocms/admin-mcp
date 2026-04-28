@@ -57,6 +57,8 @@ import {
 	getErrorRateSeriesTool,
 	getErrorsOverTimeTool,
 } from "./hyperdx.ts";
+import { podLogsTool } from "./pod-logs.ts";
+import { testLoaderTool } from "./test-loader.ts";
 import {
 	getProductionShaTool,
 	listReleasesTool,
@@ -119,4 +121,6 @@ export const tools = [
 	getErrorPatternsTool,
 	getErrorsOverTimeTool,
 	getErrorRateSeriesTool,
+	podLogsTool,
+	testLoaderTool,
 ];
