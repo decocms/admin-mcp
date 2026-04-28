@@ -7,6 +7,7 @@ import { issuesAppResource } from "./resources/issues.ts";
 import { monitorAppResource } from "./resources/monitor.ts";
 import { pullRequestsAppResource } from "./resources/pull-requests.ts";
 import { releasesAppResource } from "./resources/releases.ts";
+import { renderHtmlAppResource } from "./resources/render-html.ts";
 import { tools } from "./tools/index.ts";
 import { type Env, StateSchema } from "./types/env.ts";
 
@@ -56,6 +57,7 @@ const runtime = withRuntime<Env, typeof StateSchema>({
 		monitorAppResource,
 		pullRequestsAppResource,
 		releasesAppResource,
+		renderHtmlAppResource,
 	],
 });
 

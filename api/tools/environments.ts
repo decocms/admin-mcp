@@ -42,7 +42,6 @@ export const listEnvironmentsTool = createTool({
 		"List all sandbox environments (platform=sandbox) for the configured deco.cx site. Returns each environment's name, URL, branch/commit, and metadata.",
 	inputSchema: listEnvironmentsInputSchema,
 	outputSchema: listEnvironmentsOutputSchema,
-	_meta: { ui: { resourceUri: ENVIRONMENTS_RESOURCE_URI } },
 	annotations: {
 		readOnlyHint: true,
 		destructiveHint: false,

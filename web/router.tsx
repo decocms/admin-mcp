@@ -13,6 +13,7 @@ import IssuesPage from "./tools/issues/index.tsx";
 import MonitorPage from "./tools/monitor/index.tsx";
 import PullRequestsPage from "./tools/pull-requests/index.tsx";
 import ReleasesPage from "./tools/releases/index.tsx";
+import RenderHtmlPage from "./tools/render-html/index.tsx";
 
 const TOOL_PAGES: Record<string, React.ComponentType> = {
 	fetch_assets: AssetsPage,
@@ -21,6 +22,7 @@ const TOOL_PAGES: Record<string, React.ComponentType> = {
 	list_issues: IssuesPage,
 	list_pull_requests: PullRequestsPage,
 	list_releases: ReleasesPage,
+	render_html: RenderHtmlPage,
 };
 
 function ToolRouter() {
