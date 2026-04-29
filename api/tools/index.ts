@@ -11,6 +11,7 @@ import {
 import {
 	createPageTool,
 	deleteFileTool,
+	duplicateFileTool,
 	fileExplorerTool,
 	getBlockSchemaTool,
 	getPageSectionsTool,
@@ -88,6 +89,7 @@ export const tools = [
 	getPagesTool,
 	getPageSectionsTool,
 	createPageTool,
+	duplicateFileTool,
 	listAppsTool,
 	installAppTool,
 	uninstallAppTool,

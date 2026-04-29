@@ -132,13 +132,14 @@ export const fileExplorerTool = createTool({
 		const productionUrl = `https://${site}.deco.site`;
 		const userEnvUrl = userEnvEntry?.url ?? null;
 
-		// Fetch to wake up the environment
+		// Fetch to wake up the environment — timeout after 5s, failures are non-fatal
+		const timeout = AbortSignal.timeout(5000);
 		const [productionResponse, _userEnvResponse] = await Promise.all([
 			fetch(productionUrl),
-			userEnvUrl ? fetch(userEnvUrl) : null,
+			userEnvUrl ? fetch(userEnvUrl, { signal: timeout }).catch(() => null) : null,
 		]);
 
-		const status = productionResponse.status;
+		const status = productionResponse?.status;
 
 		return {
 			site,
@@ -1758,6 +1759,81 @@ export const listMatchersTool = createTool({
 		} catch {
 			return empty;
 		}
+	},
+});
+
+// ─── duplicate_file ───────────────────────────────────────────────────────────
+
+export const duplicateFileInputSchema = z.object({
+	env: z.string().describe("Sandbox environment name"),
+	sourceFilepath: z.string().describe("Absolute path of the file to copy"),
+	destinationFilepath: z
+		.string()
+		.describe("Absolute path where the copy should be written"),
+});
+export type DuplicateFileInput = z.infer<typeof duplicateFileInputSchema>;
+
+export const duplicateFileOutputSchema = z.object({
+	success: z.boolean(),
+	sourceFilepath: z.string(),
+	destinationFilepath: z.string(),
+});
+export type DuplicateFileOutput = z.infer<typeof duplicateFileOutputSchema>;
+
+export const duplicateFileTool = createTool({
+	id: "duplicate_file",
+	description:
+		"Copy a file from one path to another within a sandbox environment. Reads the source file and writes its content to the destination path.",
+	inputSchema: duplicateFileInputSchema,
+	outputSchema: duplicateFileOutputSchema,
+	annotations: {
+		readOnlyHint: false,
+		destructiveHint: false,
+		idempotentHint: false,
+		openWorldHint: false,
+	},
+	execute: async ({ context }, ctx) => {
+		const { site, apiKey } = getConfig(ctx);
+		const sourceFilepath = normalizeFilepath(context.sourceFilepath);
+		const destinationFilepath = normalizeFilepath(context.destinationFilepath);
+
+		// Read the source file
+		const readResult = (await callAdmin(
+			"deco-sites/admin/loaders/daemon/fs/read.ts",
+			{
+				site,
+				env: context.env,
+				filepath: sourceFilepath,
+			},
+			apiKey,
+		)) as ReadFileOutput;
+
+		if (readResult.content == null) {
+			throw new Error(`Source file not found or empty: ${sourceFilepath}`);
+		}
+
+		// Write to the destination
+		const writeResult = (await callAdmin(
+			"deco-sites/admin/actions/daemon/fs/patchFile.ts",
+			{
+				site,
+				env: context.env,
+				filepath: destinationFilepath,
+				fileContent: readResult.content,
+				timestamp: Date.now(),
+			},
+			apiKey,
+		)) as { success?: boolean; error?: string };
+
+		if (writeResult.error) {
+			throw new Error(writeResult.error);
+		}
+
+		return {
+			success: !!writeResult.success,
+			sourceFilepath,
+			destinationFilepath,
+		};
 	},
 });
 
