@@ -15,7 +15,15 @@ import {
 	Trash2,
 	Upload,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+	createContext,
+	Fragment,
+	useCallback,
+	useContext,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import {
 	DndContext,
 	MouseSensor,
@@ -83,11 +91,12 @@ export type FormValue =
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-/** Stop adding left-margin indent after this many levels to prevent truncation in narrow panels. */
-const MAX_INDENT_DEPTH = 3;
-
 function nestClass(depth: number): string {
-	return depth < MAX_INDENT_DEPTH ? "ml-3 border-l pl-3" : "border-l pl-2";
+	// First nesting level: tiny padding, no rule — keeps the form spacious.
+	// Deeper levels get a faint left border to show hierarchy. Indents are
+	// kept small so 3+ levels of nesting don't squeeze the form area.
+	if (depth === 0) return "pl-1";
+	return "border-l border-border/50 pl-3";
 }
 
 function humanize(key: string): string {
@@ -149,12 +158,12 @@ export function FieldLabel({
 }) {
 	if (!label) return null;
 	return (
-		<div className="min-w-0 space-y-0.5">
-			<span className="block truncate text-xs font-medium text-muted-foreground">
+		<div className="min-w-0 space-y-1">
+			<span className="block truncate text-sm font-medium text-foreground">
 				{label}
 			</span>
 			{description && (
-				<span className="block text-[10px] leading-snug text-muted-foreground/70">
+				<span className="block text-xs leading-snug text-muted-foreground">
 					{description}
 				</span>
 			)}
@@ -176,12 +185,12 @@ export function TextField({
 	onChange: (v: string) => void;
 }) {
 	return (
-		<div className="space-y-1">
+		<div className="space-y-2">
 			<FieldLabel label={label} description={description} />
 			<Input
 				value={value}
 				onChange={(e) => onChange(e.target.value)}
-				className="h-7 text-xs"
+				className="h-9 text-sm"
 			/>
 		</div>
 	);
@@ -201,13 +210,13 @@ function TextareaField({
 	onChange: (v: string) => void;
 }) {
 	return (
-		<div className="space-y-1">
+		<div className="space-y-2">
 			<FieldLabel label={label} description={description} />
 			<Textarea
 				value={value}
 				onChange={(e) => onChange(e.target.value)}
-				rows={5}
-				className="min-h-[unset] text-xs"
+				rows={4}
+				className="min-h-[unset] text-sm"
 			/>
 		</div>
 	);
@@ -790,13 +799,13 @@ export function NumberField({
 	onChange: (v: number) => void;
 }) {
 	return (
-		<div className="space-y-1">
+		<div className="space-y-2">
 			<FieldLabel label={label} description={description} />
 			<Input
 				type="number"
 				value={value}
 				onChange={(e) => onChange(Number(e.target.value))}
-				className="h-7 text-xs"
+				className="h-9 text-sm"
 			/>
 		</div>
 	);
@@ -816,18 +825,18 @@ export function CheckboxField({
 	onChange: (v: boolean) => void;
 }) {
 	return (
-		<div className="space-y-0.5">
-			<label className="flex cursor-pointer items-center gap-2">
+		<div className="space-y-1">
+			<label className="flex cursor-pointer items-center gap-2.5">
 				<input
 					type="checkbox"
 					checked={value}
 					onChange={(e) => onChange(e.target.checked)}
-					className="h-3.5 w-3.5 rounded accent-primary"
+					className="h-4 w-4 rounded accent-primary"
 				/>
-				<span className="text-xs text-foreground/80">{label}</span>
+				<span className="text-sm font-medium text-foreground">{label}</span>
 			</label>
 			{description && (
-				<span className="block text-[10px] text-muted-foreground/70 pl-5">
+				<span className="block pl-[26px] text-xs leading-snug text-muted-foreground">
 					{description}
 				</span>
 			)}
@@ -1254,6 +1263,7 @@ function MediaField({
 	mediaType: "video" | "file";
 }) {
 	const [open, setOpen] = useState(false);
+	const [thumbError, setThumbError] = useState(false);
 	const Icon = mediaType === "video" ? VideoIcon : FileIcon;
 	const placeholder =
 		mediaType === "video" ? "Click to select video" : "Click to select file";
@@ -1275,6 +1285,15 @@ function MediaField({
 		: undefined;
 	const stem = ext ? filename.slice(0, filename.lastIndexOf(".")) : filename;
 
+	// For videos, append #t=0.1 so the browser fetches metadata and shows
+	// the first frame as a poster without playing.
+	const videoThumbSrc =
+		mediaType === "video" && value
+			? value.includes("#")
+				? value
+				: `${value}#t=0.1`
+			: null;
+
 	return (
 		<div className="space-y-1.5">
 			<FieldLabel label={label} description={description} />
@@ -1284,7 +1303,37 @@ function MediaField({
 					className="w-full text-left"
 					onClick={() => setOpen(true)}
 				>
-					{value ? (
+					{value && videoThumbSrc && !thumbError ? (
+						<>
+							<div className="relative h-40 w-full bg-black">
+								<video
+									src={videoThumbSrc}
+									preload="metadata"
+									muted
+									playsInline
+									className="h-full w-full object-cover"
+									onError={() => setThumbError(true)}
+								>
+									<track kind="captions" />
+								</video>
+								<div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+									<div className="flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm">
+										<VideoIcon className="h-4 w-4" />
+									</div>
+								</div>
+							</div>
+							<div className="px-3 py-2">
+								<p className="truncate font-mono text-xs font-semibold">
+									{stem}
+								</p>
+								{ext && (
+									<p className="text-[10px] uppercase text-muted-foreground">
+										{ext}
+									</p>
+								)}
+							</div>
+						</>
+					) : value ? (
 						<div className="flex items-center gap-2 px-3 py-3">
 							<Icon className="h-5 w-5 shrink-0 text-muted-foreground" />
 							<div className="min-w-0 flex-1">
@@ -1327,7 +1376,10 @@ function MediaField({
 							variant="outline"
 							size="icon"
 							className="h-8 w-8 shrink-0"
-							onClick={() => onChange("")}
+							onClick={() => {
+								onChange("");
+								setThumbError(false);
+							}}
 						>
 							<Trash2 className="h-3.5 w-3.5" />
 						</Button>
@@ -1339,6 +1391,7 @@ function MediaField({
 				open={open}
 				onClose={() => setOpen(false)}
 				onSelect={(url) => {
+					setThumbError(false);
 					onChange(url);
 					setOpen(false);
 				}}
@@ -1429,6 +1482,28 @@ function getItemLabel(
 	return `Item ${index + 1}`;
 }
 
+// ─── drill stack ──────────────────────────────────────────────────────────────
+// When a user clicks an array item, that item's editor is "pushed" onto a
+// stack owned by SectionForm. The form view only ever shows the top frame,
+// so the user sees just the active item's fields plus a back button — never
+// nested under the parent's fields.
+//
+// `getValue` and `setValue` close over the pushing component's refs so they
+// always resolve to the latest data — frames stored in state stay live even
+// after the parent re-renders.
+
+type DrillFrame = {
+	label: string;
+	getValue: () => FormValue;
+	setValue: (v: FormValue) => void;
+	itemSchema?: SchemaProperty;
+	onRemove?: () => void;
+};
+
+const DrillContext = createContext<{
+	push: (frame: DrillFrame) => void;
+} | null>(null);
+
 function SortableArrayRow({
 	id,
 	index,
@@ -1465,7 +1540,7 @@ function SortableArrayRow({
 				transition,
 				opacity: isDragging ? 0.4 : 1,
 			}}
-			className="group flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-foreground/80 transition-colors hover:bg-accent hover:text-accent-foreground"
+			className="group flex cursor-pointer select-none items-center gap-2 rounded-md border border-transparent px-2 py-2 text-sm text-foreground transition-colors hover:border-border hover:bg-accent/40"
 		>
 			<span
 				{...listeners}
@@ -1473,9 +1548,9 @@ function SortableArrayRow({
 				className="shrink-0 cursor-grab touch-none text-muted-foreground/40 active:cursor-grabbing"
 				onClick={(e) => e.stopPropagation()}
 			>
-				<GripVertical className="h-3 w-3" />
+				<GripVertical className="h-3.5 w-3.5" />
 			</span>
-			<span className="flex-1 truncate text-xs" onClick={onSelect}>
+			<span className="flex-1 truncate" onClick={onSelect}>
 				{getItemLabel(value, index, titleBy, schemaTitle)}
 			</span>
 			<DropdownMenu>
@@ -1484,9 +1559,9 @@ function SortableArrayRow({
 						type="button"
 						onPointerDown={(e) => e.stopPropagation()}
 						onClick={(e) => e.stopPropagation()}
-						className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-background/80 group-hover:opacity-100"
+						className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-background/80 group-hover:opacity-100"
 					>
-						<MoreHorizontal className="h-3 w-3" />
+						<MoreHorizontal className="h-3.5 w-3.5" />
 					</button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end" className="w-32">
@@ -1530,8 +1605,7 @@ function ArrayField({
 	itemSchema?: SchemaProperty;
 	schemasMap?: Record<string, SchemaProperties>;
 }) {
-	const [open, setOpen] = useState(false);
-	const [editIndex, setEditIndex] = useState<number | null>(null);
+	const drill = useContext(DrillContext);
 	const sensors = useSensors(
 		useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
 		useSensor(TouchSensor, {
@@ -1539,6 +1613,14 @@ function ArrayField({
 		}),
 	);
 	const ids = value.map((_, i) => String(i));
+
+	// Refs let pushed drill frames keep reading the latest props after
+	// this component re-renders or even when its rendered subtree is
+	// hidden behind a deeper drill view.
+	const valueRef = useRef(value);
+	valueRef.current = value;
+	const onChangeRef = useRef(onChange);
+	onChangeRef.current = onChange;
 
 	const handleDragEnd = ({ active, over }: DragEndEvent) => {
 		if (!over || active.id === over.id) return;
@@ -1551,100 +1633,56 @@ function ArrayField({
 		onChange(next);
 	};
 
-	const handleRemove = (i: number) => {
-		onChange(value.filter((_, j) => j !== i));
-		setEditIndex(null);
+	const drillItem = (i: number) => {
+		if (!drill) return;
+		drill.push({
+			label: getItemLabel(
+				value[i],
+				i,
+				itemSchema?.titleBy,
+				itemSchema?.title,
+			),
+			getValue: () => valueRef.current[i],
+			setValue: (nv) => {
+				const next = [...valueRef.current];
+				next[i] = nv;
+				onChangeRef.current(next);
+			},
+			itemSchema,
+			onRemove: () =>
+				onChangeRef.current(valueRef.current.filter((_, j) => j !== i)),
+		});
 	};
 
 	return (
-		<div className="space-y-1">
-			<button
-				type="button"
-				onClick={() => {
-					setOpen((o) => !o);
-					setEditIndex(null);
-				}}
-				className="flex w-full items-center gap-1 text-left"
-			>
-				{open ? (
-					<ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
-				) : (
-					<ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
-				)}
-				<span className="text-xs font-medium text-muted-foreground">
-					{label}
-				</span>
-				<span className="ml-1 rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">
+		<div className="space-y-2">
+			<div className="flex items-center gap-1.5">
+				<span className="text-sm font-medium text-foreground">{label}</span>
+				<span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
 					{value.length}
 				</span>
-			</button>
-			{description && !open && (
-				<span className="block text-[10px] text-muted-foreground/70 pl-4">
+			</div>
+			{description && (
+				<span className="block text-xs leading-snug text-muted-foreground">
 					{description}
 				</span>
 			)}
 
-			{open && editIndex !== null ? (
-				<div className={nestClass(depth)}>
-					<div className="mb-2 flex items-center gap-1">
-						<button
-							type="button"
-							onClick={() => setEditIndex(null)}
-							className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-						>
-							<ChevronLeft className="h-3.5 w-3.5" />
-						</button>
-						<span className="flex-1 truncate text-xs font-medium">
-							{getItemLabel(
-								value[editIndex],
-								editIndex,
-								itemSchema?.titleBy,
-								itemSchema?.title,
-							)}
-						</span>
-						<button
-							type="button"
-							onClick={() => handleRemove(editIndex)}
-							className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-							title="Remove"
-						>
-							<Trash2 className="h-3 w-3" />
-						</button>
-					</div>
-					<FormField
-						name="item"
-						value={value[editIndex]}
-						onChange={(v) => {
-							const next = [...value];
-							next[editIndex] = v;
-							onChange(next);
-						}}
-						depth={depth + 1}
-						hideLabel
-						schemaType={itemSchema?.type}
-						schemaDefault={itemSchema?.default}
-						schemaEnum={itemSchema?.enum}
-						schemaFormat={itemSchema?.format}
-						fieldSchema={itemSchema?.properties}
-						anyOfRefs={itemSchema?.anyOfRefs}
-						schemasMap={schemasMap ?? {}}
-					/>
-				</div>
-			) : open ? (
-				<div className={nestClass(depth)}>
-					<DndContext
-						sensors={sensors}
-						modifiers={[restrictToVerticalAxis]}
-						onDragEnd={handleDragEnd}
-					>
-						<SortableContext items={ids} strategy={verticalListSortingStrategy}>
+			<DndContext
+				sensors={sensors}
+				modifiers={[restrictToVerticalAxis]}
+				onDragEnd={handleDragEnd}
+			>
+				<SortableContext items={ids} strategy={verticalListSortingStrategy}>
+					{value.length > 0 && (
+						<div className="space-y-1 rounded-lg border bg-muted/10 p-1.5">
 							{value.map((item, i) => (
 								<SortableArrayRow
 									key={i}
 									id={String(i)}
 									index={i}
 									value={item}
-									onSelect={() => setEditIndex(i)}
+									onSelect={() => drillItem(i)}
 									onDuplicate={() => {
 										const next = [...value];
 										next.splice(i + 1, 0, structuredClone(item));
@@ -1655,18 +1693,18 @@ function ArrayField({
 									schemaTitle={itemSchema?.title}
 								/>
 							))}
-						</SortableContext>
-					</DndContext>
-					<button
-						type="button"
-						onClick={() => onChange([...value, emptyItemFrom(value[0] ?? "")])}
-						className="mt-1 flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-					>
-						<Plus className="h-3 w-3" />
-						Add item
-					</button>
-				</div>
-			) : null}
+						</div>
+					)}
+				</SortableContext>
+			</DndContext>
+			<button
+				type="button"
+				onClick={() => onChange([...value, emptyItemFrom(value[0] ?? "")])}
+				className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border bg-muted/20 px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:border-foreground/40 hover:bg-accent/40 hover:text-foreground"
+			>
+				<Plus className="h-4 w-4" />
+				Add item
+			</button>
 		</div>
 	);
 }
@@ -1707,31 +1745,32 @@ function ObjectField({
 	if (keys.length === 0) return null;
 
 	return (
-		<div className="space-y-1">
+		<div className="space-y-3">
 			{!hideLabel && label && (
 				<button
 					type="button"
 					onClick={() => setOpen((o) => !o)}
-					className="flex w-full items-center gap-1 text-left"
+					className="flex w-full items-center gap-1.5 text-left"
 				>
 					{open ? (
-						<ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+						<ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
 					) : (
-						<ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
+						<ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
 					)}
-					<span className="text-xs font-medium text-muted-foreground">
-						{label}
-					</span>
+					<span className="text-sm font-medium text-foreground">{label}</span>
 				</button>
 			)}
 			{description && !hideLabel && (
-				<span className="block text-[10px] text-muted-foreground/70 pl-4">
+				<span className="block pl-5 text-xs leading-snug text-muted-foreground">
 					{description}
 				</span>
 			)}
 			{(open || hideLabel) && (
 				<div
-					className={cn("space-y-3", !hideLabel && label && nestClass(depth))}
+					className={cn(
+						"space-y-7 pt-1",
+						!hideLabel && label && nestClass(depth),
+					)}
 				>
 					{keys.map((k) => {
 						const prop = fieldSchema?.[k];
@@ -1784,13 +1823,13 @@ function SelectField({
 	const fromSelectValue = (v: string) => (v === EMPTY_SENTINEL ? "" : v);
 
 	return (
-		<div className="space-y-1">
+		<div className="space-y-2">
 			<FieldLabel label={label} description={description} />
 			<Select
 				value={toSelectValue(value)}
 				onValueChange={(v) => onChange(fromSelectValue(v))}
 			>
-				<SelectTrigger className="h-7 text-xs">
+				<SelectTrigger className="h-9 text-sm">
 					<SelectValue placeholder="Select…" />
 				</SelectTrigger>
 				<SelectContent>
@@ -2379,6 +2418,14 @@ export function SectionForm({
 		? Object.keys(schema).filter((k) => !k.startsWith("__") && k !== "@type")
 		: Object.keys(data).filter((k) => !k.startsWith("__"));
 
+	const [drillStack, setDrillStack] = useState<DrillFrame[]>([]);
+	const drillContext = {
+		push: (frame: DrillFrame) =>
+			setDrillStack((s) => [...s, frame]),
+	};
+	const popDrill = () => setDrillStack((s) => s.slice(0, -1));
+	const topFrame = drillStack[drillStack.length - 1];
+
 	if (keys.length === 0) {
 		return (
 			<div className="px-3 py-6 text-center text-xs text-muted-foreground">
@@ -2388,6 +2435,7 @@ export function SectionForm({
 	}
 
 	return (
+		<DrillContext.Provider value={drillContext}>
 		<div className="min-h-0 flex-1 block! min-w-auto overflow-y-auto">
 			{readOnly && (
 				<style>
@@ -2466,8 +2514,63 @@ export function SectionForm({
 					</div>
 				</div>
 			)}
+			{topFrame && (
+				<div className="sticky top-0 z-10 flex shrink-0 items-center gap-1.5 border-b bg-background px-4 py-3">
+					<button
+						type="button"
+						onClick={popDrill}
+						className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+						title="Back"
+					>
+						<ChevronLeft className="h-4 w-4" />
+					</button>
+					<div className="flex min-w-0 flex-1 items-center gap-1.5 text-sm">
+						{drillStack.map((frame, i) => {
+							const isLast = i === drillStack.length - 1;
+							return (
+								<Fragment key={i}>
+									{i > 0 && (
+										<ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" />
+									)}
+									{isLast ? (
+										<span className="truncate font-semibold">
+											{frame.label}
+										</span>
+									) : (
+										<button
+											type="button"
+											onClick={() =>
+												setDrillStack((s) => s.slice(0, i + 1))
+											}
+											className="-mx-1 truncate rounded px-1 py-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+										>
+											{frame.label}
+										</button>
+									)}
+								</Fragment>
+							);
+						})}
+					</div>
+					{topFrame.onRemove && (
+						<button
+							type="button"
+							onClick={() => {
+								topFrame.onRemove?.();
+								popDrill();
+							}}
+							className="shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+							title="Remove"
+						>
+							<Trash2 className="h-3.5 w-3.5" />
+						</button>
+					)}
+				</div>
+			)}
 			<div
-				className="space-y-4 p-3"
+				className={cn(
+					"space-y-7 px-5 py-6",
+					topFrame && "hidden",
+				)}
 				{...(readOnly ? { "data-cms-readonly": "" } : {})}
 			>
 				{keys.map((key) => {
@@ -2493,6 +2596,35 @@ export function SectionForm({
 					);
 				})}
 			</div>
+			{drillStack.map((frame, i) => {
+				const isTop = i === drillStack.length - 1;
+				const itemSchema = frame.itemSchema;
+				return (
+					<div
+						key={i}
+						className={cn(
+							"space-y-7 px-5 py-6",
+							!isTop && "hidden",
+						)}
+					>
+						<FormField
+							name="item"
+							value={frame.getValue()}
+							onChange={frame.setValue}
+							hideLabel
+							schemaType={itemSchema?.type}
+							schemaDefault={itemSchema?.default}
+							schemaEnum={itemSchema?.enum}
+							schemaFormat={itemSchema?.format}
+							fieldSchema={itemSchema?.properties}
+							anyOfRefs={itemSchema?.anyOfRefs}
+							schemasMap={schemasMap}
+							depth={0}
+						/>
+					</div>
+				);
+			})}
 		</div>
+		</DrillContext.Provider>
 	);
 }

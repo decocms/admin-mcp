@@ -32,8 +32,9 @@ export function getEnv(ctx?: AppContext): Env {
 export function getConfig(ctx?: AppContext) {
 	const env = getEnv(ctx);
 	const state = env.MESH_REQUEST_CONTEXT?.state;
-	const apiKey = env.MESH_REQUEST_CONTEXT?.authorization;
-	const site = state?.SITE_NAME;
+	const apiKey =
+		env.MESH_REQUEST_CONTEXT?.authorization ?? process.env.DECO_ADMIN_API_KEY;
+	const site = state?.SITE_NAME ?? process.env.SITE_NAME;
 	if (!site) throw new Error("SITE_NAME is not configured.");
 	if (!apiKey) throw new Error("DECO_ADMIN_API_KEY is not configured.");
 	return {

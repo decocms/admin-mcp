@@ -150,16 +150,16 @@ export function VtexISProductListModal({
 
 	return (
 		<Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-			<DialogContent className="flex max-h-[85vh] w-[500px] flex-col gap-0 p-0 overflow-hidden">
+			<DialogContent className="flex max-h-[85vh] w-[520px] flex-col gap-0 p-0 overflow-hidden">
 				{/* Header */}
-				<div className="shrink-0 border-b px-5 py-4 bg-[#F71963]/5">
+				<div className="shrink-0 border-b px-6 py-5 bg-[#F71963]/5">
 					<div className="flex items-center gap-3">
 						<VtexLogo />
 						<div className="min-w-0">
 							<p className="text-sm font-semibold leading-none text-foreground">
 								IS Product List
 							</p>
-							<p className="text-[10px] font-mono text-muted-foreground mt-1 truncate">
+							<p className="text-[11px] font-mono text-muted-foreground mt-1.5 truncate">
 								vtex/loaders/intelligentSearch/productList.ts
 							</p>
 						</div>
@@ -167,7 +167,7 @@ export function VtexISProductListModal({
 				</div>
 
 				{/* Mode tabs */}
-				<div className="shrink-0 border-b bg-muted/30 px-5">
+				<div className="shrink-0 border-b bg-muted/30 px-6">
 					<div className="flex gap-0 overflow-x-auto">
 						{IS_MODES.map((m) => (
 							<button
@@ -175,7 +175,7 @@ export function VtexISProductListModal({
 								type="button"
 								onClick={() => handleModeChange(m.id)}
 								className={cn(
-									"shrink-0 border-b-2 px-3 py-2.5 text-[11px] font-medium transition-colors whitespace-nowrap",
+									"shrink-0 border-b-2 px-3 py-3 text-xs font-medium transition-colors whitespace-nowrap",
 									mode === m.id
 										? "border-[#F71963] text-[#F71963]"
 										: "border-transparent text-muted-foreground hover:text-foreground",
@@ -188,9 +188,9 @@ export function VtexISProductListModal({
 				</div>
 
 				{/* Fields */}
-				<div className="overflow-y-auto max-h-[60vh]">
-					<div className="px-5 py-4 space-y-4">
-						<p className="text-[11px] text-muted-foreground leading-snug -mt-1">
+				<div className="overflow-y-auto max-h-[65vh]">
+					<div className="px-6 py-5 space-y-5">
+						<p className="text-xs text-muted-foreground leading-snug">
 							{IS_MODES.find((m) => m.id === mode)?.description}
 						</p>
 
@@ -281,19 +281,16 @@ export function VtexISProductListModal({
 				</div>
 
 				{/* Footer */}
-				<DialogFooter className="shrink-0 border-t px-5 py-3">
+				<DialogFooter className="shrink-0 border-t px-6 py-4">
 					<Button
 						variant="outline"
-						size="sm"
 						onClick={onClose}
-						className="h-7 text-xs"
 					>
 						Cancel
 					</Button>
 					<Button
-						size="sm"
 						onClick={() => onSave(draft)}
-						className="h-7 text-xs bg-[#F71963] hover:bg-[#F71963]/90 text-white"
+						className="bg-[#F71963] hover:bg-[#F71963]/90 text-white"
 					>
 						Save changes
 					</Button>

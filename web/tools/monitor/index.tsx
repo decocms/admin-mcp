@@ -179,27 +179,27 @@ function StatCard({
 }) {
 	if (loading) {
 		return (
-			<Card>
-				<CardContent className="p-4">
-					<div className="flex items-center justify-between mb-2">
+			<Card className="py-0">
+				<CardContent className="p-4 h-[110px] flex flex-col justify-between">
+					<div className="flex items-center justify-between">
 						<Skeleton className="h-3 w-24" />
-						<Skeleton className="h-8 w-8 rounded-lg" />
+						<Skeleton className="h-7 w-7 rounded-lg" />
 					</div>
-					<Skeleton className="h-7 w-20 mt-1" />
+					<Skeleton className="h-10 w-20" />
 				</CardContent>
 			</Card>
 		);
 	}
 	return (
-		<Card>
-			<CardContent className="p-4">
-				<div className="flex items-center justify-between mb-1.5">
+		<Card className="py-0">
+			<CardContent className="p-4 h-[110px] flex flex-col justify-between">
+				<div className="flex items-center justify-between">
 					<p className="text-xs text-muted-foreground">{title}</p>
 					<div className="p-1.5 rounded-lg bg-muted text-muted-foreground">
 						{icon}
 					</div>
 				</div>
-				<p className="text-2xl font-bold">{value}</p>
+				<p className="text-4xl font-bold tracking-tight">{value}</p>
 			</CardContent>
 		</Card>
 	);

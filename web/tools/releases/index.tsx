@@ -1,13 +1,12 @@
 import {
 	CheckCircle2,
-	Clock,
 	ExternalLink,
 	GitCommit,
 	Rocket,
 	RotateCcw,
 	Search,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
@@ -25,6 +24,11 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog.tsx";
 import { Input } from "@/components/ui/input.tsx";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip.tsx";
 import { useMcpApp, useMcpState } from "@/context.tsx";
 import { cn } from "@/lib/utils.ts";
 import type {
@@ -50,14 +54,30 @@ function formatDate(timestamp: number): string {
 	return new Date(timestamp * 1000).toLocaleString();
 }
 
+function splitCommitMessage(message: string): { title: string; body: string } {
+	const idx = message.indexOf("\n");
+	if (idx === -1) return { title: message.trim(), body: "" };
+	return {
+		title: message.slice(0, idx).trim(),
+		body: message
+			.slice(idx + 1)
+			.replace(/\s+/g, " ")
+			.trim(),
+	};
+}
+
+// ─── AuthorAvatar ─────────────────────────────────────────────────────────────
+
 function AuthorAvatar({
 	name,
 	avatarUrl,
 	login,
+	size = 24,
 }: {
 	name: string;
 	avatarUrl?: string | null;
 	login?: string | null;
+	size?: number;
 }) {
 	const initials = name
 		.split(" ")
@@ -67,15 +87,15 @@ function AuthorAvatar({
 		.toUpperCase();
 
 	const src =
-		avatarUrl ?? (login ? `https://github.com/${login}.png?size=32` : null);
+		avatarUrl ?? (login ? `https://github.com/${login}.png?size=48` : null);
 
 	if (src) {
 		return (
 			<img
 				src={src}
 				alt={name}
-				title={name}
-				className="w-4 h-4 rounded-full shrink-0 bg-muted"
+				className="rounded-full shrink-0 bg-muted"
+				style={{ width: size, height: size }}
 				onError={(e) => {
 					(e.currentTarget as HTMLImageElement).style.display = "none";
 				}}
@@ -85,8 +105,8 @@ function AuthorAvatar({
 
 	return (
 		<span
-			className="inline-flex w-4 h-4 rounded-full bg-muted items-center justify-center text-[9px] font-medium text-muted-foreground shrink-0"
-			title={name}
+			className="inline-flex rounded-full bg-muted items-center justify-center font-medium text-muted-foreground shrink-0"
+			style={{ width: size, height: size, fontSize: Math.round(size * 0.4) }}
 		>
 			{initials}
 		</span>
@@ -125,7 +145,7 @@ function PromoteDialog({
 	if (!commit) return null;
 
 	const short = commit.oid.slice(0, 7);
-	const title = commit.commit.message.split("\n")[0];
+	const { title } = splitCommitMessage(commit.commit.message);
 
 	const startPolling = (targetSha: string) => {
 		setState("deploying");
@@ -222,7 +242,7 @@ function PromoteDialog({
 					</p>
 				)}
 				{state === "done" && (
-					<p className="text-sm text-green-600 font-medium flex items-center gap-1.5">
+					<p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5">
 						<CheckCircle2 className="w-4 h-4" />
 						Live in production.
 					</p>
@@ -280,7 +300,7 @@ function RevertDialog({
 	if (!commit) return null;
 
 	const short = commit.oid.slice(0, 7);
-	const title = commit.commit.message.split("\n")[0];
+	const { title } = splitCommitMessage(commit.commit.message);
 
 	const handleRevert = async () => {
 		setState("loading");
@@ -353,7 +373,7 @@ function RevertDialog({
 
 				{state === "done" && (
 					<div className="flex flex-col gap-2">
-						<p className="text-sm text-green-600 font-medium">
+						<p className="text-sm text-emerald-600 dark:text-emerald-400 font-medium">
 							✓ Revert PR created successfully.
 						</p>
 						{prUrl && (
@@ -405,9 +425,9 @@ function RevertDialog({
 	);
 }
 
-// ─── CommitRow ────────────────────────────────────────────────────────────────
+// ─── CommitCard ───────────────────────────────────────────────────────────────
 
-function CommitRow({
+function CommitCard({
 	commit,
 	isProduction,
 	onPromote,
@@ -419,91 +439,144 @@ function CommitRow({
 	onRevert: (commit: ReleaseCommit) => void;
 }) {
 	const short = commit.oid.slice(0, 7);
-	const title = commit.commit.message.split("\n")[0];
+	const { title, body } = splitCommitMessage(commit.commit.message);
 
 	return (
 		<div
 			className={cn(
-				"flex items-start gap-3 rounded-lg border p-4 transition-colors",
+				"group flex flex-col gap-2.5 rounded-lg border bg-card p-4 transition-colors",
 				isProduction
-					? "border-green-500/40 bg-green-500/5 hover:bg-green-500/10"
-					: "border-border bg-card hover:bg-muted/20",
+					? "border-emerald-500/40 bg-emerald-500/[0.04] hover:border-emerald-500/60"
+					: "border-border hover:border-foreground/20",
 			)}
 		>
-			<GitCommit
-				className={cn(
-					"w-4 h-4 mt-0.5 shrink-0",
-					isProduction ? "text-green-500" : "text-muted-foreground",
+			{/* Top: SHA + status icon */}
+			<div className="flex items-start justify-between gap-2">
+				<code
+					className="text-xs font-mono text-muted-foreground truncate"
+					title={commit.oid}
+				>
+					{short}
+				</code>
+				{isProduction ? (
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<span
+								role="img"
+								aria-label="Live in production"
+								className="inline-flex shrink-0 cursor-default"
+							>
+								<CheckCircle2 className="h-[18px] w-[18px] text-emerald-500" />
+							</span>
+						</TooltipTrigger>
+						<TooltipContent side="left" className="max-w-[240px] text-sm">
+							<span className="font-medium">Live</span>
+							<span className="block text-background/75 mt-0.5">
+								Currently deployed to production
+							</span>
+						</TooltipContent>
+					</Tooltip>
+				) : (
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<span
+								role="img"
+								aria-label="Available commit"
+								className="inline-flex shrink-0 cursor-default"
+							>
+								<GitCommit className="h-[18px] w-[18px] text-muted-foreground" />
+							</span>
+						</TooltipTrigger>
+						<TooltipContent side="left" className="max-w-[240px] text-sm">
+							<span className="font-medium">Available</span>
+							<span className="block text-background/75 mt-0.5">
+								Not currently in production — promote to deploy
+							</span>
+						</TooltipContent>
+					</Tooltip>
 				)}
-			/>
-			<div className="flex-1 min-w-0">
-				<div className="flex items-center gap-2 flex-wrap">
-					<p className="text-sm font-medium text-foreground leading-snug truncate">
-						{title}
-					</p>
-					{isProduction && (
-						<span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2 py-0.5 text-xs font-medium text-green-600 dark:text-green-400 shrink-0">
-							<CheckCircle2 className="w-3 h-3" />
-							Production
-						</span>
-					)}
-				</div>
-				<div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-muted-foreground">
-					<code className="font-mono">{short}</code>
-					<span>·</span>
-					<span className="flex items-center gap-1.5">
-						<AuthorAvatar
-							name={commit.commit.author.name}
-							avatarUrl={commit.avatarUrl}
-							login={commit.login}
-						/>
-						{commit.commit.author.name}
-					</span>
-					<span>·</span>
-					<span
-						className="flex items-center gap-1"
-						title={formatDate(commit.commit.author.timestamp)}
-					>
-						<Clock className="w-3 h-3" />
-						{timeAgo(commit.commit.author.timestamp)}
-					</span>
-				</div>
 			</div>
-			<div className="flex items-center gap-2 shrink-0 ml-2">
-				<Button
-					variant="outline"
-					size="sm"
-					className="h-7 text-xs gap-1.5"
-					onClick={() => onRevert(commit)}
-					disabled={isProduction}
-					title={isProduction ? "Already in production" : undefined}
-				>
-					<RotateCcw className="w-3 h-3" />
-					Revert
-				</Button>
-				<Button
-					variant={isProduction ? "outline" : "default"}
-					size="sm"
-					className={cn(
-						"h-7 text-xs gap-1.5",
-						isProduction &&
-							"border-green-500/40 text-green-600 dark:text-green-400 cursor-default",
+
+			{/* Title */}
+			<h3 className="text-[15px] font-medium text-foreground leading-snug line-clamp-2">
+				{title}
+			</h3>
+
+			{/* Body (multi-line commit message after the title) */}
+			{body && (
+				<p className="text-sm text-muted-foreground leading-snug line-clamp-2">
+					{body}
+				</p>
+			)}
+
+			{/* Footer: actions  —  avatar · time */}
+			<div className="mt-1 flex items-center justify-between gap-3">
+				<div className="flex items-center gap-2.5 min-w-0">
+					<Button
+						variant="outline"
+						size="sm"
+						className="h-8 text-sm gap-1.5"
+						onClick={() => onRevert(commit)}
+						disabled={isProduction}
+						title={isProduction ? "Already in production" : undefined}
+					>
+						<RotateCcw className="w-3.5 h-3.5" />
+						Revert
+					</Button>
+					{isProduction ? (
+						<span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+							<CheckCircle2 className="w-3.5 h-3.5" />
+							Live
+						</span>
+					) : (
+						<Button
+							variant="default"
+							size="sm"
+							className="h-8 text-sm gap-1.5"
+							onClick={() => onPromote(commit)}
+						>
+							<Rocket className="w-3.5 h-3.5" />
+							Promote
+						</Button>
 					)}
-					onClick={() => !isProduction && onPromote(commit)}
-					disabled={isProduction}
-					title={isProduction ? "Already in production" : undefined}
-				>
-					<Rocket className="w-3 h-3" />
-					{isProduction ? "Live" : "Promote"}
-				</Button>
+				</div>
+
+				{/* Right: avatar · time */}
+				<div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<span className="inline-flex shrink-0 cursor-default">
+								<AuthorAvatar
+									name={commit.commit.author.name}
+									avatarUrl={commit.avatarUrl}
+									login={commit.login}
+									size={24}
+								/>
+							</span>
+						</TooltipTrigger>
+						<TooltipContent side="top">
+							{commit.commit.author.name}
+						</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<span className="shrink-0 cursor-default">
+								{timeAgo(commit.commit.author.timestamp)}
+							</span>
+						</TooltipTrigger>
+						<TooltipContent side="top" className="text-sm">
+							{formatDate(commit.commit.author.timestamp)}
+						</TooltipContent>
+					</Tooltip>
+				</div>
 			</div>
 		</div>
 	);
 }
 
-// ─── ReleasesList ─────────────────────────────────────────────────────────────
+// ─── ReleasesView ─────────────────────────────────────────────────────────────
 
-function ReleasesList({
+function ReleasesView({
 	commits,
 	site,
 	productionSha: initialProductionSha,
@@ -519,26 +592,31 @@ function ReleasesList({
 	);
 	const [revertTarget, setRevertTarget] = useState<ReleaseCommit | null>(null);
 
-	const filtered = search.trim()
-		? commits.filter(
-				(c) =>
-					c.commit.message.toLowerCase().includes(search.toLowerCase()) ||
-					c.oid.startsWith(search.toLowerCase()) ||
-					c.commit.author.name.toLowerCase().includes(search.toLowerCase()),
-			)
-		: commits;
+	const filtered = useMemo(() => {
+		const q = search.trim().toLowerCase();
+		if (!q) return commits;
+		return commits.filter(
+			(c) =>
+				c.commit.message.toLowerCase().includes(q) ||
+				c.oid.toLowerCase().startsWith(q) ||
+				c.commit.author.name.toLowerCase().includes(q) ||
+				(c.login ?? "").toLowerCase().includes(q),
+		);
+	}, [commits, search]);
 
 	return (
-		<section className="flex flex-col gap-4">
-			{/* Header */}
-			<div className="flex items-start justify-between gap-3">
-				<div>
-					<h1 className="text-base font-semibold">Releases</h1>
+		<section className="flex flex-col gap-6">
+			{/* Title */}
+			<div className="flex flex-wrap items-center justify-between gap-3">
+				<div className="min-w-0">
+					<h1 className="text-xl font-medium leading-tight">Releases</h1>
 					{site && (
-						<p className="text-sm text-muted-foreground mt-0.5">{site}</p>
+						<p className="text-sm text-muted-foreground mt-1 truncate">
+							{site}
+						</p>
 					)}
 				</div>
-				<Badge variant="secondary" className="text-xs shrink-0 mt-0.5">
+				<Badge variant="secondary" className="text-xs shrink-0">
 					{commits.length} commits
 				</Badge>
 			</div>
@@ -551,7 +629,7 @@ function ReleasesList({
 						placeholder="Filter by message, SHA, or author…"
 						value={search}
 						onChange={(e) => setSearch(e.target.value)}
-						className="pl-9 h-8 text-sm"
+						className="pl-9 h-9 text-sm"
 					/>
 				</div>
 			)}
@@ -567,7 +645,7 @@ function ReleasesList({
 			) : (
 				<div className="flex flex-col gap-2">
 					{filtered.map((commit) => (
-						<CommitRow
+						<CommitCard
 							key={commit.oid}
 							commit={commit}
 							isProduction={
@@ -611,16 +689,23 @@ function LoadingSkeleton() {
 				{(["s1", "s2", "s3", "s4", "s5"] as const).map((key) => (
 					<div
 						key={key}
-						className="rounded-lg border border-border p-4 flex items-start gap-3"
+						className="rounded-lg border border-border p-4 flex flex-col gap-2.5"
 					>
-						<div className="w-4 h-4 rounded bg-muted animate-pulse shrink-0 mt-0.5" />
-						<div className="flex-1 flex flex-col gap-1.5">
-							<div className="h-3.5 bg-muted animate-pulse rounded w-3/4" />
-							<div className="h-3 bg-muted animate-pulse rounded w-1/3" />
+						<div className="flex items-center justify-between gap-2">
+							<div className="h-3.5 bg-muted animate-pulse rounded w-20" />
+							<div className="w-[18px] h-[18px] rounded bg-muted animate-pulse" />
 						</div>
-						<div className="flex gap-2 shrink-0">
-							<div className="h-7 w-16 bg-muted animate-pulse rounded" />
-							<div className="h-7 w-20 bg-muted animate-pulse rounded" />
+						<div className="h-4 bg-muted animate-pulse rounded w-3/4" />
+						<div className="h-3.5 bg-muted animate-pulse rounded w-full" />
+						<div className="flex items-center justify-between gap-2 mt-1">
+							<div className="flex gap-2">
+								<div className="h-8 w-20 bg-muted animate-pulse rounded" />
+								<div className="h-8 w-24 bg-muted animate-pulse rounded" />
+							</div>
+							<div className="flex items-center gap-2">
+								<div className="w-6 h-6 rounded-full bg-muted animate-pulse" />
+								<div className="h-3.5 w-16 bg-muted animate-pulse rounded" />
+							</div>
 						</div>
 					</div>
 				))}
@@ -699,21 +784,20 @@ export default function ReleasesPage() {
 
 	if (state.status === "tool-input") {
 		return (
-			<div className="p-5">
+			<div className="mx-auto w-full max-w-[1200px] px-4 pt-8 pb-6 md:px-10 md:pt-12 md:pb-10">
 				<LoadingSkeleton />
 			</div>
 		);
 	}
 
-	// tool-result
 	const { commits, site, productionSha } = state.toolResult ?? {
 		commits: [],
 		site: "",
 	};
 
 	return (
-		<div className="p-5">
-			<ReleasesList
+		<div className="mx-auto w-full max-w-[1200px] px-4 pt-8 pb-6 md:px-10 md:pt-12 md:pb-10">
+			<ReleasesView
 				commits={commits}
 				site={site}
 				productionSha={productionSha}

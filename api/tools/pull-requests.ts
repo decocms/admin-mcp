@@ -34,7 +34,9 @@ export const pullRequestSchema = z
 			)
 			.optional(),
 		mergeable: z.boolean().nullable().optional(),
+		mergeable_state: z.string().optional(),
 		merged: z.boolean().optional(),
+		merged_at: z.string().nullable().optional(),
 	})
 	.passthrough();
 
@@ -68,13 +70,118 @@ export const listPullRequestsTool = createTool({
 	},
 	execute: async (_input, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
-		const data = await callAdmin(
-			"deco-sites/admin/loaders/github/getPullRequests.ts",
-			{ site },
-			apiKey,
+
+		// We need both open AND closed PRs to populate Done / Cancelled
+		// columns. GitHub's REST list endpoint accepts state=open|closed|all,
+		// but we don't know which params the admin loader honors. Strategy:
+		//   1. Try `state: "all"` with a generous `per_page` (one call).
+		//   2. If that gives us no closed PRs, fall back to an explicit
+		//      closed-only call merged onto the open list.
+		// Per-call failures are swallowed so a missing param shape never
+		// breaks the whole list.
+		async function fetchList(params: Record<string, unknown>) {
+			try {
+				const data = await callAdmin(
+					"deco-sites/admin/loaders/github/getPullRequests.ts",
+					{ site, ...params },
+					apiKey,
+				);
+				return Array.isArray(data) ? data : [];
+			} catch {
+				return [];
+			}
+		}
+
+		let raw: unknown[] = await fetchList({ state: "all", per_page: 50 });
+		const hasClosed = raw.some(
+			(pr) => (pr as { state?: string })?.state === "closed",
 		);
-		const raw = Array.isArray(data) ? data : [];
-		const pullRequests = raw.map((pr) => pullRequestSchema.parse(pr));
+
+		if (!hasClosed) {
+			// Loader probably ignored `state: "all"`. Combine an explicit
+			// open + closed call instead.
+			const [openRaw, closedRaw] = await Promise.all([
+				fetchList({ state: "open" }),
+				fetchList({ state: "closed", per_page: 30 }),
+			]);
+			const seen = new Set<number>();
+			const merged: unknown[] = [];
+			for (const pr of [...openRaw, ...closedRaw]) {
+				const n = (pr as { number?: unknown })?.number;
+				if (typeof n !== "number" || seen.has(n)) continue;
+				seen.add(n);
+				merged.push(pr);
+			}
+			raw = merged;
+		}
+
+		// Debug: shows in API server log so we can see what the loader returns.
+		console.log(
+			`[list_pull_requests] site=${site} fetched=${raw.length}`,
+			raw.slice(0, 3).map((p) => {
+				const pr = p as {
+					number?: number;
+					state?: string;
+					merged_at?: string | null;
+					draft?: boolean;
+				};
+				return {
+					n: pr.number,
+					state: pr.state,
+					merged_at: pr.merged_at,
+					draft: pr.draft,
+				};
+			}),
+		);
+
+		// GitHub's /pulls list endpoint does NOT include `mergeable` /
+		// `mergeable_state` — those are only computed on the single-PR
+		// endpoint. Hydrate only OPEN, non-draft PRs (where mergeability
+		// matters); merged/closed/draft are already terminal so we skip the
+		// extra round-trip. Per-PR failures are non-fatal.
+		const detailPaths = [
+			"deco-sites/admin/loaders/github/getPullRequest.ts",
+			"deco-sites/admin/loaders/github/getPullRequestDetails.ts",
+		];
+		async function fetchDetail(prNumber: number): Promise<unknown | null> {
+			for (const path of detailPaths) {
+				try {
+					const detail = await callAdmin(
+						path,
+						{ site, pullRequestNumber: prNumber },
+						apiKey,
+					);
+					if (detail && typeof detail === "object") return detail;
+				} catch {
+					// try next path
+				}
+			}
+			return null;
+		}
+
+		const enriched = await Promise.all(
+			raw.map(async (pr) => {
+				if (
+					!pr ||
+					typeof pr !== "object" ||
+					typeof (pr as { number?: unknown }).number !== "number"
+				) {
+					return pr;
+				}
+				const state = (pr as { state?: string }).state;
+				const draft = (pr as { draft?: boolean }).draft;
+				const merged = (pr as { merged?: boolean; merged_at?: string | null })
+					.merged_at;
+				if (state !== "open" || draft || merged) {
+					return pr;
+				}
+				const number = (pr as { number: number }).number;
+				const detail = await fetchDetail(number);
+				return detail ? { ...(pr as object), ...(detail as object) } : pr;
+			}),
+		);
+
+		const pullRequests = enriched.map((pr) => pullRequestSchema.parse(pr));
 		return { pullRequests, site };
 	},
 });
