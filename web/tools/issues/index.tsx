@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/card.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { useMcpApp, useMcpState } from "@/context.tsx";
-import { cn } from "@/lib/utils.ts";
 import type {
 	Issue,
 	IssueDetails,
@@ -72,11 +71,7 @@ function IssueRow({
 					{fixState === "loading" ? "Loading context…" : "Fix it"}
 				</Button>
 				<a href={issue.url} target="_blank" rel="noreferrer">
-					<Button
-						variant="ghost"
-						size="sm"
-						className="h-7 text-xs gap-1.5"
-					>
+					<Button variant="ghost" size="sm" className="h-7 text-xs gap-1.5">
 						<ExternalLink className="w-3 h-3" />
 						Open in GitHub
 					</Button>
@@ -196,9 +191,7 @@ function IssuesList({
 				<div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
 					<CircleDot className="w-8 h-8 opacity-30" />
 					<p className="text-sm">
-						{search
-							? `No issues matching "${search}"`
-							: "No open issues"}
+						{search ? `No issues matching "${search}"` : "No open issues"}
 					</p>
 				</div>
 			) : (

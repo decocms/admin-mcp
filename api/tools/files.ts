@@ -136,7 +136,9 @@ export const fileExplorerTool = createTool({
 		const timeout = AbortSignal.timeout(5000);
 		const [productionResponse, _userEnvResponse] = await Promise.all([
 			fetch(productionUrl),
-			userEnvUrl ? fetch(userEnvUrl, { signal: timeout }).catch(() => null) : null,
+			userEnvUrl
+				? fetch(userEnvUrl, { signal: timeout }).catch(() => null)
+				: null,
 		]);
 
 		const status = productionResponse?.status;
@@ -703,7 +705,7 @@ export const getPagesTool = createTool({
 					};
 				};
 				const sectionTypeSet = new Set(
-					Object.keys(meta.manifest?.blocks?.["sections"] ?? {}),
+					Object.keys(meta.manifest?.blocks?.sections ?? {}),
 				);
 
 				for (const [blockId, block] of Object.entries(decofile)) {
@@ -1506,7 +1508,7 @@ export const listSectionsTool = createTool({
 				schema?: RawSchema;
 			};
 
-			const sectionBlocks = meta.manifest?.blocks?.["sections"] ?? {};
+			const sectionBlocks = meta.manifest?.blocks?.sections ?? {};
 			const sectionTypeSet = new Set(Object.keys(sectionBlocks));
 			const defs = (meta.schema?.$defs ??
 				meta.schema?.definitions ??
@@ -1673,7 +1675,7 @@ export const listMatchersTool = createTool({
 				schema?: RawSchema;
 			};
 
-			const matcherBlocks = meta.manifest?.blocks?.["matchers"] ?? {};
+			const matcherBlocks = meta.manifest?.blocks?.matchers ?? {};
 			const defs = (meta.schema?.$defs ??
 				meta.schema?.definitions ??
 				{}) as RawSchema;

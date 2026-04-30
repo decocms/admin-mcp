@@ -619,7 +619,13 @@ export function PublishDialog({
 								type="button"
 								className="flex w-full items-center justify-between px-6 py-3.5 text-sm transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
 								onClick={handleOpenPR}
-								disabled={isOpeningPR || isPublishing || isLoadingGitDiff || !gitDiff || Object.keys(gitDiff.diffs).length === 0}
+								disabled={
+									isOpeningPR ||
+									isPublishing ||
+									isLoadingGitDiff ||
+									!gitDiff ||
+									Object.keys(gitDiff.diffs).length === 0
+								}
 							>
 								<span className="flex items-center gap-3">
 									{isOpeningPR ? (
@@ -656,7 +662,11 @@ export function PublishDialog({
 										content: [{ type: "text", text: "/review" }],
 									});
 								}}
-								disabled={isPublishing || !gitDiff || Object.keys(gitDiff.diffs).length === 0}
+								disabled={
+									isPublishing ||
+									!gitDiff ||
+									Object.keys(gitDiff.diffs).length === 0
+								}
 							>
 								Ask for AI review
 							</Button>

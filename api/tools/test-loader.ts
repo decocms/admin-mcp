@@ -7,9 +7,7 @@ import { getConfig } from "../lib/admin.ts";
 export const testLoaderInputSchema = z.object({
 	key: z
 		.string()
-		.describe(
-			'The loader key to invoke, e.g. "site/loaders/myLoader.ts".',
-		),
+		.describe('The loader key to invoke, e.g. "site/loaders/myLoader.ts".'),
 	props: z
 		.record(z.string(), z.unknown())
 		.optional()

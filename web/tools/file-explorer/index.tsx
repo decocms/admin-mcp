@@ -1,12 +1,10 @@
-import type { OnMount } from "@monaco-editor/react";
-import Editor, { loader } from "@monaco-editor/react";
 import {
 	DndContext,
+	type DragEndEvent,
 	MouseSensor,
 	TouchSensor,
 	useSensor,
 	useSensors,
-	type DragEndEvent,
 } from "@dnd-kit/core";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import {
@@ -15,19 +13,20 @@ import {
 	verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import type { OnMount } from "@monaco-editor/react";
+import Editor, { loader } from "@monaco-editor/react";
 import {
+	ArrowUpRight,
 	Calendar,
 	ChevronDown,
-	ChevronLeft,
 	ChevronRight,
-	Copy,
 	CircleHelp,
 	Clock,
 	CloudLightning,
 	Code,
 	Cookie,
+	Copy,
 	Crosshair,
-	ExternalLink,
 	Eye,
 	EyeOff,
 	File,
@@ -38,16 +37,15 @@ import {
 	GitFork,
 	Globe,
 	GripVertical,
-	type LucideIcon,
-	LayersIcon,
 	LayoutTemplate,
 	Loader2,
+	type LucideIcon,
 	MapPin,
 	Minus,
 	Monitor,
+	MoreHorizontal,
 	MousePointer,
 	MousePointer2,
-	MoreHorizontal,
 	Package,
 	PanelLeft,
 	Plus,
@@ -56,6 +54,7 @@ import {
 	Search,
 	Smartphone,
 	Tablet,
+	TextCursorInput,
 	Trash2,
 	X,
 	Zap,
@@ -69,6 +68,8 @@ import tsWorker from "monaco-editor/esm/vs/language/typescript/ts.worker?worker&
 import {
 	type ComponentProps,
 	type FormEvent,
+	Fragment,
+	type ReactNode,
 	useCallback,
 	useEffect,
 	useMemo,
@@ -91,18 +92,18 @@ import {
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu.tsx";
 import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu.tsx";
-import {
 	Dialog,
 	DialogContent,
 	DialogFooter,
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog.tsx";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuItem,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu.tsx";
 import {
 	Empty,
 	EmptyDescription,
@@ -112,6 +113,15 @@ import {
 } from "@/components/ui/empty.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "@/components/ui/tooltip.tsx";
+import {
+	type ViewModeOption,
+	ViewModeToggle,
+} from "@/components/ui/view-mode-toggle.tsx";
 import { useMcpApp, useMcpState } from "@/context.tsx";
 import { cn } from "@/lib/utils.ts";
 import type {
@@ -134,10 +144,10 @@ import type {
 	ReadFileOutput,
 	WriteFileOutput,
 } from "../../../api/tools/files.ts";
-import type { SchemaProperties } from "./cms-form.tsx";
 import type { GitStatus } from "../../../api/tools/git.ts";
-import { PublishDialog } from "./publish-dialog.tsx";
+import type { SchemaProperties } from "./cms-form.tsx";
 import { SectionForm } from "./cms-form.tsx";
+import { PublishDialog } from "./publish-dialog.tsx";
 import type {
 	CmsInspectPayload,
 	EnvStatus,
@@ -172,6 +182,35 @@ globalThis.MonacoEnvironment = {
 };
 
 // ─── constants ────────────────────────────────────────────────────────────────
+
+type ToolbarMode = "preview" | "visual" | "code" | "cms";
+
+const TOOLBAR_MODE_OPTIONS: ViewModeOption<ToolbarMode>[] = [
+	{
+		value: "preview",
+		icon: <Eye className="h-3.5 w-3.5" />,
+		label: "Preview",
+		tooltip: "Preview",
+	},
+	{
+		value: "visual",
+		icon: <MousePointer2 className="h-3.5 w-3.5" />,
+		label: "Visual",
+		tooltip: "Visual editor",
+	},
+	{
+		value: "code",
+		icon: <FileCode2 className="h-3.5 w-3.5" />,
+		label: "Code",
+		tooltip: "Code",
+	},
+	{
+		value: "cms",
+		icon: <TextCursorInput className="h-3.5 w-3.5" />,
+		label: "CMS",
+		tooltip: "CMS sections",
+	},
+];
 
 const WARMUP_TOAST_ID = "env-warmup";
 const WARMUP_TIMEOUT_MS = 5000;
@@ -460,7 +499,11 @@ function cmsInspectScript() {
 	};
 
 	const removeOverlays = () => {
-		document.querySelectorAll(`[${WRAPPER_ATTR}]`).forEach((el) => el.remove());
+		for (const el of Array.from(
+			document.querySelectorAll(`[${WRAPPER_ATTR}]`),
+		)) {
+			el.remove();
+		}
 	};
 
 	const enable = () => {
@@ -637,11 +680,12 @@ function SortableSectionItem({
 			}}
 			{...listeners}
 			{...attributes}
+			onClick={onSelect}
 			onKeyDown={(e) => {
 				if (e.key === "Enter" || e.key === " ") onSelect();
 			}}
 			className={cn(
-				"group flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 transition-colors active:cursor-grabbing",
+				"group flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2.5 transition-colors active:cursor-grabbing",
 				saved
 					? "text-[oklch(0.45_0.15_289)] hover:bg-[oklch(0.7278_0.151_289/0.12)] dark:text-[oklch(0.78_0.15_289)] dark:hover:bg-[oklch(0.7278_0.151_289/0.15)]"
 					: multivariate
@@ -649,9 +693,9 @@ function SortableSectionItem({
 						: "text-foreground/80 hover:bg-accent hover:text-accent-foreground",
 			)}
 		>
-			<GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
+			<GripVertical className="h-4 w-4 shrink-0 text-muted-foreground/40" />
 			<LayoutTemplate
-				className="h-3.5 w-3.5 shrink-0"
+				className="h-4 w-4 shrink-0"
 				style={
 					saved
 						? { color: "oklch(0.7278 0.151 289)" }
@@ -662,60 +706,71 @@ function SortableSectionItem({
 			/>
 			<span
 				className={cn(
-					"flex-1 truncate text-xs font-medium",
+					"flex-1 truncate text-sm font-medium",
 					section.isHidden && "line-through opacity-50",
 				)}
-				onClick={onSelect}
 			>
 				{section.label}
 			</span>
-			<button
-				type="button"
-				onPointerDown={(e) => e.stopPropagation()}
-				onClick={(e) => {
-					e.stopPropagation();
-					onToggleHidden();
-				}}
-				title={section.isHidden ? "Show section" : "Hide section"}
-				className={cn(
-					"shrink-0 rounded p-0.5 transition-colors hover:bg-background/80",
-					section.isHidden
-						? "text-muted-foreground/60"
-						: "text-muted-foreground/30 opacity-0 group-hover:opacity-100",
-				)}
-			>
-				{section.isHidden ? (
-					<EyeOff className="h-3 w-3" />
-				) : (
-					<Eye className="h-3 w-3" />
-				)}
-			</button>
-			<button
-				type="button"
-				onPointerDown={(e) => e.stopPropagation()}
-				onClick={(e) => {
-					e.stopPropagation();
-					onToggleLazy();
-				}}
-				title={section.isLazy ? "Remove lazy" : "Make lazy"}
-				className={cn(
-					"shrink-0 rounded p-0.5 transition-colors hover:bg-background/80",
-					section.isLazy
-						? "text-yellow-500"
-						: "text-muted-foreground/30 opacity-0 group-hover:opacity-100",
-				)}
-			>
-				<Zap className="h-3 w-3" />
-			</button>{" "}
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<button
+						type="button"
+						onPointerDown={(e) => e.stopPropagation()}
+						onClick={(e) => {
+							e.stopPropagation();
+							onToggleHidden();
+						}}
+						className={cn(
+							"shrink-0 rounded p-1.5 transition-colors hover:bg-background/80",
+							section.isHidden
+								? "text-muted-foreground"
+								: "text-muted-foreground/60 opacity-0 group-hover:opacity-100",
+						)}
+					>
+						{section.isHidden ? (
+							<EyeOff className="h-4 w-4" />
+						) : (
+							<Eye className="h-4 w-4" />
+						)}
+					</button>
+				</TooltipTrigger>
+				<TooltipContent side="top">
+					{section.isHidden ? "Show section" : "Hide section"}
+				</TooltipContent>
+			</Tooltip>
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<button
+						type="button"
+						onPointerDown={(e) => e.stopPropagation()}
+						onClick={(e) => {
+							e.stopPropagation();
+							onToggleLazy();
+						}}
+						className={cn(
+							"shrink-0 rounded p-1.5 transition-colors hover:bg-background/80",
+							section.isLazy
+								? "text-yellow-500"
+								: "text-muted-foreground/60 opacity-0 group-hover:opacity-100",
+						)}
+					>
+						<Zap className="h-4 w-4" />
+					</button>
+				</TooltipTrigger>
+				<TooltipContent side="top">
+					{section.isLazy ? "Remove lazy loading" : "Lazy load"}
+				</TooltipContent>
+			</Tooltip>
 			<DropdownMenu>
 				<DropdownMenuTrigger asChild>
 					<button
 						type="button"
 						onPointerDown={(e) => e.stopPropagation()}
 						onClick={(e) => e.stopPropagation()}
-						className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 transition-opacity hover:bg-background/80 group-hover:opacity-100"
+						className="shrink-0 rounded p-1.5 text-muted-foreground/60 opacity-0 transition-opacity hover:bg-background/80 hover:text-foreground group-hover:opacity-100"
 					>
-						<MoreHorizontal className="h-3.5 w-3.5" />
+						<MoreHorizontal className="h-4 w-4" />
 					</button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end" className="w-32">
@@ -847,7 +902,6 @@ function MatcherPicker({
 							<div className="flex flex-1 items-center gap-2 rounded-md border px-2.5 py-1">
 								<Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
 								<input
-									autoFocus
 									value={search}
 									onChange={(e) => setSearch(e.target.value)}
 									placeholder="Search…"
@@ -1110,16 +1164,14 @@ function SortableVariantItem({
 			}}
 			{...listeners}
 			{...attributes}
+			onClick={onSelect}
 			onKeyDown={(e) => {
 				if (e.key === "Enter" || e.key === " ") onSelect();
 			}}
 			className="group flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 text-[oklch(0.45_0.15_160)] hover:bg-[oklch(0.65_0.15_160/0.12)] dark:text-[oklch(0.78_0.15_160)] dark:hover:bg-[oklch(0.65_0.15_160/0.15)]"
 		>
 			<GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
-			<div
-				className="flex flex-1 flex-col gap-0.5 overflow-hidden"
-				onClick={onSelect}
-			>
+			<div className="flex flex-1 flex-col gap-0.5 overflow-hidden">
 				<span className="truncate text-xs font-medium">{valueLabel}</span>
 				<span className="truncate text-[10px] text-muted-foreground">
 					{label}
@@ -1330,6 +1382,66 @@ function AppsPanel({
 	);
 }
 
+// ─── PanelBreadcrumb ──────────────────────────────────────────────────────────
+
+interface BreadcrumbCrumb {
+	label: string;
+	onClick?: () => void;
+	color?: string;
+}
+
+function PanelBreadcrumb({
+	crumbs,
+	actions,
+	borderColor,
+}: {
+	crumbs: BreadcrumbCrumb[];
+	actions?: ReactNode;
+	borderColor?: string;
+}) {
+	return (
+		<div
+			className="flex shrink-0 items-center gap-1.5 border-b px-5 py-3 text-sm transition-colors"
+			style={borderColor ? { borderColor } : undefined}
+		>
+			<div className="flex flex-1 items-center gap-1.5 min-w-0">
+				{crumbs.map((c, i) => {
+					const isLast = i === crumbs.length - 1;
+					return (
+						<Fragment key={`${i}-${c.label}`}>
+							{i > 0 && (
+								<ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" />
+							)}
+							{isLast || !c.onClick ? (
+								<span
+									className={cn(
+										"truncate font-semibold",
+										!isLast && "text-muted-foreground",
+									)}
+									style={isLast && c.color ? { color: c.color } : undefined}
+								>
+									{c.label}
+								</span>
+							) : (
+								<button
+									type="button"
+									onClick={c.onClick}
+									className="-mx-1 truncate rounded px-1 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+								>
+									{c.label}
+								</button>
+							)}
+						</Fragment>
+					);
+				})}
+			</div>
+			{actions && (
+				<div className="ml-2 flex shrink-0 items-center gap-1.5">{actions}</div>
+			)}
+		</div>
+	);
+}
+
 // ─── CMS panel ────────────────────────────────────────────────────────────────
 
 interface CmsPanelProps {
@@ -1453,7 +1565,7 @@ function CmsPanel({
 	useEffect(() => {
 		setEditName((data?.pageData.name as string | undefined) ?? "");
 		setEditPath((data?.pageData.path as string | undefined) ?? "");
-	}, [data?.pageKey]);
+	}, [data?.pageData.name, data?.pageData.path]);
 
 	const activeSection = data?.sections[selectedSection ?? -1];
 	const isMultivariate =
@@ -1502,143 +1614,134 @@ function CmsPanel({
 		selectedPageVariant !== null &&
 		selectedPageVariant !== undefined;
 	const activePageVariant = isPageVariantSections
-		? pageVariants![selectedPageVariant!]
+		? pageVariants?.[selectedPageVariant!]
 		: undefined;
 
 	return (
 		<div
-			className="m-4 absolute top-0 left-0 bottom-0 z-30 flex w-72 flex-col overflow-hidden rounded-xl border shadow-2xl transition-colors"
+			className="flex h-full w-full flex-col overflow-hidden bg-background transition-colors"
 			style={
 				editingGlobally
 					? {
-							borderColor: "oklch(0.7278 0.151 289 / 0.35)",
 							background: "oklch(0.97 0.01 289)",
-							boxShadow:
-								"0 25px 50px -12px oklch(0.7278 0.151 289 / 0.2), 0 0 0 1px oklch(0.7278 0.151 289 / 0.1)",
 						}
-					: { background: "var(--background, #fff)" }
+					: undefined
 			}
 		>
 			{/* Header */}
 			{isEditingVariant ? (
-				<div className="flex shrink-0 items-center gap-2 border-b px-3 py-2.5">
-					<button
-						type="button"
-						onClick={onDeselectVariant}
-						className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-						title="Back to variants"
-					>
-						<ChevronLeft className="h-3.5 w-3.5" />
-					</button>
-					<span className="flex-1 truncate text-sm font-semibold">
-						{activeSection?.variants?.[selectedVariant ?? 0]?.label ??
-							`Variant ${(selectedVariant ?? 0) + 1}`}
-					</span>
-					{autoSaving && (
-						<Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
-					)}
-				</div>
-			) : isMultivariate ? (
-				<div className="flex shrink-0 items-center gap-2 border-b px-3 py-2.5">
-					<button
-						type="button"
-						onClick={onDeselectSection}
-						className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-						title="Back to sections"
-					>
-						<ChevronLeft className="h-3.5 w-3.5" />
-					</button>
-					<span
-						className="flex-1 truncate text-sm font-semibold"
-						style={{ color: "oklch(0.45 0.15 160)" }}
-					>
-						{activeSection?.label ?? "Variants"}
-					</span>
-					<button
-						type="button"
-						onClick={onRemoveAllVariants}
-						className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-						title="Remove all variants"
-					>
-						<Trash2 className="h-3.5 w-3.5" />
-					</button>
-				</div>
-			) : isEditing ? (
-				<div
-					className="flex shrink-0 items-center gap-2 border-b px-3 py-2.5 transition-colors"
-					style={
-						editingGlobally
-							? { borderColor: "oklch(0.7278 0.151 289 / 0.2)" }
-							: undefined
+				<PanelBreadcrumb
+					crumbs={[
+						{
+							label: editName || "Page",
+							onClick: () => {
+								onDeselectVariant();
+								onDeselectSection();
+							},
+						},
+						{
+							label: activeSection?.label ?? "Variants",
+							onClick: onDeselectVariant,
+							color: "oklch(0.45 0.15 160)",
+						},
+						{
+							label:
+								activeSection?.variants?.[selectedVariant ?? 0]?.label ??
+								`Variant ${(selectedVariant ?? 0) + 1}`,
+						},
+					]}
+					actions={
+						autoSaving && (
+							<Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+						)
 					}
-				>
-					<button
-						type="button"
-						onClick={onDeselectSection}
-						className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-						title="Back to sections"
-					>
-						<ChevronLeft className="h-3.5 w-3.5" />
-					</button>
-					<span className="flex-1 truncate text-sm font-semibold">
-						{activeSection?.label ?? "Edit"}
-					</span>
-					{editingGlobally && (
-						<span
-							className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
-							style={{
-								background: "oklch(0.7278 0.151 289 / 0.12)",
-								color: "oklch(0.5 0.15 289)",
-							}}
-						>
-							editing
-						</span>
-					)}
-					{!savedBlock && !activeSection?.isMultivariate && (
+				/>
+			) : isMultivariate ? (
+				<PanelBreadcrumb
+					crumbs={[
+						{ label: editName || "Page", onClick: onDeselectSection },
+						{
+							label: activeSection?.label ?? "Variants",
+							color: "oklch(0.45 0.15 160)",
+						},
+					]}
+					actions={
 						<button
 							type="button"
-							onClick={onWrapWithVariants}
-							className="shrink-0 rounded p-1 text-muted-foreground hover:text-[oklch(0.45_0.15_160)] hover:bg-[oklch(0.65_0.15_160/0.12)]"
-							title="Turn into variant"
+							onClick={onRemoveAllVariants}
+							className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+							title="Remove all variants"
 						>
-							<Flag className="h-3.5 w-3.5" />
+							<Trash2 className="h-3.5 w-3.5" />
 						</button>
-					)}
-					{autoSaving && !savedBlock && (
-						<Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
-					)}
-				</div>
+					}
+				/>
+			) : isEditing ? (
+				<PanelBreadcrumb
+					crumbs={[
+						{ label: editName || "Page", onClick: onDeselectSection },
+						{ label: activeSection?.label ?? "Edit" },
+					]}
+					borderColor={
+						editingGlobally ? "oklch(0.7278 0.151 289 / 0.2)" : undefined
+					}
+					actions={
+						<>
+							{editingGlobally && (
+								<span
+									className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
+									style={{
+										background: "oklch(0.7278 0.151 289 / 0.12)",
+										color: "oklch(0.5 0.15 289)",
+									}}
+								>
+									editing
+								</span>
+							)}
+							{!savedBlock && !activeSection?.isMultivariate && (
+								<button
+									type="button"
+									onClick={onWrapWithVariants}
+									className="shrink-0 rounded p-1 text-muted-foreground hover:text-[oklch(0.45_0.15_160)] hover:bg-[oklch(0.65_0.15_160/0.12)]"
+									title="Turn into variant"
+								>
+									<Flag className="h-3.5 w-3.5" />
+								</button>
+							)}
+							{autoSaving && !savedBlock && (
+								<Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+							)}
+						</>
+					}
+				/>
 			) : isPageVariantSections ? (
-				<div className="flex shrink-0 items-center gap-2 border-b px-3 py-2.5">
-					<button
-						type="button"
-						onClick={onDeselectPageVariant}
-						className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-						title="Back to page variants"
-					>
-						<ChevronLeft className="h-3.5 w-3.5" />
-					</button>
-					<span
-						className="flex-1 truncate text-sm font-semibold"
-						style={{ color: "oklch(0.45 0.15 160)" }}
-					>
-						{activePageVariant?.label ?? `Variant ${selectedPageVariant! + 1}`}
-					</span>
-					{autoSaving && (
-						<Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
-					)}
-				</div>
+				<PanelBreadcrumb
+					crumbs={[
+						{ label: editName || "Page", onClick: onDeselectPageVariant },
+						{
+							label:
+								activePageVariant?.label ??
+								`Variant ${selectedPageVariant! + 1}`,
+							color: "oklch(0.45 0.15 160)",
+						},
+					]}
+					actions={
+						autoSaving && (
+							<Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+						)
+					}
+				/>
 			) : (
-				<div className="shrink-0 border-b px-3 pb-2.5 pt-2.5">
-					<div className="flex items-center gap-2">
-						<div className="flex flex-1 flex-col">
+				<div className="shrink-0 border-b px-5 py-4">
+					<div className="flex items-start gap-2">
+						<div className="flex flex-1 flex-col gap-0">
 							<input
 								value={editName}
 								onChange={(e) => {
 									setEditName(e.target.value);
 									onPageMetaChange(e.target.value, editPath);
 								}}
-								className="truncate bg-transparent text-sm font-semibold outline-none placeholder:text-muted-foreground/50 hover:bg-accent/40 focus:bg-accent/60 rounded px-1 -mx-1"
+								className="-mx-2 truncate rounded bg-transparent px-2 py-0.5 text-lg font-semibold leading-tight outline-none placeholder:text-muted-foreground/50 hover:bg-accent/40 focus:bg-accent/60"
 								placeholder="Page name"
 							/>
 							<input
@@ -1647,17 +1750,17 @@ function CmsPanel({
 									setEditPath(e.target.value);
 									onPageMetaChange(editName, e.target.value);
 								}}
-								className="-mt-1 truncate bg-transparent text-[10px] text-muted-foreground outline-none placeholder:text-muted-foreground/40 hover:bg-accent/40 focus:bg-accent/60 rounded px-1 -mx-1"
+								className="-mx-2 truncate rounded bg-transparent px-2 py-0.5 text-sm leading-tight text-muted-foreground outline-none placeholder:text-muted-foreground/40 hover:bg-accent/40 focus:bg-accent/60"
 								placeholder="/path"
 							/>
 						</div>
 						<button
 							type="button"
 							onClick={onClose}
-							className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+							className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
 							title="Exit CMS mode"
 						>
-							<X className="h-3.5 w-3.5" />
+							<X className="h-4 w-4" />
 						</button>
 					</div>
 				</div>
@@ -1717,6 +1820,7 @@ function CmsPanel({
 											/>
 											{variantRuleSchema ? (
 												<SectionForm
+													key={`variant-${selectedSection}-${selectedVariant}-rule`}
 													data={ruleData}
 													schema={variantRuleSchema}
 													schemasMap={schemasMap}
@@ -1751,6 +1855,7 @@ function CmsPanel({
 						{variantSectionOpen && (
 							<div className="px-1 pb-2">
 								<SectionForm
+									key={`variant-${selectedSection}-${selectedVariant}-value`}
 									data={sectionData}
 									schema={sectionSchema ?? undefined}
 									schemasMap={schemasMap}
@@ -1810,6 +1915,7 @@ function CmsPanel({
 				</div>
 			) : isEditing && sectionData ? (
 				<SectionForm
+					key={`section-${selectedSection}`}
 					data={sectionData}
 					schema={sectionSchema ?? undefined}
 					schemasMap={schemasMap}
@@ -1827,7 +1933,7 @@ function CmsPanel({
 				/* ── Page-level variant list ─────────────────────────────── */
 				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 					<div className="min-h-0 flex-1 overflow-y-auto p-2">
-						{pageVariants!.map((pv, i) => (
+						{pageVariants?.map((pv, i) => (
 							<div
 								key={i}
 								className="group flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-accent"
@@ -1932,6 +2038,7 @@ function CmsPanel({
 											/>
 											{pageVariantRuleSchema ? (
 												<SectionForm
+													key={`page-variant-${selectedPageVariant}-rule`}
 													data={pvRule}
 													schema={pageVariantRuleSchema}
 													schemasMap={schemasMap}
@@ -1964,28 +2071,30 @@ function CmsPanel({
 									items={sortableIds}
 									strategy={verticalListSortingStrategy}
 								>
-									{data.sections.map((section) => (
-										<SortableSectionItem
-											key={String(section.index)}
-											section={section}
-											onSelect={() => onSelectSection(section.index)}
-											onDuplicate={() => onDuplicateSection(section.index)}
-											onRemove={() => onRemoveSection(section.index)}
-											onToggleLazy={() => onToggleLazySection(section.index)}
-											onToggleHidden={() =>
-												onToggleHiddenSection(section.index)
-											}
-										/>
-									))}
+									<div className="space-y-1.5">
+										{data.sections.map((section) => (
+											<SortableSectionItem
+												key={String(section.index)}
+												section={section}
+												onSelect={() => onSelectSection(section.index)}
+												onDuplicate={() => onDuplicateSection(section.index)}
+												onRemove={() => onRemoveSection(section.index)}
+												onToggleLazy={() => onToggleLazySection(section.index)}
+												onToggleHidden={() =>
+													onToggleHiddenSection(section.index)
+												}
+											/>
+										))}
+									</div>
 								</SortableContext>
 							</DndContext>
 						)}
 					</div>
-					<div className="shrink-0 border-t p-2">
+					<div className="shrink-0 border-t p-3">
 						<button
 							type="button"
 							onClick={onAddSection}
-							className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+							className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 						>
 							<Plus className="h-3.5 w-3.5" />
 							Add section
@@ -2009,28 +2118,30 @@ function CmsPanel({
 									items={sortableIds}
 									strategy={verticalListSortingStrategy}
 								>
-									{data.sections.map((section) => (
-										<SortableSectionItem
-											key={String(section.index)}
-											section={section}
-											onSelect={() => onSelectSection(section.index)}
-											onDuplicate={() => onDuplicateSection(section.index)}
-											onRemove={() => onRemoveSection(section.index)}
-											onToggleLazy={() => onToggleLazySection(section.index)}
-											onToggleHidden={() =>
-												onToggleHiddenSection(section.index)
-											}
-										/>
-									))}
+									<div className="space-y-1.5">
+										{data.sections.map((section) => (
+											<SortableSectionItem
+												key={String(section.index)}
+												section={section}
+												onSelect={() => onSelectSection(section.index)}
+												onDuplicate={() => onDuplicateSection(section.index)}
+												onRemove={() => onRemoveSection(section.index)}
+												onToggleLazy={() => onToggleLazySection(section.index)}
+												onToggleHidden={() =>
+													onToggleHiddenSection(section.index)
+												}
+											/>
+										))}
+									</div>
 								</SortableContext>
 							</DndContext>
 						)}
 					</div>
-					<div className="shrink-0 border-t p-2">
+					<div className="shrink-0 border-t p-3">
 						<button
 							type="button"
 							onClick={onAddSection}
-							className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+							className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 						>
 							<Plus className="h-3.5 w-3.5" />
 							Add section
@@ -2213,7 +2324,7 @@ function FileExplorerWorkspace({
 	const [isSendingCodePrompt, setIsSendingCodePrompt] = useState(false);
 	const [editorTheme, setEditorTheme] = useState<"vs" | "vs-dark">(() =>
 		typeof document !== "undefined" &&
-		document.documentElement.classList.contains("dark")
+		document.documentElement.getAttribute("data-theme") === "dark"
 			? "vs-dark"
 			: "vs",
 	);
@@ -2315,10 +2426,15 @@ function FileExplorerWorkspace({
 		if (typeof document === "undefined") return;
 		const root = document.documentElement;
 		const update = () =>
-			setEditorTheme(root.classList.contains("dark") ? "vs-dark" : "vs");
+			setEditorTheme(
+				root.getAttribute("data-theme") === "dark" ? "vs-dark" : "vs",
+			);
 		update();
 		const observer = new MutationObserver(update);
-		observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+		observer.observe(root, {
+			attributes: true,
+			attributeFilter: ["data-theme"],
+		});
 		return () => observer.disconnect();
 	}, []);
 
@@ -2359,6 +2475,25 @@ function FileExplorerWorkspace({
 			setTimeout(() => visualEditorInputRef.current?.focus(), 50);
 		}
 	}, [visualEditorElement]);
+
+	useEffect(() => {
+		if (viewMode !== "visual") return;
+		const win = previewIframeRef.current?.contentWindow;
+		if (!win) return;
+		try {
+			const script = win.document.createElement("script");
+			script.textContent = `(${visualEditorScript.toString()})()`;
+			win.document.head.appendChild(script);
+		} catch {
+			win.postMessage(
+				{
+					type: "editor::inject",
+					args: { script: `(${visualEditorScript.toString()})()` },
+				},
+				"*",
+			);
+		}
+	}, [viewMode]);
 
 	useEffect(() => {
 		const win = previewIframeRef.current?.contentWindow;
@@ -2510,7 +2645,7 @@ function FileExplorerWorkspace({
 
 	useEffect(() => {
 		setCmsInspectElement(null);
-	}, [previewPath]);
+	}, []);
 
 	useEffect(() => {
 		if (codePromptSelection) {
@@ -3388,7 +3523,7 @@ function FileExplorerWorkspace({
 		const newPageVariants = cmsData.pageVariants
 			? [...cmsData.pageVariants]
 			: undefined;
-		if (newPageVariants && newPageVariants[pvIdx]) {
+		if (newPageVariants?.[pvIdx]) {
 			newPageVariants[pvIdx] = {
 				...newPageVariants[pvIdx],
 				rule: newRule,
@@ -3688,7 +3823,7 @@ function FileExplorerWorkspace({
 		): Set<string> => {
 			if (!node || typeof node !== "object") return result;
 			if (Array.isArray(node)) {
-				node.forEach((item) => collectResolveTypes(item, result));
+				for (const item of node) collectResolveTypes(item, result);
 				return result;
 			}
 			const obj = node as Record<string, unknown>;
@@ -5394,6 +5529,12 @@ function FileExplorerWorkspace({
 		}
 	}, [app, userEnv, pagesLoaded, pagesLoading]);
 
+	// Eager-load pages once the env is ready so the URL bar can show page names
+	useEffect(() => {
+		if (envStatus !== "ready" || pagesLoaded || pagesLoading) return;
+		void fetchPages();
+	}, [envStatus, pagesLoaded, pagesLoading, fetchPages]);
+
 	const handleVisualEditorSend = useCallback(async () => {
 		if (!visualEditorElement || !visualEditorInput.trim() || !app) return;
 		const p = visualEditorElement;
@@ -5489,94 +5630,42 @@ function FileExplorerWorkspace({
 				<div className="min-h-0 flex-1 overflow-hidden rounded-lg border bg-card">
 					<div className="flex h-full min-h-0 flex-col">
 						{/* ── preview mode banner ── */}
-						<div className="flex items-center justify-center gap-2 border-b bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+						<div className="flex items-center justify-center gap-2 border-b bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-500 dark:bg-blue-950 dark:text-blue-400">
 							<Eye className="h-3 w-3" />
 							Preview mode — changes won't affect production unless you publish
 						</div>
 
 						{/* ── toolbar ── */}
-						<div className="flex items-center justify-between gap-3 border-b px-3 py-2">
-							{/* View mode switcher */}
-							<div className="flex shrink-0 items-center rounded-lg border bg-muted/40">
-								<button
-									type="button"
-									className={cn(
-										"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
-										viewMode === "preview" && !cmsOpen
-											? "bg-background text-foreground shadow-xs"
-											: "text-muted-foreground hover:text-foreground",
-									)}
-									onClick={() => {
-										if (cmsOpen) handleCmsPanelClose();
-										setViewMode("preview");
+						<div className="flex h-12 shrink-0 items-center gap-3 border-b bg-background px-3">
+							{/* Group 1: view mode toggle + more (left, fixed width) */}
+							<div className="flex shrink-0 items-center gap-1">
+								<ViewModeToggle
+									value={cmsOpen ? "cms" : viewMode}
+									onValueChange={(mode: ToolbarMode) => {
+										if (mode === "cms") {
+											if (!cmsOpen) handleCmsToggle();
+										} else {
+											if (cmsOpen) handleCmsPanelClose();
+											setViewMode(mode);
+										}
 									}}
-									disabled={envStatus !== "ready"}
-									title="Preview"
-								>
-									<Eye className="h-3.5 w-3.5" />
-								</button>
-								<button
-									type="button"
-									className={cn(
-										"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
-										viewMode === "visual" && !cmsOpen
-											? "bg-background text-foreground shadow-xs"
-											: "text-muted-foreground hover:text-foreground",
-									)}
-									onClick={() => {
-										if (cmsOpen) handleCmsPanelClose();
-										setViewMode("visual");
-									}}
-									disabled={envStatus !== "ready"}
-									title="Visual editor — click any element to ask the AI about it"
-								>
-									<MousePointer2 className="h-3.5 w-3.5" />
-								</button>
-								<button
-									type="button"
-									className={cn(
-										"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
-										viewMode === "code" && !cmsOpen
-											? "bg-background text-foreground shadow-xs"
-											: "text-muted-foreground hover:text-foreground",
-									)}
-									onClick={() => {
-										if (cmsOpen) handleCmsPanelClose();
-										setViewMode("code");
-									}}
-									title="Code"
-								>
-									<FileCode2 className="h-3.5 w-3.5" />
-								</button>
-								<button
-									type="button"
-									className={cn(
-										"flex shrink-0 items-center gap-1.5 px-2.5 py-1.5 text-sm transition-colors",
-										cmsOpen
-											? "bg-primary/10 text-primary"
-											: "text-muted-foreground hover:text-foreground",
-									)}
-									onClick={handleCmsToggle}
-									disabled={envStatus !== "ready"}
-									title="CMS — browse and edit page sections"
-								>
-									<LayersIcon className="h-3.5 w-3.5" />
-								</button>
-								{/* More options */}
+									options={TOOLBAR_MODE_OPTIONS.map((o) => ({
+										...o,
+										disabled: o.value !== "code" && envStatus !== "ready",
+									}))}
+									size="sm"
+								/>
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
-										<button
-											type="button"
+										<Button
+											variant="ghost"
+											size="icon-sm"
 											className={cn(
-												"flex items-center rounded-md px-2.5 py-1.5 text-sm transition-colors",
-												appsOpen
-													? "bg-background text-foreground shadow-xs"
-													: "text-muted-foreground hover:text-foreground",
+												appsOpen && "bg-accent text-accent-foreground",
 											)}
-											title="More options"
 										>
 											<MoreHorizontal className="h-3.5 w-3.5" />
-										</button>
+										</Button>
 									</DropdownMenuTrigger>
 									<DropdownMenuContent align="start" className="w-44">
 										<DropdownMenuItem
@@ -5590,70 +5679,90 @@ function FileExplorerWorkspace({
 								</DropdownMenu>
 							</div>
 
-							{/* URL bar */}
-							<div
-								ref={pagesContainerRef}
-								className="relative min-w-0 flex-1 max-w-xl"
-							>
-								<form
-									onSubmit={(e) => {
-										setPagesOpen(false);
-										handlePreviewPathSubmit(e);
-									}}
+							{/* Group 2: nav + url (centered, takes remaining space) */}
+							<div className="flex min-w-0 flex-1 items-center justify-center gap-0.5">
+								<div
+									ref={pagesContainerRef}
+									className="relative flex h-9 min-w-0 max-w-full items-center gap-0.5 rounded-md border bg-background px-0.5"
 								>
-									<div className="flex h-7 items-center gap-2 rounded-lg border bg-background px-0.5">
-										<button
-											type="button"
-											className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-											onClick={handleTogglePreviewViewport}
-											title={
-												previewViewport === "desktop"
-													? "Switch to mobile preview"
-													: "Switch to desktop preview"
-											}
-										>
-											{previewViewport === "desktop" ? (
-												<Monitor className="h-3.5 w-3.5" />
-											) : (
-												<Smartphone className="h-3.5 w-3.5" />
-											)}
-										</button>
-										<Input
-											value={previewPathInput}
-											onChange={(event) =>
-												setPreviewPathInput(event.target.value)
-											}
-											onClick={() => {
-												if (envStatus === "ready") {
-													setPagesOpen(true);
-													void fetchPages();
-												}
-											}}
-											onKeyDown={(e) => {
-												if (e.key === "Escape") setPagesOpen(false);
-											}}
-											placeholder="/"
-											className="h-7 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
-										/>
-										<div className="flex items-center gap-0.5">
-											<button
-												type="button"
-												className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-												onClick={handleOpenPreviewInNewTab}
-												disabled={!envUrl || envStatus !== "ready"}
-												title="Open in new tab"
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												variant="ghost"
+												size="icon-sm"
+												onClick={handleTogglePreviewViewport}
 											>
-												<ExternalLink className="h-3.5 w-3.5" />
-											</button>
-											<button
-												type="button"
-												className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+												{previewViewport === "desktop" ? (
+													<Monitor className="h-3.5 w-3.5" />
+												) : (
+													<Smartphone className="h-3.5 w-3.5" />
+												)}
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent side="bottom">
+											{previewViewport === "desktop"
+												? "Switch to mobile"
+												: "Switch to desktop"}
+										</TooltipContent>
+									</Tooltip>
+
+									{/* URL pill */}
+									<div className="ml-1 w-[28rem] min-w-0 shrink">
+										<form
+											onSubmit={(e) => {
+												setPagesOpen(false);
+												handlePreviewPathSubmit(e);
+											}}
+										>
+											<label className="flex h-8 min-w-0 cursor-text items-center gap-1.5 rounded-md px-0.5 transition-colors duration-200 hover:bg-accent/40">
+												{(() => {
+													const norm = (s: string) =>
+														s.replace(/\/+$/, "") || "/";
+													const target = norm(previewPathInput);
+													const matchedName =
+														activeGlobalSection?.name ??
+														pages.find((p) => norm(p.path) === target)?.name ??
+														null;
+													return (
+														<>
+															<Input
+																value={previewPathInput}
+																onChange={(event) =>
+																	setPreviewPathInput(event.target.value)
+																}
+																onClick={() => {
+																	if (envStatus === "ready") {
+																		setPagesOpen(true);
+																		void fetchPages();
+																	}
+																}}
+																onKeyDown={(e) => {
+																	if (e.key === "Escape") setPagesOpen(false);
+																}}
+																placeholder="/"
+																style={{
+																	width: `${Math.max(previewPathInput.length, 1) + 1}ch`,
+																}}
+																className="h-7 shrink-0 !border-0 !bg-transparent px-0 text-[12px] text-foreground/88 !shadow-none focus-visible:!ring-0 dark:!bg-transparent"
+															/>
+															{matchedName && (
+																<span className="pointer-events-none min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
+																	{matchedName}
+																</span>
+															)}
+														</>
+													);
+												})()}
+											</label>
+										</form>
+									</div>
+
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												variant="ghost"
+												size="icon-sm"
 												onClick={handleRefresh}
-												title={
-													viewMode === "preview"
-														? "Refresh preview"
-														: "Refresh file list"
-												}
 											>
 												<RefreshCw
 													className={cn(
@@ -5662,134 +5771,152 @@ function FileExplorerWorkspace({
 															"animate-spin",
 													)}
 												/>
-											</button>
-										</div>
-									</div>
-								</form>
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent side="bottom">
+											{viewMode === "preview" ? "Refresh preview" : "Refresh"}
+										</TooltipContent>
+									</Tooltip>
 
-								{pagesOpen && (
-									<div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-md border bg-popover shadow-md">
-										<div className="p-1 border-b">
-											<button
-												type="button"
-												className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
-												onMouseDown={(e) => {
-													e.preventDefault();
-													setPagesOpen(false);
-													setCreatePageDialogOpen(true);
-												}}
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												variant="ghost"
+												size="icon-sm"
+												onClick={handleOpenPreviewInNewTab}
+												disabled={!envUrl || envStatus !== "ready"}
 											>
-												<Plus className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-												<span className="flex-1 font-medium">
-													Create new page
-												</span>
-											</button>
-										</div>
-										{pagesLoading ? (
-											<div className="flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground">
-												<Loader2 className="h-3.5 w-3.5 animate-spin" />
-												Loading pages…
+												<ArrowUpRight className="h-3.5 w-3.5" />
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent side="bottom">
+											Open in new tab
+										</TooltipContent>
+									</Tooltip>
+
+									{pagesOpen && (
+										<div className="absolute left-0 right-0 top-full z-50 mt-1.5 overflow-hidden rounded-lg border bg-popover shadow-lg">
+											<div className="p-1.5 border-b">
+												<button
+													type="button"
+													className="flex w-full items-center gap-2.5 rounded-md px-3 py-2.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+													onMouseDown={(e) => {
+														e.preventDefault();
+														setPagesOpen(false);
+														setCreatePageDialogOpen(true);
+													}}
+												>
+													<Plus className="h-4 w-4 shrink-0 text-muted-foreground" />
+													<span className="flex-1 font-medium">
+														Create new page
+													</span>
+												</button>
 											</div>
-										) : filteredPages.length === 0 &&
-											filteredGlobalSections.length === 0 ? (
-											<div className="px-3 py-3 text-xs text-muted-foreground">
-												{pages.length === 0 && globalSections.length === 0
-													? "No pages found in this environment."
-													: "No results match your search."}
-											</div>
-										) : (
-											<ScrollArea className="max-h-64">
-												{filteredPages.length > 0 && (
-													<div className="p-1">
-														{filteredPages.map((page) => (
-															<button
-																key={page.key}
-																type="button"
-																className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
-																onMouseDown={(e) => {
-																	e.preventDefault();
-																	setDirectPreviewUrl(null);
-																	setActiveGlobalSection(null);
-																	setPreviewPathInput(page.path);
-																	setPreviewPath(page.path);
-																	setPagesOpen(false);
-																}}
-															>
-																<LayoutTemplate className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-																<span className="flex-1 truncate font-medium">
-																	{page.name}
-																</span>
-																<span className="shrink-0 text-xs text-muted-foreground">
-																	{page.path}
-																</span>
-															</button>
-														))}
-													</div>
-												)}
-												{filteredGlobalSections.length > 0 && (
-													<div
-														className={cn(
-															"p-1",
-															filteredPages.length > 0 && "border-t",
-														)}
-													>
-														<div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-															Global components
+											{pagesLoading ? (
+												<div className="flex items-center justify-center gap-2 px-4 py-5 text-xs text-muted-foreground">
+													<Loader2 className="h-3.5 w-3.5 animate-spin" />
+													Loading pages…
+												</div>
+											) : filteredPages.length === 0 &&
+												filteredGlobalSections.length === 0 ? (
+												<div className="px-4 py-5 text-center text-xs text-muted-foreground">
+													{pages.length === 0 && globalSections.length === 0
+														? "No pages found in this environment."
+														: "No results match your search."}
+												</div>
+											) : (
+												<ScrollArea className="max-h-80">
+													{filteredPages.length > 0 && (
+														<div className="p-1.5">
+															{filteredPages.map((page) => (
+																<button
+																	key={page.key}
+																	type="button"
+																	className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+																	onMouseDown={(e) => {
+																		e.preventDefault();
+																		setDirectPreviewUrl(null);
+																		setActiveGlobalSection(null);
+																		setPreviewPathInput(page.path);
+																		setPreviewPath(page.path);
+																		setPagesOpen(false);
+																	}}
+																>
+																	<LayoutTemplate className="h-4 w-4 shrink-0 text-muted-foreground" />
+																	<span className="flex-1 truncate font-medium">
+																		{page.name}
+																	</span>
+																	<span className="shrink-0 text-xs text-muted-foreground">
+																		{page.path}
+																	</span>
+																</button>
+															))}
 														</div>
-														{filteredGlobalSections.map((section) => (
-															<button
-																key={section.key}
-																type="button"
-																className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
-																onMouseDown={(e) => {
-																	e.preventDefault();
-																	if (!envUrl) return;
-																	const props = btoa(
-																		JSON.stringify({
-																			path: "/",
-																			sections: [
-																				{ __resolveType: section.key },
-																			],
-																		}),
-																	);
-																	const url = `${envUrl}/live/previews/website/pages/Page.tsx?props=${encodeURIComponent(props)}&path=/&pathTemplate=/&__cb=${crypto.randomUUID()}`;
-																	setDirectPreviewUrl(url);
-																	setActiveGlobalSection(section);
-																	setPreviewPathInput(section.name);
-																	setPagesOpen(false);
-																}}
-															>
-																<Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-																<span className="flex-1 truncate font-medium">
-																	{section.name}
-																</span>
-																<span className="shrink-0 text-xs text-muted-foreground truncate max-w-[180px]">
-																	{section.resolveType
-																		.split("/")
-																		.pop()
-																		?.replace(/\.tsx?$/, "")}
-																</span>
-															</button>
-														))}
-													</div>
-												)}
-											</ScrollArea>
-										)}
-									</div>
-								)}
+													)}
+													{filteredGlobalSections.length > 0 && (
+														<div
+															className={cn(
+																"p-1.5",
+																filteredPages.length > 0 && "border-t",
+															)}
+														>
+															<div className="px-3 py-2 text-xs font-medium text-muted-foreground">
+																Global components
+															</div>
+															{filteredGlobalSections.map((section) => (
+																<button
+																	key={section.key}
+																	type="button"
+																	className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+																	onMouseDown={(e) => {
+																		e.preventDefault();
+																		if (!envUrl) return;
+																		const props = btoa(
+																			JSON.stringify({
+																				path: "/",
+																				sections: [
+																					{ __resolveType: section.key },
+																				],
+																			}),
+																		);
+																		const url = `${envUrl}/live/previews/website/pages/Page.tsx?props=${encodeURIComponent(props)}&path=/&pathTemplate=/&__cb=${crypto.randomUUID()}`;
+																		setDirectPreviewUrl(url);
+																		setActiveGlobalSection(section);
+																		setPreviewPathInput(section.name);
+																		setPagesOpen(false);
+																	}}
+																>
+																	<Globe className="h-4 w-4 shrink-0 text-muted-foreground" />
+																	<span className="flex-1 truncate font-medium">
+																		{section.name}
+																	</span>
+																	<span className="shrink-0 text-xs text-muted-foreground truncate max-w-[180px]">
+																		{section.resolveType
+																			.split("/")
+																			.pop()
+																			?.replace(/\.tsx?$/, "")}
+																	</span>
+																</button>
+															))}
+														</div>
+													)}
+												</ScrollArea>
+											)}
+										</div>
+									)}
+								</div>
 							</div>
 
-							{/* Publish button */}
-							<div className="shrink-0">
-								<Button
-									type="button"
-									className="h-9 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-all hover:opacity-95 hover:shadow-md"
-									onClick={() => setPublishDialogOpen(true)}
-									disabled={envStatus !== "ready"}
-								>
-									Publish
-								</Button>
-							</div>
+							{/* Right: Publish (fixed width) */}
+							<Button
+								type="button"
+								size="sm"
+								className="shrink-0"
+								onClick={() => setPublishDialogOpen(true)}
+								disabled={envStatus !== "ready"}
+							>
+								Publish
+							</Button>
 						</div>
 
 						{/* ── main content ── */}
@@ -6172,448 +6299,449 @@ function FileExplorerWorkspace({
 										</>
 									) : (
 										/* Preview / visual editor */
-										<div className="min-h-0 flex-1 overflow-hidden bg-muted/10">
-											{envStatus === "warming-up" ? (
-												<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background/80">
-													<div className="flex flex-col items-center gap-3 text-muted-foreground">
-														<Loader2 className="h-5 w-5 animate-spin" />
-														<span className="text-sm">
-															Starting your Live Preview…
-														</span>
-													</div>
-												</div>
-											) : envStatus === "waiting" ? (
-												<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background/80">
-													<div className="flex flex-col items-center gap-3 text-muted-foreground">
-														<Loader2 className="h-5 w-5 animate-spin" />
-														<span className="text-sm">
-															Preview is starting. This can take a moment...
-														</span>
-													</div>
-												</div>
-											) : previewError ? (
-												<PreviewErrorFallback />
-											) : (
-												<div className="flex h-full items-center justify-center overflow-auto bg-background">
-													<div
-														className={cn(
-															"relative h-full min-h-[480px] overflow-hidden bg-background shadow-sm transition-[width,border-radius] duration-300 ease-out",
-															previewViewport === "mobile"
-																? "w-[390px] max-w-full"
-																: "w-full",
-														)}
-													>
-														{(isLoadingPreview || !previewUrl) && (
-															<div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
-																<div className="flex items-center gap-3 text-muted-foreground">
-																	<Loader2 className="h-4 w-4 animate-spin" />
-																	<span className="text-sm">
-																		Loading preview...
-																	</span>
-																</div>
-															</div>
-														)}
-
-														{/* CMS panel */}
-														{cmsOpen && cmsPanelVisible && (
-															<CmsPanel
-																loading={cmsLoading}
-																error={cmsError}
-																data={cmsData}
-																selectedSection={cmsSelectedSection}
-																sectionData={cmsSectionData}
-																sectionSchema={cmsSectionSchema}
-																schemasMap={cmsSchemasMap}
-																autoSaving={cmsAutoSaving}
-																savedBlock={cmsSavedBlock}
-																onSelectSection={handleCmsSelectSection}
-																onDeselectSection={handleCmsDeselectSection}
-																onChangeSectionData={handleCmsSectionDataChange}
-																onReorderSections={(src, dest) =>
-																	void handleCmsReorderSections(src, dest)
-																}
-																onDuplicateSection={(idx) =>
-																	void handleCmsDuplicateSection(idx)
-																}
-																onRemoveSection={(idx) =>
-																	void handleCmsRemoveSection(idx)
-																}
-																onToggleLazySection={(idx) =>
-																	void handleCmsToggleLazySection(idx)
-																}
-																onToggleHiddenSection={(idx) =>
-																	void handleCmsToggleHiddenSection(idx)
-																}
-																onPageMetaChange={handleCmsPageMetaChange}
-																onAddSection={() => void handleCmsAddSection()}
-																onClose={handleCmsPanelClose}
-																onMinimize={handleCmsPanelMinimize}
-																onSavedBlockEdit={handleSavedBlockEdit}
-																onSavedBlockCancel={handleSavedBlockCancel}
-																onSavedBlockSave={() =>
-																	void handleSavedBlockSave()
-																}
-																selectedVariant={cmsSelectedVariant}
-																variantRuleSchema={cmsVariantRuleSchema}
-																onSelectVariant={handleCmsSelectVariant}
-																onDeselectVariant={handleCmsDeselectVariant}
-																onChangeVariantData={handleChangeVariantData}
-																onReorderVariants={handleReorderVariants}
-																availableMatchers={cmsAvailableMatchers}
-																onFetchMatchers={() => void fetchMatchersList()}
-																onChangeMatcherType={handleChangeMatcherType}
-																onWrapWithVariants={handleWrapWithVariants}
-																onAddVariant={handleAddVariant}
-																onDuplicateVariant={handleDuplicateVariant}
-																onRemoveVariant={handleRemoveVariant}
-																onRemoveAllVariants={handleRemoveAllVariants}
-																pageVariants={cmsData?.pageVariants}
-																selectedPageVariant={cmsSelectedPageVariant}
-																onSelectPageVariant={handleSelectPageVariant}
-																onDeselectPageVariant={
-																	handleDeselectPageVariant
-																}
-																pageVariantRuleSchema={cmsPageVariantRuleSchema}
-																onChangePageVariantRule={
-																	handleChangePageVariantRule
-																}
-																onChangePageVariantMatcherType={
-																	handleChangePageVariantMatcherType
-																}
-																onAddPageVariant={handleAddPageVariant}
-																onDuplicatePageVariant={
-																	handleDuplicatePageVariant
-																}
-																onRemovePageVariant={handleRemovePageVariant}
-															/>
-														)}
-
-														{/* Minimized CMS restore button */}
-														{cmsOpen && !cmsPanelVisible && (
-															<button
-																type="button"
-																onClick={() => setCmsPanelVisible(true)}
-																className="absolute top-4 left-4 z-30 flex items-center gap-1.5 rounded-lg border bg-background/95 px-2.5 py-1.5 text-xs font-medium text-muted-foreground shadow-lg backdrop-blur-sm transition-colors hover:text-foreground"
-																title="Show CMS panel"
-															>
-																<PanelLeft className="h-3.5 w-3.5" />
-																<span>CMS</span>
-															</button>
-														)}
-
-														{/* Apps panel */}
-														{appsOpen && (
-															<AppsPanel
-																loading={appsLoading}
-																data={appsData}
-																installingApps={installingApps}
-																onClose={handleAppsToggle}
-																onSelectApp={(blockId, configPath, title) =>
-																	void handleOpenAppConfig(
-																		blockId,
-																		configPath,
-																		title,
-																	)
-																}
-																onInstall={(name, vendor) =>
-																	void handleInstallApp(name, vendor)
-																}
-																onUninstall={(name, vendor) =>
-																	void handleUninstallApp(name, vendor)
-																}
-															/>
-														)}
-
-														{/* Add section modal */}
-														<Dialog
-															open={addSectionOpen}
-															onOpenChange={setAddSectionOpen}
-														>
-															<DialogContent className="flex max-h-[80vh] w-[1000px] flex-col gap-0 p-0">
-																<DialogHeader className="shrink-0 border-b px-4 py-3">
-																	<span className="text-sm font-semibold">
-																		Add section
-																	</span>
-																</DialogHeader>
-																<div className="shrink-0 border-b px-3 py-2">
-																	<Input
-																		autoFocus
-																		placeholder="Search sections…"
-																		className="h-7 text-xs"
-																		value={addSectionSearch}
-																		onChange={(e) =>
-																			setAddSectionSearch(e.target.value)
-																		}
-																	/>
-																</div>
-																<div className="min-h-0 flex-1 overflow-y-auto p-3">
-																	{addSectionLoading ? (
-																		<div className="flex items-center justify-center py-10">
-																			<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-																		</div>
-																	) : (
-																		(() => {
-																			const q = addSectionSearch.toLowerCase();
-																			const filtered = (
-																				addSectionSections?.sections ?? []
-																			).filter(
-																				(s) =>
-																					!q ||
-																					s.title.toLowerCase().includes(q) ||
-																					s.resolveType
-																						.toLowerCase()
-																						.includes(q),
-																			);
-																			const globals = filtered.filter(
-																				(s) => s.isGlobal,
-																			);
-																			const types = filtered.filter(
-																				(s) => !s.isGlobal,
-																			);
-
-																			if (filtered.length === 0) {
-																				return (
-																					<div className="py-8 text-center text-xs text-muted-foreground">
-																						No sections found
-																					</div>
-																				);
-																			}
-
-																			const SectionCard = (
-																				s: (typeof filtered)[0],
-																			) => (
-																				<button
-																					key={s.blockId ?? s.resolveType}
-																					type="button"
-																					onClick={() =>
-																						void handleCmsConfirmAddSection(
-																							s.resolveType,
-																							s.blockId,
-																						)
-																					}
-																					className="group flex flex-col overflow-hidden rounded-lg border bg-card text-left transition-all hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-																				>
-																					{/* Preview iframe */}
-																					<div className="relative h-32 w-full overflow-hidden bg-muted/30">
-																						{s.previewUrl ? (
-																							<iframe
-																								src={s.previewUrl}
-																								loading="lazy"
-																								scrolling="no"
-																								className="pointer-events-none absolute left-0 top-0 origin-top-left border-none"
-																								style={{
-																									width: "1280px",
-																									height: "640px",
-																									transform: "scale(0.234)",
-																									transformOrigin: "top left",
-																								}}
-																								title={s.title}
-																							/>
-																						) : (
-																							<div className="flex h-full items-center justify-center">
-																								<span className="text-xs text-muted-foreground">
-																									No preview
-																								</span>
-																							</div>
-																						)}
-																						{s.isGlobal && (
-																							<div className="absolute right-1.5 top-1.5 rounded-full bg-primary/90 px-1.5 py-0.5 text-[9px] font-medium text-primary-foreground">
-																								Global
-																							</div>
-																						)}
-																					</div>
-																					{/* Info */}
-																					<div className="flex flex-col gap-0.5 px-2.5 py-2">
-																						<span className="truncate text-xs font-medium text-foreground group-hover:text-primary">
-																							{s.title}
-																						</span>
-																						{s.description && (
-																							<span className="line-clamp-1 text-[10px] text-muted-foreground">
-																								{s.description}
-																							</span>
-																						)}
-																					</div>
-																				</button>
-																			);
-
-																			return (
-																				<div className="space-y-4">
-																					{globals.length > 0 && (
-																						<div className="space-y-2">
-																							<p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-																								Global sections
-																							</p>
-																							<div className="grid grid-cols-3 gap-2">
-																								{globals.map(SectionCard)}
-																							</div>
-																						</div>
-																					)}
-																					{types.length > 0 && (
-																						<div className="space-y-2">
-																							{globals.length > 0 && (
-																								<p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-																									Sections
-																								</p>
-																							)}
-																							<div className="grid grid-cols-3 gap-2">
-																								{types.map(SectionCard)}
-																							</div>
-																						</div>
-																					)}
-																				</div>
-																			);
-																		})()
-																	)}
-																</div>
-															</DialogContent>
-														</Dialog>
-
-														{viewMode === "visual" &&
-															previewUrl &&
-															!visualEditorElement && (
-																<div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 rounded-full border border-violet-400/40 bg-violet-500/90 px-3 py-1 text-xs font-medium text-white shadow-md backdrop-blur-sm pointer-events-none select-none">
-																	<MousePointer2 className="h-3 w-3" />
-																	Click any element to ask the AI
-																</div>
-															)}
-
-														{viewMode === "visual" &&
-															visualEditorElement &&
-															(() => {
-																const POPUP_W = 320;
-																const POPUP_H = 44;
-																const PAD = 12;
-																const { x, y } = visualEditorElement.position;
-																const { width: vw, height: vh } =
-																	visualEditorElement.viewport;
-																const left = Math.max(
-																	PAD,
-																	Math.min(x - POPUP_W / 2, vw - POPUP_W - PAD),
-																);
-																const isNearBottom = y / vh > 0.68;
-																const top = isNearBottom
-																	? Math.max(PAD, y - POPUP_H - 18)
-																	: Math.min(y + 18, vh - POPUP_H - PAD);
-																return (
-																	<div
-																		className="absolute z-30 pointer-events-none"
-																		style={{
-																			left: `${(left / vw) * 100}%`,
-																			top: `${(top / vh) * 100}%`,
-																			width: `${POPUP_W}px`,
-																		}}
-																	>
-																		<form
-																			className="pointer-events-auto flex w-full items-center gap-1.5 rounded-full border border-border bg-background/95 px-3 py-1.5 shadow-xl backdrop-blur-sm"
-																			onSubmit={(e) => {
-																				e.preventDefault();
-																				void handleVisualEditorSend();
-																			}}
-																		>
-																			<input
-																				ref={visualEditorInputRef}
-																				type="text"
-																				value={visualEditorInput}
-																				onChange={(e) =>
-																					setVisualEditorInput(e.target.value)
-																				}
-																				onKeyDown={(e) => {
-																					if (e.key === "Escape") {
-																						setVisualEditorElement(null);
-																						setVisualEditorInput("");
-																					}
-																				}}
-																				placeholder="Ask the AI..."
-																				className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-																			/>
-																			<button
-																				type="submit"
-																				disabled={
-																					!visualEditorInput.trim() ||
-																					isSendingVisual
-																				}
-																				className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-30"
-																				title="Send"
-																			>
-																				{isSendingVisual ? (
-																					<Loader2 className="h-3 w-3 animate-spin" />
-																				) : (
-																					<svg
-																						width="10"
-																						height="10"
-																						viewBox="0 0 10 10"
-																						fill="none"
-																						aria-hidden="true"
-																					>
-																						<title>Send</title>
-																						<path
-																							d="M5 9V1M1 5l4-4 4 4"
-																							stroke="currentColor"
-																							strokeWidth="1.5"
-																							strokeLinecap="round"
-																							strokeLinejoin="round"
-																						/>
-																					</svg>
-																				)}
-																			</button>
-																		</form>
-																	</div>
-																);
-															})()}
-
-														{cmsOpen &&
-															cmsInspectActive &&
-															previewUrl &&
-															!cmsInspectElement && (
-																<div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 rounded-full border border-sky-400/40 bg-sky-500/90 px-3 py-1 text-xs font-medium text-white shadow-md backdrop-blur-sm pointer-events-none select-none">
-																	<Crosshair className="h-3 w-3" />
-																	Click any section to inspect
-																</div>
-															)}
-
-														{previewUrl ? (
-															<iframe
-																key={previewUrl}
-																ref={previewIframeRef}
-																src={previewSrc ?? previewUrl}
-																title={`Preview of ${userEnv} at ${previewPath}`}
-																className="h-full w-full border-0"
-																onLoad={() => {
-																	const win =
-																		previewIframeRef.current?.contentWindow;
-																	if (!win) return;
-
-																	const scriptToInject =
-																		cmsOpen && cmsInspectActive
-																			? cmsInspectScript
-																			: viewMode === "visual"
-																				? visualEditorScript
-																				: null;
-
-																	if (!scriptToInject) return;
-
-																	try {
-																		const script =
-																			win.document.createElement("script");
-																		script.textContent = `(${scriptToInject.toString()})()`;
-																		win.document.head.appendChild(script);
-																	} catch {
-																		win.postMessage(
-																			{
-																				type: "editor::inject",
-																				args: {
-																					script: `(${scriptToInject.toString()})()`,
-																				},
-																			},
-																			"*",
-																		);
-																	}
-																}}
-															/>
-														) : null}
-													</div>
+										<div className="min-h-0 flex-1 overflow-hidden bg-muted/10 flex">
+											{/* Docked CMS panel */}
+											{cmsOpen && cmsPanelVisible && (
+												<div className="flex h-full w-[42%] min-w-[420px] max-w-[600px] shrink-0 flex-col overflow-hidden border-r bg-background">
+													<CmsPanel
+														loading={cmsLoading}
+														error={cmsError}
+														data={cmsData}
+														selectedSection={cmsSelectedSection}
+														sectionData={cmsSectionData}
+														sectionSchema={cmsSectionSchema}
+														schemasMap={cmsSchemasMap}
+														autoSaving={cmsAutoSaving}
+														savedBlock={cmsSavedBlock}
+														onSelectSection={handleCmsSelectSection}
+														onDeselectSection={handleCmsDeselectSection}
+														onChangeSectionData={handleCmsSectionDataChange}
+														onReorderSections={(src, dest) =>
+															void handleCmsReorderSections(src, dest)
+														}
+														onDuplicateSection={(idx) =>
+															void handleCmsDuplicateSection(idx)
+														}
+														onRemoveSection={(idx) =>
+															void handleCmsRemoveSection(idx)
+														}
+														onToggleLazySection={(idx) =>
+															void handleCmsToggleLazySection(idx)
+														}
+														onToggleHiddenSection={(idx) =>
+															void handleCmsToggleHiddenSection(idx)
+														}
+														onPageMetaChange={handleCmsPageMetaChange}
+														onAddSection={() => void handleCmsAddSection()}
+														onClose={handleCmsPanelClose}
+														onMinimize={handleCmsPanelMinimize}
+														onSavedBlockEdit={handleSavedBlockEdit}
+														onSavedBlockCancel={handleSavedBlockCancel}
+														onSavedBlockSave={() => void handleSavedBlockSave()}
+														selectedVariant={cmsSelectedVariant}
+														variantRuleSchema={cmsVariantRuleSchema}
+														onSelectVariant={handleCmsSelectVariant}
+														onDeselectVariant={handleCmsDeselectVariant}
+														onChangeVariantData={handleChangeVariantData}
+														onReorderVariants={handleReorderVariants}
+														availableMatchers={cmsAvailableMatchers}
+														onFetchMatchers={() => void fetchMatchersList()}
+														onChangeMatcherType={handleChangeMatcherType}
+														onWrapWithVariants={handleWrapWithVariants}
+														onAddVariant={handleAddVariant}
+														onDuplicateVariant={handleDuplicateVariant}
+														onRemoveVariant={handleRemoveVariant}
+														onRemoveAllVariants={handleRemoveAllVariants}
+														pageVariants={cmsData?.pageVariants}
+														selectedPageVariant={cmsSelectedPageVariant}
+														onSelectPageVariant={handleSelectPageVariant}
+														onDeselectPageVariant={handleDeselectPageVariant}
+														pageVariantRuleSchema={cmsPageVariantRuleSchema}
+														onChangePageVariantRule={
+															handleChangePageVariantRule
+														}
+														onChangePageVariantMatcherType={
+															handleChangePageVariantMatcherType
+														}
+														onAddPageVariant={handleAddPageVariant}
+														onDuplicatePageVariant={handleDuplicatePageVariant}
+														onRemovePageVariant={handleRemovePageVariant}
+													/>
 												</div>
 											)}
+											<div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+												{envStatus === "warming-up" ? (
+													<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background/80">
+														<div className="flex flex-col items-center gap-3 text-muted-foreground">
+															<Loader2 className="h-5 w-5 animate-spin" />
+															<span className="text-sm">
+																Starting your Live Preview…
+															</span>
+														</div>
+													</div>
+												) : envStatus === "waiting" ? (
+													<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background/80">
+														<div className="flex flex-col items-center gap-3 text-muted-foreground">
+															<Loader2 className="h-5 w-5 animate-spin" />
+															<span className="text-sm">
+																Preview is starting. This can take a moment...
+															</span>
+														</div>
+													</div>
+												) : previewError ? (
+													<PreviewErrorFallback />
+												) : (
+													<div className="flex h-full items-center justify-center overflow-auto bg-background">
+														<div
+															className={cn(
+																"relative h-full min-h-[480px] overflow-hidden bg-background shadow-sm transition-[width,border-radius] duration-300 ease-out",
+																previewViewport === "mobile"
+																	? "w-[390px] max-w-full"
+																	: "w-full",
+															)}
+														>
+															{(isLoadingPreview || !previewUrl) && (
+																<div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80">
+																	<div className="flex items-center gap-3 text-muted-foreground">
+																		<Loader2 className="h-4 w-4 animate-spin" />
+																		<span className="text-sm">
+																			Loading preview...
+																		</span>
+																	</div>
+																</div>
+															)}
+
+															{/* Minimized CMS restore button */}
+															{cmsOpen && !cmsPanelVisible && (
+																<button
+																	type="button"
+																	onClick={() => setCmsPanelVisible(true)}
+																	className="absolute top-4 left-4 z-30 flex items-center gap-1.5 rounded-lg border bg-background/95 px-2.5 py-1.5 text-xs font-medium text-muted-foreground shadow-lg backdrop-blur-sm transition-colors hover:text-foreground"
+																	title="Show CMS panel"
+																>
+																	<PanelLeft className="h-3.5 w-3.5" />
+																	<span>CMS</span>
+																</button>
+															)}
+
+															{/* Apps panel */}
+															{appsOpen && (
+																<AppsPanel
+																	loading={appsLoading}
+																	data={appsData}
+																	installingApps={installingApps}
+																	onClose={handleAppsToggle}
+																	onSelectApp={(blockId, configPath, title) =>
+																		void handleOpenAppConfig(
+																			blockId,
+																			configPath,
+																			title,
+																		)
+																	}
+																	onInstall={(name, vendor) =>
+																		void handleInstallApp(name, vendor)
+																	}
+																	onUninstall={(name, vendor) =>
+																		void handleUninstallApp(name, vendor)
+																	}
+																/>
+															)}
+
+															{/* Add section modal */}
+															<Dialog
+																open={addSectionOpen}
+																onOpenChange={setAddSectionOpen}
+															>
+																<DialogContent className="flex max-h-[80vh] w-[1000px] flex-col gap-0 p-0">
+																	<DialogHeader className="shrink-0 border-b px-4 py-3">
+																		<span className="text-sm font-semibold">
+																			Add section
+																		</span>
+																	</DialogHeader>
+																	<div className="shrink-0 border-b px-3 py-2">
+																		<Input
+																			autoFocus
+																			placeholder="Search sections…"
+																			className="h-7 text-xs"
+																			value={addSectionSearch}
+																			onChange={(e) =>
+																				setAddSectionSearch(e.target.value)
+																			}
+																		/>
+																	</div>
+																	<div className="min-h-0 flex-1 overflow-y-auto p-3">
+																		{addSectionLoading ? (
+																			<div className="flex items-center justify-center py-10">
+																				<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+																			</div>
+																		) : (
+																			(() => {
+																				const q =
+																					addSectionSearch.toLowerCase();
+																				const filtered = (
+																					addSectionSections?.sections ?? []
+																				).filter(
+																					(s) =>
+																						!q ||
+																						s.title.toLowerCase().includes(q) ||
+																						s.resolveType
+																							.toLowerCase()
+																							.includes(q),
+																				);
+																				const globals = filtered.filter(
+																					(s) => s.isGlobal,
+																				);
+																				const types = filtered.filter(
+																					(s) => !s.isGlobal,
+																				);
+
+																				if (filtered.length === 0) {
+																					return (
+																						<div className="py-8 text-center text-xs text-muted-foreground">
+																							No sections found
+																						</div>
+																					);
+																				}
+
+																				const SectionCard = (
+																					s: (typeof filtered)[0],
+																				) => (
+																					<button
+																						key={s.blockId ?? s.resolveType}
+																						type="button"
+																						onClick={() =>
+																							void handleCmsConfirmAddSection(
+																								s.resolveType,
+																								s.blockId,
+																							)
+																						}
+																						className="group flex flex-col overflow-hidden rounded-lg border bg-card text-left transition-all hover:border-primary/50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+																					>
+																						{/* Preview iframe */}
+																						<div className="relative h-32 w-full overflow-hidden bg-muted/30">
+																							{s.previewUrl ? (
+																								<iframe
+																									src={s.previewUrl}
+																									loading="lazy"
+																									scrolling="no"
+																									className="pointer-events-none absolute left-0 top-0 origin-top-left border-none"
+																									style={{
+																										width: "1280px",
+																										height: "640px",
+																										transform: "scale(0.234)",
+																										transformOrigin: "top left",
+																									}}
+																									title={s.title}
+																								/>
+																							) : (
+																								<div className="flex h-full items-center justify-center">
+																									<span className="text-xs text-muted-foreground">
+																										No preview
+																									</span>
+																								</div>
+																							)}
+																							{s.isGlobal && (
+																								<div className="absolute right-1.5 top-1.5 rounded-full bg-primary/90 px-1.5 py-0.5 text-[9px] font-medium text-primary-foreground">
+																									Global
+																								</div>
+																							)}
+																						</div>
+																						{/* Info */}
+																						<div className="flex flex-col gap-0.5 px-2.5 py-2">
+																							<span className="truncate text-xs font-medium text-foreground group-hover:text-primary">
+																								{s.title}
+																							</span>
+																							{s.description && (
+																								<span className="line-clamp-1 text-[10px] text-muted-foreground">
+																									{s.description}
+																								</span>
+																							)}
+																						</div>
+																					</button>
+																				);
+
+																				return (
+																					<div className="space-y-4">
+																						{globals.length > 0 && (
+																							<div className="space-y-2">
+																								<p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+																									Global sections
+																								</p>
+																								<div className="grid grid-cols-3 gap-2">
+																									{globals.map(SectionCard)}
+																								</div>
+																							</div>
+																						)}
+																						{types.length > 0 && (
+																							<div className="space-y-2">
+																								{globals.length > 0 && (
+																									<p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+																										Sections
+																									</p>
+																								)}
+																								<div className="grid grid-cols-3 gap-2">
+																									{types.map(SectionCard)}
+																								</div>
+																							</div>
+																						)}
+																					</div>
+																				);
+																			})()
+																		)}
+																	</div>
+																</DialogContent>
+															</Dialog>
+
+															{viewMode === "visual" &&
+																previewUrl &&
+																!visualEditorElement && (
+																	<div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 rounded-full border border-violet-400/40 bg-violet-500/90 px-3 py-1 text-xs font-medium text-white shadow-md backdrop-blur-sm pointer-events-none select-none">
+																		<MousePointer2 className="h-3 w-3" />
+																		Click any element to ask the AI
+																	</div>
+																)}
+
+															{viewMode === "visual" &&
+																visualEditorElement &&
+																(() => {
+																	const POPUP_W = 320;
+																	const POPUP_H = 44;
+																	const PAD = 12;
+																	const { x, y } = visualEditorElement.position;
+																	const { width: vw, height: vh } =
+																		visualEditorElement.viewport;
+																	const left = Math.max(
+																		PAD,
+																		Math.min(
+																			x - POPUP_W / 2,
+																			vw - POPUP_W - PAD,
+																		),
+																	);
+																	const isNearBottom = y / vh > 0.68;
+																	const top = isNearBottom
+																		? Math.max(PAD, y - POPUP_H - 18)
+																		: Math.min(y + 18, vh - POPUP_H - PAD);
+																	return (
+																		<div
+																			className="absolute z-30 pointer-events-none"
+																			style={{
+																				left: `${(left / vw) * 100}%`,
+																				top: `${(top / vh) * 100}%`,
+																				width: `${POPUP_W}px`,
+																			}}
+																		>
+																			<form
+																				className="pointer-events-auto flex w-full items-center gap-1.5 rounded-full border border-border bg-background/95 px-3 py-1.5 shadow-xl backdrop-blur-sm"
+																				onSubmit={(e) => {
+																					e.preventDefault();
+																					void handleVisualEditorSend();
+																				}}
+																			>
+																				<input
+																					ref={visualEditorInputRef}
+																					type="text"
+																					value={visualEditorInput}
+																					onChange={(e) =>
+																						setVisualEditorInput(e.target.value)
+																					}
+																					onKeyDown={(e) => {
+																						if (e.key === "Escape") {
+																							setVisualEditorElement(null);
+																							setVisualEditorInput("");
+																						}
+																					}}
+																					placeholder="Ask the AI..."
+																					className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+																				/>
+																				<button
+																					type="submit"
+																					disabled={
+																						!visualEditorInput.trim() ||
+																						isSendingVisual
+																					}
+																					className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-30"
+																					title="Send"
+																				>
+																					{isSendingVisual ? (
+																						<Loader2 className="h-3 w-3 animate-spin" />
+																					) : (
+																						<svg
+																							width="10"
+																							height="10"
+																							viewBox="0 0 10 10"
+																							fill="none"
+																							aria-hidden="true"
+																						>
+																							<title>Send</title>
+																							<path
+																								d="M5 9V1M1 5l4-4 4 4"
+																								stroke="currentColor"
+																								strokeWidth="1.5"
+																								strokeLinecap="round"
+																								strokeLinejoin="round"
+																							/>
+																						</svg>
+																					)}
+																				</button>
+																			</form>
+																		</div>
+																	);
+																})()}
+
+															{cmsOpen &&
+																cmsInspectActive &&
+																previewUrl &&
+																!cmsInspectElement && (
+																	<div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5 rounded-full border border-sky-400/40 bg-sky-500/90 px-3 py-1 text-xs font-medium text-white shadow-md backdrop-blur-sm pointer-events-none select-none">
+																		<Crosshair className="h-3 w-3" />
+																		Click any section to inspect
+																	</div>
+																)}
+
+															{previewUrl ? (
+																<iframe
+																	key={previewUrl}
+																	ref={previewIframeRef}
+																	src={previewSrc ?? previewUrl}
+																	title={`Preview of ${userEnv} at ${previewPath}`}
+																	className="h-full w-full border-0"
+																	onLoad={() => {
+																		const win =
+																			previewIframeRef.current?.contentWindow;
+																		if (!win) return;
+
+																		const scriptToInject =
+																			cmsOpen && cmsInspectActive
+																				? cmsInspectScript
+																				: viewMode === "visual"
+																					? visualEditorScript
+																					: null;
+
+																		if (!scriptToInject) return;
+
+																		try {
+																			const script =
+																				win.document.createElement("script");
+																			script.textContent = `(${scriptToInject.toString()})()`;
+																			win.document.head.appendChild(script);
+																		} catch {
+																			win.postMessage(
+																				{
+																					type: "editor::inject",
+																					args: {
+																						script: `(${scriptToInject.toString()})()`,
+																					},
+																				},
+																				"*",
+																			);
+																		}
+																	}}
+																/>
+															) : null}
+														</div>
+													</div>
+												)}
+											</div>
 										</div>
 									)}
 								</div>

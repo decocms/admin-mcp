@@ -47,16 +47,16 @@ export function VtexISProductListingPageModal({
 
 	return (
 		<Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-			<DialogContent className="flex max-h-[85vh] w-[500px] flex-col gap-0 p-0 overflow-hidden">
+			<DialogContent className="flex max-h-[85vh] w-[520px] flex-col gap-0 p-0 overflow-hidden">
 				{/* Header */}
-				<div className="shrink-0 border-b px-5 py-4 bg-[#F71963]/5">
+				<div className="shrink-0 border-b px-6 py-5 bg-[#F71963]/5">
 					<div className="flex items-center gap-3">
 						<VtexLogo />
 						<div className="min-w-0">
 							<p className="text-sm font-semibold leading-none text-foreground">
 								IS Product Listing Page
 							</p>
-							<p className="text-[10px] font-mono text-muted-foreground mt-1 truncate">
+							<p className="text-[11px] font-mono text-muted-foreground mt-1.5 truncate">
 								vtex/loaders/intelligentSearch/productListingPage.ts
 							</p>
 						</div>
@@ -64,8 +64,8 @@ export function VtexISProductListingPageModal({
 				</div>
 
 				{/* Fields */}
-				<div className="overflow-y-auto max-h-[60vh]">
-					<div className="px-5 py-4 space-y-4">
+				<div className="overflow-y-auto max-h-[65vh]">
+					<div className="px-6 py-5 space-y-5">
 						<TextField
 							label="Query"
 							description="Search query string"
@@ -142,19 +142,13 @@ export function VtexISProductListingPageModal({
 				</div>
 
 				{/* Footer */}
-				<DialogFooter className="shrink-0 border-t px-5 py-3">
-					<Button
-						variant="outline"
-						size="sm"
-						onClick={onClose}
-						className="h-7 text-xs"
-					>
+				<DialogFooter className="shrink-0 border-t px-6 py-4">
+					<Button variant="outline" onClick={onClose}>
 						Cancel
 					</Button>
 					<Button
-						size="sm"
 						onClick={() => onSave(draft)}
-						className="h-7 text-xs bg-[#F71963] hover:bg-[#F71963]/90 text-white"
+						className="bg-[#F71963] hover:bg-[#F71963]/90 text-white"
 					>
 						Save changes
 					</Button>

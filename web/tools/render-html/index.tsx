@@ -1,11 +1,11 @@
-import { useMcpState } from "@/context.tsx";
+import { Badge } from "@/components/ui/badge.tsx";
 import {
 	Card,
 	CardContent,
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card.tsx";
-import { Badge } from "@/components/ui/badge.tsx";
+import { useMcpState } from "@/context.tsx";
 import type {
 	RenderHtmlInput,
 	RenderHtmlOutput,
@@ -81,8 +81,8 @@ export default function RenderHtmlPage() {
 	// tool-result: show the HTML from output
 	const html =
 		state.status === "tool-input"
-			? state.toolInput?.html ?? ""
-			: state.toolResult?.html ?? "";
+			? (state.toolInput?.html ?? "")
+			: (state.toolResult?.html ?? "");
 
 	if (!html) {
 		return (

@@ -19,15 +19,11 @@ export const podLogsInputSchema = z.object({
 	podIndex: z
 		.number()
 		.optional()
-		.describe(
-			"StatefulSet pod index. Defaults to 0 (first replica).",
-		),
+		.describe("StatefulSet pod index. Defaults to 0 (first replica)."),
 	containerName: z
 		.string()
 		.optional()
-		.describe(
-			'Container name inside the pod. Defaults to "app".',
-		),
+		.describe('Container name inside the pod. Defaults to "app".'),
 });
 export type PodLogsInput = z.infer<typeof podLogsInputSchema>;
 

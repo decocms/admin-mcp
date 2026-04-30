@@ -54,11 +54,11 @@ export function VtexStringArrayEditor({
 	onChange: (v: string[]) => void;
 }) {
 	return (
-		<div className="space-y-1.5">
+		<div className="space-y-2">
 			<FieldLabel label={label} description={description} />
-			<div className="space-y-1.5">
+			<div className="space-y-2">
 				{value.map((item, i) => (
-					<div key={i} className="flex gap-1.5 items-center">
+					<div key={i} className="flex gap-2 items-center">
 						<Input
 							value={item}
 							onChange={(e) => {
@@ -67,23 +67,23 @@ export function VtexStringArrayEditor({
 								onChange(next);
 							}}
 							placeholder={placeholder}
-							className="h-7 text-xs flex-1"
+							className="h-9 text-sm flex-1"
 						/>
 						<button
 							type="button"
 							onClick={() => onChange(value.filter((_, j) => j !== i))}
-							className="shrink-0 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+							className="shrink-0 p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
 						>
-							<Trash2 className="h-3 w-3" />
+							<Trash2 className="h-3.5 w-3.5" />
 						</button>
 					</div>
 				))}
 				<button
 					type="button"
 					onClick={() => onChange([...value, ""])}
-					className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mt-0.5"
+					className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mt-1"
 				>
-					<Plus className="h-3 w-3" />
+					<Plus className="h-3.5 w-3.5" />
 					Add item
 				</button>
 			</div>
@@ -111,11 +111,11 @@ export function VtexKeyValueArrayEditor({
 	onChange: (v: KeyValuePair[]) => void;
 }) {
 	return (
-		<div className="space-y-1.5">
+		<div className="space-y-2">
 			<FieldLabel label={label} description={description} />
-			<div className="space-y-1.5">
+			<div className="space-y-2">
 				{value.map((item, i) => (
-					<div key={i} className="flex gap-1.5 items-center">
+					<div key={i} className="flex gap-2 items-center">
 						<Input
 							value={item.key}
 							onChange={(e) => {
@@ -124,7 +124,7 @@ export function VtexKeyValueArrayEditor({
 								onChange(next);
 							}}
 							placeholder={keyPlaceholder}
-							className="h-7 text-xs flex-1"
+							className="h-9 text-sm flex-1"
 						/>
 						<Input
 							value={item.value}
@@ -134,23 +134,23 @@ export function VtexKeyValueArrayEditor({
 								onChange(next);
 							}}
 							placeholder={valuePlaceholder}
-							className="h-7 text-xs flex-1"
+							className="h-9 text-sm flex-1"
 						/>
 						<button
 							type="button"
 							onClick={() => onChange(value.filter((_, j) => j !== i))}
-							className="shrink-0 p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+							className="shrink-0 p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
 						>
-							<Trash2 className="h-3 w-3" />
+							<Trash2 className="h-3.5 w-3.5" />
 						</button>
 					</div>
 				))}
 				<button
 					type="button"
 					onClick={() => onChange([...value, { key: "", value: "" }])}
-					className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mt-0.5"
+					className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mt-1"
 				>
-					<Plus className="h-3 w-3" />
+					<Plus className="h-3.5 w-3.5" />
 					Add facet
 				</button>
 			</div>
@@ -170,13 +170,13 @@ export function SortField({
 	onChange: (v: string) => void;
 }) {
 	return (
-		<div className="space-y-1">
+		<div className="space-y-2">
 			<FieldLabel label="Sort" description="Product sort order" />
 			<Select
 				value={value === "" ? EMPTY_SENTINEL : value}
 				onValueChange={(v) => onChange(v === EMPTY_SENTINEL ? "" : v)}
 			>
-				<SelectTrigger className="h-7 text-xs">
+				<SelectTrigger className="h-9 text-sm">
 					<SelectValue placeholder="Relevance" />
 				</SelectTrigger>
 				<SelectContent>
@@ -184,7 +184,7 @@ export function SortField({
 						<SelectItem
 							key={opt.value === "" ? EMPTY_SENTINEL : opt.value}
 							value={opt.value === "" ? EMPTY_SENTINEL : opt.value}
-							className="text-xs"
+							className="text-sm"
 						>
 							{opt.label}
 						</SelectItem>
