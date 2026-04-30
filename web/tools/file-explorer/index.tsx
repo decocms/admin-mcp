@@ -5843,7 +5843,7 @@ function FileExplorerWorkspace({
 																	}}
 																>
 																	<LayoutTemplate className="h-4 w-4 shrink-0 text-muted-foreground" />
-																	<span className="flex-1 truncate font-medium">
+																	<span className="min-w-0 flex-1 truncate font-medium">
 																		{page.name}
 																	</span>
 																	<span className="shrink-0 text-xs text-muted-foreground">
@@ -5887,10 +5887,10 @@ function FileExplorerWorkspace({
 																	}}
 																>
 																	<Globe className="h-4 w-4 shrink-0 text-muted-foreground" />
-																	<span className="flex-1 truncate font-medium">
+																	<span className="min-w-0 flex-1 truncate font-medium">
 																		{section.name}
 																	</span>
-																	<span className="shrink-0 text-xs text-muted-foreground truncate max-w-[180px]">
+																	<span className="shrink-0 text-xs text-muted-foreground">
 																		{section.resolveType
 																			.split("/")
 																			.pop()
