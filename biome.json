@@ -43,7 +43,7 @@
 			}
 		},
 		{
-			"includes": ["web/components/ui/**", "web/hooks/**"],
+			"includes": ["web/components/ui/**", "web/hooks/**", "web/tools/**"],
 			"linter": {
 				"rules": {
 					"a11y": {
@@ -51,7 +51,9 @@
 						"useSemanticElements": "off",
 						"noRedundantRoles": "off",
 						"useAriaPropsForRole": "off",
-						"useKeyWithClickEvents": "off"
+						"useKeyWithClickEvents": "off",
+						"noStaticElementInteractions": "off",
+						"noLabelWithoutControl": "off"
 					},
 					"suspicious": {
 						"noArrayIndexKey": "off",

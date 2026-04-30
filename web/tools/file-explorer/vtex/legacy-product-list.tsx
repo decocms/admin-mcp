@@ -286,10 +286,7 @@ export function VtexLegacyProductListModal({
 
 				{/* Footer */}
 				<DialogFooter className="shrink-0 border-t px-6 py-4">
-					<Button
-						variant="outline"
-						onClick={onClose}
-					>
+					<Button variant="outline" onClick={onClose}>
 						Cancel
 					</Button>
 					<Button

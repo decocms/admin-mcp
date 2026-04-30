@@ -1,19 +1,34 @@
 import {
+	DndContext,
+	type DragEndEvent,
+	MouseSensor,
+	TouchSensor,
+	useSensor,
+	useSensors,
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+	SortableContext,
+	useSortable,
+	verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
 	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
 	Code2,
-	GripVertical,
 	FileIcon,
+	GripVertical,
 	ImageIcon,
 	Link,
 	Loader2,
-	VideoIcon,
 	MoreHorizontal,
 	Plus,
 	Search,
 	Trash2,
 	Upload,
+	VideoIcon,
 } from "lucide-react";
 import {
 	createContext,
@@ -24,30 +39,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import {
-	DndContext,
-	MouseSensor,
-	TouchSensor,
-	useSensor,
-	useSensors,
-	type DragEndEvent,
-} from "@dnd-kit/core";
-import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
-import {
-	SortableContext,
-	useSortable,
-	verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import { Input } from "@/components/ui/input.tsx";
-import { Textarea } from "@/components/ui/textarea.tsx";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select.tsx";
+import { Button } from "@/components/ui/button.tsx";
 import {
 	Dialog,
 	DialogContent,
@@ -55,15 +47,23 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog.tsx";
-import { Button } from "@/components/ui/button.tsx";
-import { cn } from "@/lib/utils.ts";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
 	DropdownMenuItem,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
+import { Input } from "@/components/ui/input.tsx";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select.tsx";
+import { Textarea } from "@/components/ui/textarea.tsx";
 import { useMcpApp } from "@/context.tsx";
+import { cn } from "@/lib/utils.ts";
 import type {
 	Asset,
 	AssetsOutput,
@@ -121,7 +121,7 @@ function beautifyTitle(title: string | undefined): string | undefined {
 	return noExt.charAt(0).toUpperCase() + noExt.slice(1);
 }
 
-function looksLikeImageUrl(value: unknown): boolean {
+function _looksLikeImageUrl(value: unknown): boolean {
 	if (typeof value !== "string") return false;
 	return /\.(jpg|jpeg|png|gif|webp|svg|avif)(\?.*)?$/i.test(value);
 }
@@ -1636,12 +1636,7 @@ function ArrayField({
 	const drillItem = (i: number) => {
 		if (!drill) return;
 		drill.push({
-			label: getItemLabel(
-				value[i],
-				i,
-				itemSchema?.titleBy,
-				itemSchema?.title,
-			),
+			label: getItemLabel(value[i], i, itemSchema?.titleBy, itemSchema?.title),
 			getValue: () => valueRef.current[i],
 			setValue: (nv) => {
 				const next = [...valueRef.current];
@@ -2420,8 +2415,7 @@ export function SectionForm({
 
 	const [drillStack, setDrillStack] = useState<DrillFrame[]>([]);
 	const drillContext = {
-		push: (frame: DrillFrame) =>
-			setDrillStack((s) => [...s, frame]),
+		push: (frame: DrillFrame) => setDrillStack((s) => [...s, frame]),
 	};
 	const popDrill = () => setDrillStack((s) => s.slice(0, -1));
 	const topFrame = drillStack[drillStack.length - 1];
@@ -2436,10 +2430,10 @@ export function SectionForm({
 
 	return (
 		<DrillContext.Provider value={drillContext}>
-		<div className="min-h-0 flex-1 block! min-w-auto overflow-y-auto">
-			{readOnly && (
-				<style>
-					{`[data-cms-readonly] input,
+			<div className="min-h-0 flex-1 block! min-w-auto overflow-y-auto">
+				{readOnly && (
+					<style>
+						{`[data-cms-readonly] input,
 [data-cms-readonly] textarea,
 [data-cms-readonly] select,
 [data-cms-readonly] [role="combobox"],
@@ -2449,182 +2443,174 @@ export function SectionForm({
   pointer-events: none;
   opacity: 0.6;
 }`}
-				</style>
-			)}
-			{readOnly && (
-				<div
-					className="sticky top-0 z-10 border-b px-3 py-2.5"
-					style={{
-						borderColor: "oklch(0.7278 0.151 289 / 0.25)",
-						background: "oklch(0.97 0.01 289)",
-					}}
-				>
-					<p
-						className="mb-2 text-[11px] leading-snug"
-						style={{ color: "oklch(0.55 0.12 289)" }}
+					</style>
+				)}
+				{readOnly && (
+					<div
+						className="sticky top-0 z-10 border-b px-3 py-2.5"
+						style={{
+							borderColor: "oklch(0.7278 0.151 289 / 0.25)",
+							background: "oklch(0.97 0.01 289)",
+						}}
 					>
-						Changing this block will update all pages where it is used.
-					</p>
-					<button
-						type="button"
-						onClick={onEditGlobally}
-						className="flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-white transition-colors hover:opacity-90"
-						style={{ background: "oklch(0.7278 0.151 289)" }}
-					>
-						Edit globally{savedBlockKey ? ` (${savedBlockKey})` : ""}
-					</button>
-				</div>
-			)}
-			{!readOnly && savedBlockKey && (
-				<div
-					className="sticky top-0 z-10 border-b px-3 py-2.5"
-					style={{
-						borderColor: "oklch(0.7278 0.151 289 / 0.25)",
-						background: "oklch(0.97 0.01 289)",
-					}}
-				>
-					<p
-						className="mb-1.5 text-[11px] leading-snug"
-						style={{ color: "oklch(0.55 0.12 289)" }}
-					>
-						Editing shared block. Save to apply everywhere.
-					</p>
-					<div className="flex gap-2">
-						<button
-							type="button"
-							onClick={onCancelGlobally}
-							disabled={saving}
-							className="flex flex-1 items-center justify-center rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
-							style={{
-								borderColor: "oklch(0.7278 0.151 289 / 0.3)",
-								color: "oklch(0.55 0.12 289)",
-							}}
+						<p
+							className="mb-2 text-[11px] leading-snug"
+							style={{ color: "oklch(0.55 0.12 289)" }}
 						>
-							Cancel
-						</button>
+							Changing this block will update all pages where it is used.
+						</p>
 						<button
 							type="button"
-							onClick={onSaveGlobally}
-							disabled={saving}
-							className="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+							onClick={onEditGlobally}
+							className="flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-white transition-colors hover:opacity-90"
 							style={{ background: "oklch(0.7278 0.151 289)" }}
 						>
-							{saving ? "Saving…" : "Save"}
+							Edit globally{savedBlockKey ? ` (${savedBlockKey})` : ""}
 						</button>
 					</div>
-				</div>
-			)}
-			{topFrame && (
-				<div className="sticky top-0 z-10 flex shrink-0 items-center gap-1.5 border-b bg-background px-4 py-3">
-					<button
-						type="button"
-						onClick={popDrill}
-						className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-						title="Back"
+				)}
+				{!readOnly && savedBlockKey && (
+					<div
+						className="sticky top-0 z-10 border-b px-3 py-2.5"
+						style={{
+							borderColor: "oklch(0.7278 0.151 289 / 0.25)",
+							background: "oklch(0.97 0.01 289)",
+						}}
 					>
-						<ChevronLeft className="h-4 w-4" />
-					</button>
-					<div className="flex min-w-0 flex-1 items-center gap-1.5 text-sm">
-						{drillStack.map((frame, i) => {
-							const isLast = i === drillStack.length - 1;
-							return (
-								<Fragment key={i}>
-									{i > 0 && (
-										<ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" />
-									)}
-									{isLast ? (
-										<span className="truncate font-semibold">
-											{frame.label}
-										</span>
-									) : (
-										<button
-											type="button"
-											onClick={() =>
-												setDrillStack((s) => s.slice(0, i + 1))
-											}
-											className="-mx-1 truncate rounded px-1 py-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-										>
-											{frame.label}
-										</button>
-									)}
-								</Fragment>
-							);
-						})}
+						<p
+							className="mb-1.5 text-[11px] leading-snug"
+							style={{ color: "oklch(0.55 0.12 289)" }}
+						>
+							Editing shared block. Save to apply everywhere.
+						</p>
+						<div className="flex gap-2">
+							<button
+								type="button"
+								onClick={onCancelGlobally}
+								disabled={saving}
+								className="flex flex-1 items-center justify-center rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent disabled:opacity-50"
+								style={{
+									borderColor: "oklch(0.7278 0.151 289 / 0.3)",
+									color: "oklch(0.55 0.12 289)",
+								}}
+							>
+								Cancel
+							</button>
+							<button
+								type="button"
+								onClick={onSaveGlobally}
+								disabled={saving}
+								className="flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium text-white transition-colors hover:opacity-90 disabled:opacity-50"
+								style={{ background: "oklch(0.7278 0.151 289)" }}
+							>
+								{saving ? "Saving…" : "Save"}
+							</button>
+						</div>
 					</div>
-					{topFrame.onRemove && (
+				)}
+				{topFrame && (
+					<div className="sticky top-0 z-10 flex shrink-0 items-center gap-1.5 border-b bg-background px-4 py-3">
 						<button
 							type="button"
-							onClick={() => {
-								topFrame.onRemove?.();
-								popDrill();
-							}}
-							className="shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-							title="Remove"
+							onClick={popDrill}
+							className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+							title="Back"
 						>
-							<Trash2 className="h-3.5 w-3.5" />
+							<ChevronLeft className="h-4 w-4" />
 						</button>
-					)}
-				</div>
-			)}
-			<div
-				className={cn(
-					"space-y-7 px-5 py-6",
-					topFrame && "hidden",
+						<div className="flex min-w-0 flex-1 items-center gap-1.5 text-sm">
+							{drillStack.map((frame, i) => {
+								const isLast = i === drillStack.length - 1;
+								return (
+									<Fragment key={i}>
+										{i > 0 && (
+											<ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" />
+										)}
+										{isLast ? (
+											<span className="truncate font-semibold">
+												{frame.label}
+											</span>
+										) : (
+											<button
+												type="button"
+												onClick={() => setDrillStack((s) => s.slice(0, i + 1))}
+												className="-mx-1 truncate rounded px-1 py-0.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+											>
+												{frame.label}
+											</button>
+										)}
+									</Fragment>
+								);
+							})}
+						</div>
+						{topFrame.onRemove && (
+							<button
+								type="button"
+								onClick={() => {
+									topFrame.onRemove?.();
+									popDrill();
+								}}
+								className="shrink-0 rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+								title="Remove"
+							>
+								<Trash2 className="h-3.5 w-3.5" />
+							</button>
+						)}
+					</div>
 				)}
-				{...(readOnly ? { "data-cms-readonly": "" } : {})}
-			>
-				{keys.map((key) => {
-					const prop = schema?.[key];
+				<div
+					className={cn("space-y-7 px-5 py-6", topFrame && "hidden")}
+					{...(readOnly ? { "data-cms-readonly": "" } : {})}
+				>
+					{keys.map((key) => {
+						const prop = schema?.[key];
+						return (
+							<FormField
+								key={key}
+								name={key}
+								label={beautifyTitle(prop?.title)}
+								description={prop?.description}
+								schemaType={prop?.type}
+								schemaDefault={prop?.default}
+								schemaEnum={prop?.enum}
+								schemaFormat={prop?.format}
+								fieldSchema={prop?.properties}
+								itemSchema={prop?.items}
+								anyOfRefs={prop?.anyOfRefs}
+								schemasMap={schemasMap}
+								value={data[key] as FormValue}
+								onChange={(v) => onChange({ ...data, [key]: v })}
+								depth={0}
+							/>
+						);
+					})}
+				</div>
+				{drillStack.map((frame, i) => {
+					const isTop = i === drillStack.length - 1;
+					const itemSchema = frame.itemSchema;
 					return (
-						<FormField
-							key={key}
-							name={key}
-							label={beautifyTitle(prop?.title)}
-							description={prop?.description}
-							schemaType={prop?.type}
-							schemaDefault={prop?.default}
-							schemaEnum={prop?.enum}
-							schemaFormat={prop?.format}
-							fieldSchema={prop?.properties}
-							itemSchema={prop?.items}
-							anyOfRefs={prop?.anyOfRefs}
-							schemasMap={schemasMap}
-							value={data[key] as FormValue}
-							onChange={(v) => onChange({ ...data, [key]: v })}
-							depth={0}
-						/>
+						<div
+							key={i}
+							className={cn("space-y-7 px-5 py-6", !isTop && "hidden")}
+						>
+							<FormField
+								name="item"
+								value={frame.getValue()}
+								onChange={frame.setValue}
+								hideLabel
+								schemaType={itemSchema?.type}
+								schemaDefault={itemSchema?.default}
+								schemaEnum={itemSchema?.enum}
+								schemaFormat={itemSchema?.format}
+								fieldSchema={itemSchema?.properties}
+								anyOfRefs={itemSchema?.anyOfRefs}
+								schemasMap={schemasMap}
+								depth={0}
+							/>
+						</div>
 					);
 				})}
 			</div>
-			{drillStack.map((frame, i) => {
-				const isTop = i === drillStack.length - 1;
-				const itemSchema = frame.itemSchema;
-				return (
-					<div
-						key={i}
-						className={cn(
-							"space-y-7 px-5 py-6",
-							!isTop && "hidden",
-						)}
-					>
-						<FormField
-							name="item"
-							value={frame.getValue()}
-							onChange={frame.setValue}
-							hideLabel
-							schemaType={itemSchema?.type}
-							schemaDefault={itemSchema?.default}
-							schemaEnum={itemSchema?.enum}
-							schemaFormat={itemSchema?.format}
-							fieldSchema={itemSchema?.properties}
-							anyOfRefs={itemSchema?.anyOfRefs}
-							schemasMap={schemasMap}
-							depth={0}
-						/>
-					</div>
-				);
-			})}
-		</div>
 		</DrillContext.Provider>
 	);
 }

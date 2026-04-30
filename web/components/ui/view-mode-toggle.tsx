@@ -1,10 +1,10 @@
-import { cn } from "@/lib/utils.ts";
 import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "@/components/ui/tooltip.tsx";
+import { cn } from "@/lib/utils.ts";
 
 export interface ViewModeOption<T extends string = string> {
 	value: T;
@@ -59,7 +59,8 @@ export function ViewModeToggle<T extends string = string>({
 		const parent = el.parentElement;
 		if (parent) {
 			for (const sibling of Array.from(parent.children)) {
-				if (sibling !== el && sibling instanceof HTMLElement) ro.observe(sibling);
+				if (sibling !== el && sibling instanceof HTMLElement)
+					ro.observe(sibling);
 			}
 		}
 		return () => ro.disconnect();
