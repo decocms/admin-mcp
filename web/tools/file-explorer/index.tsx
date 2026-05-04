@@ -78,11 +78,6 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge.tsx";
-import {
-	ResizableHandle,
-	ResizablePanel,
-	ResizablePanelGroup,
-} from "@/components/ui/resizable.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
 	Card,
@@ -117,6 +112,11 @@ import {
 	EmptyTitle,
 } from "@/components/ui/empty.tsx";
 import { Input } from "@/components/ui/input.tsx";
+import {
+	ResizableHandle,
+	ResizablePanel,
+	ResizablePanelGroup,
+} from "@/components/ui/resizable.tsx";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import {
 	Tooltip,
@@ -6382,7 +6382,9 @@ function FileExplorerWorkspace({
 													/>
 												</ResizablePanel>
 											)}
-											{cmsOpen && cmsPanelVisible && <ResizableHandle withHandle />}
+											{cmsOpen && cmsPanelVisible && (
+												<ResizableHandle withHandle />
+											)}
 											<ResizablePanel className="flex h-full min-w-0 flex-col overflow-hidden">
 												{envStatus === "warming-up" ? (
 													<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background/80">
