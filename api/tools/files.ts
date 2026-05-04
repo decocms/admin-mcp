@@ -14,6 +14,20 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
 	}
 }
 
+// Mirror ENVIRONMENTS.consistentHash from admin/sdk/environments.ts
+function consistentHash(input: string): string {
+	let hash = 0;
+	for (let i = 0; i < input.length; i++) {
+		hash = (hash << 5) - hash + input.charCodeAt(i);
+		hash = hash & hash;
+	}
+	return Math.abs(hash).toString(36);
+}
+
+function buildEnvUrl(site: string, env: string): string {
+	return `https://envs-${site}--${consistentHash(env)}.decocdn.com`;
+}
+
 export async function getUserEnvName(apiKey: string): Promise<string> {
 	const payload = decodeJwtPayload(apiKey);
 	const userId =
@@ -661,18 +675,7 @@ export const getPagesTool = createTool({
 	execute: async ({ context }, ctx) => {
 		const { site } = getConfig(ctx);
 
-		// Mirror ENVIRONMENTS.consistentHash from admin/sdk/environments.ts
-		const consistentHash = (input: string) => {
-			let hash = 0;
-			for (let i = 0; i < input.length; i++) {
-				hash = (hash << 5) - hash + input.charCodeAt(i);
-				hash = hash & hash;
-			}
-			return Math.abs(hash).toString(36);
-		};
-
-		// URL pattern: https://sites-{site}--{consistentHash(envName)}.decocdn.com
-		const envUrl = `https://sites-${site}--${consistentHash(context.env)}.decocdn.com`;
+		const envUrl = buildEnvUrl(site, context.env);
 
 		// Fetch the .decofile and _meta manifest in parallel
 		const [decofileRes, metaRes] = await Promise.all([
@@ -831,16 +834,7 @@ export const getPageSectionsTool = createTool({
 	execute: async ({ context }, ctx) => {
 		const { site } = getConfig(ctx);
 
-		const consistentHash = (input: string) => {
-			let hash = 0;
-			for (let i = 0; i < input.length; i++) {
-				hash = (hash << 5) - hash + input.charCodeAt(i);
-				hash = hash & hash;
-			}
-			return Math.abs(hash).toString(36);
-		};
-
-		const envUrl = `https://sites-${site}--${consistentHash(context.env)}.decocdn.com`;
+		const envUrl = buildEnvUrl(site, context.env);
 
 		const decofileRes = await fetch(`${envUrl}/.decofile`);
 		if (!decofileRes.ok) {
@@ -1311,16 +1305,7 @@ export const listAppsTool = createTool({
 			// proceed with empty list
 		}
 
-		const consistentHash = (input: string) => {
-			let hash = 0;
-			for (let i = 0; i < input.length; i++) {
-				hash = (hash << 5) - hash + input.charCodeAt(i);
-				hash = hash & hash;
-			}
-			return Math.abs(hash).toString(36);
-		};
-
-		const envUrl = `https://sites-${site}--${consistentHash(context.env)}.decocdn.com`;
+		const envUrl = buildEnvUrl(site, context.env);
 
 		type DecoBlock = { __resolveType?: string; [key: string]: unknown };
 		let decofile: Record<string, DecoBlock> = {};
@@ -1483,16 +1468,7 @@ export const listSectionsTool = createTool({
 		const { site } = getConfig(ctx);
 		const empty = { sections: [] };
 
-		const consistentHash = (input: string) => {
-			let hash = 0;
-			for (let i = 0; i < input.length; i++) {
-				hash = (hash << 5) - hash + input.charCodeAt(i);
-				hash = hash & hash;
-			}
-			return Math.abs(hash).toString(36);
-		};
-
-		const envUrl = `https://sites-${site}--${consistentHash(context.env)}.decocdn.com`;
+		const envUrl = buildEnvUrl(site, context.env);
 
 		/** Build the deco.cx section preview URL for a given resolveType or blockId */
 		const buildPreviewUrl = (blockIdOrResolveType: string): string => {
@@ -1665,16 +1641,7 @@ export const listMatchersTool = createTool({
 		const { site } = getConfig(ctx);
 		const empty = { matchers: [] };
 
-		const consistentHash = (input: string) => {
-			let hash = 0;
-			for (let i = 0; i < input.length; i++) {
-				hash = (hash << 5) - hash + input.charCodeAt(i);
-				hash = hash & hash;
-			}
-			return Math.abs(hash).toString(36);
-		};
-
-		const envUrl = `https://sites-${site}--${consistentHash(context.env)}.decocdn.com`;
+		const envUrl = buildEnvUrl(site, context.env);
 
 		try {
 			const metaRes = await fetch(`${envUrl}/live/_meta`);
@@ -1922,16 +1889,7 @@ export const getBlockSchemaTool = createTool({
 		const { site } = getConfig(ctx);
 		const empty = { resolveType: context.resolveType, properties: {} };
 
-		const consistentHash = (input: string) => {
-			let hash = 0;
-			for (let i = 0; i < input.length; i++) {
-				hash = (hash << 5) - hash + input.charCodeAt(i);
-				hash = hash & hash;
-			}
-			return Math.abs(hash).toString(36);
-		};
-
-		const envUrl = `https://sites-${site}--${consistentHash(context.env)}.decocdn.com`;
+		const envUrl = buildEnvUrl(site, context.env);
 
 		try {
 			const metaRes = await fetch(`${envUrl}/live/_meta`);
