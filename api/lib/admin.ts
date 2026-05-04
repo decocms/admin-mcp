@@ -3,7 +3,7 @@ import { createRuntimeContext } from "@decocms/runtime/tools";
 import type { Env } from "../types/env.ts";
 
 export const ADMIN_BASE_URL =
-	process.env.DECO_ADMIN_URL ?? "https://admin.deco.cx";
+	process.env.DECO_ADMIN_URL ?? "https://admin-envs.deco.cx/";
 
 export async function callAdmin(
 	path: string,

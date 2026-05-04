@@ -115,14 +115,24 @@ export const fileExplorerTool = createTool({
 		) as z.infer<typeof environmentSchema>[];
 
 		let userEnvEntry = sandboxEnvs.find((e) => e.name === userEnvName) ?? null;
+		const isOldCluster = userEnvEntry?.url?.startsWith("https://sites-");
 
-		if (!userEnvEntry) {
+		if(isOldCluster) {
+			await callAdmin(
+				"deco-sites/admin/actions/environments/delete.ts",
+				{ site, name: userEnvName },
+				apiKey,
+			);
+		}
+
+		if (!userEnvEntry || isOldCluster) {
 			try {
 				const created = (await callAdmin(
 					"deco-sites/admin/actions/environments/create.ts",
 					{ site, name: userEnvName, platform: "sandbox" },
 					apiKey,
 				)) as z.infer<typeof environmentSchema>;
+				console.log("created", created);
 				userEnvEntry = created;
 			} catch {
 				// Creation failed — frontend will keep polling until the env is ready
@@ -140,6 +150,7 @@ export const fileExplorerTool = createTool({
 				? fetch(userEnvUrl, { signal: timeout }).catch(() => null)
 				: null,
 		]);
+		console.log("_userEnvResponse", _userEnvResponse);
 
 		const status = productionResponse?.status;
 

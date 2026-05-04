@@ -34,7 +34,9 @@ import {
 	Flag,
 	Folder,
 	FolderOpen,
+	GitBranch,
 	GitFork,
+	Github,
 	Globe,
 	GripVertical,
 	LayoutTemplate,
@@ -77,6 +79,16 @@ import {
 	useState,
 } from "react";
 import { toast } from "sonner";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@/components/ui/alert-dialog.tsx";
 import { Badge } from "@/components/ui/badge.tsx";
 import { Button } from "@/components/ui/button.tsx";
 import {
@@ -117,6 +129,12 @@ import {
 	ResizablePanel,
 	ResizablePanelGroup,
 } from "@/components/ui/resizable.tsx";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover.tsx";
+
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import {
 	Tooltip,
@@ -149,7 +167,7 @@ import type {
 	ReadFileOutput,
 	WriteFileOutput,
 } from "../../../api/tools/files.ts";
-import type { GitStatus } from "../../../api/tools/git.ts";
+import type { GitRawOutput, GitStatus } from "../../../api/tools/git.ts";
 import type { SchemaProperties } from "./cms-form.tsx";
 import { SectionForm } from "./cms-form.tsx";
 import { PublishDialog } from "./publish-dialog.tsx";
@@ -2216,6 +2234,18 @@ function FileExplorerWorkspace({
 	const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
 	const [publishDialogOpen, setPublishDialogOpen] = useState(false);
 
+	// ── branch selector ─────────────────────────────────────────────────────────
+	const [branches, setBranches] = useState<string[]>([]);
+	const [branchesLoading, setBranchesLoading] = useState(false);
+	const [branchPopoverOpen, setBranchPopoverOpen] = useState(false);
+	const [branchSearch, setBranchSearch] = useState("");
+	const [switchingBranch, setSwitchingBranch] = useState(false);
+	const [confirmBranchSwitch, setConfirmBranchSwitch] = useState<string | null>(
+		null,
+	);
+	const [creatingBranch, setCreatingBranch] = useState(false);
+	const [newBranchName, setNewBranchName] = useState("");
+
 	// ── CMS state ────────────────────────────────────────────────────────────────
 	const [cmsOpen, setCmsOpen] = useState(false);
 	const [cmsPanelVisible, setCmsPanelVisible] = useState(true);
@@ -2665,15 +2695,12 @@ function FileExplorerWorkspace({
 		}
 	}, [viewMode]);
 
-	// Refresh preview and invalidate open file buffers on detected file changes
-	// Poll git_status every 5 s; on any change, treat files as stale
-	const lastGitStatusRef = useRef<string | null>(null);
-
+	// Fetch git status once when environment is ready
 	useEffect(() => {
 		if (envStatus !== "ready" || !app || !userEnv) return;
 		let cancelled = false;
 
-		const check = async () => {
+		(async () => {
 			try {
 				const result = await app.callServerTool({
 					name: "git_status",
@@ -2681,35 +2708,212 @@ function FileExplorerWorkspace({
 				});
 				if (cancelled || result?.isError) return;
 				const data = result?.structuredContent as GitStatus | undefined;
-				if (!data) return;
-				setGitStatus(data);
-				const snapshot = JSON.stringify(data);
-				if (lastGitStatusRef.current === null) {
-					// First reading — just store baseline
-					lastGitStatusRef.current = snapshot;
-				} else if (snapshot !== lastGitStatusRef.current) {
-					lastGitStatusRef.current = snapshot;
-					setPreviewRefreshKey((k) => k + 1);
-					setFileBuffers((prev) => {
-						const next: typeof prev = {};
-						for (const [fp, buf] of Object.entries(prev)) {
-							next[fp] = { ...buf, loaded: false };
-						}
-						return next;
-					});
-				}
+				if (data) setGitStatus(data);
 			} catch {
 				// non-fatal
 			}
-		};
+		})();
 
-		void check();
-		const interval = setInterval(() => void check(), 5_000);
 		return () => {
 			cancelled = true;
-			clearInterval(interval);
 		};
 	}, [app, envStatus, userEnv]);
+
+	// ── branch helpers ──────────────────────────────────────────────────────────
+
+	const currentBranch = gitStatus?.current ?? null;
+
+	const IGNORED_CHANGE_PATHS = ["static/tailwind.css"];
+	const filterIgnored = (paths: string[]) =>
+		paths.filter((p) => !IGNORED_CHANGE_PATHS.includes(p));
+
+	const hasUncommittedChanges = gitStatus
+		? filterIgnored([
+				...gitStatus.modified,
+				...gitStatus.created,
+				...gitStatus.deleted,
+				...gitStatus.not_added,
+			]).length +
+				gitStatus.renamed.length >
+			0
+		: false;
+
+	const fetchBranches = useCallback(async () => {
+		if (!app || !userEnv) return;
+		setBranchesLoading(true);
+		try {
+			// Update remote refs without downloading objects
+			await app.callServerTool({
+				name: "git_raw",
+				arguments: {
+					env: userEnv,
+					args: [
+						"fetch",
+						"origin",
+						"+refs/heads/*:refs/remotes/origin/*",
+						"--prune",
+					],
+				},
+			});
+			// List remote-tracking branches
+			const result = await app.callServerTool({
+				name: "git_raw",
+				arguments: { env: userEnv, args: ["branch", "-r"] },
+			});
+			if (result?.isError) return;
+			const data = result?.structuredContent as GitRawOutput | undefined;
+			if (!data?.result) return;
+			// branch -r output: "  origin/<branch>" or "  origin/HEAD -> origin/main"
+			const parsed = data.result
+				.split("\n")
+				.map((line) => line.trim())
+				.filter((line) => line && !line.includes("->"))
+				.map((line) => line.replace(/^origin\//, ""))
+				.filter((b) => b.length > 0);
+			setBranches(parsed);
+		} catch {
+			// non-fatal
+		} finally {
+			setBranchesLoading(false);
+		}
+	}, [app, userEnv]);
+
+	const executeBranchSwitch = useCallback(
+		async (targetBranch: string, discardChanges: boolean) => {
+			if (!app || !userEnv) return;
+			setSwitchingBranch(true);
+			try {
+				if (gitStatus) {
+					const allChangedPaths = [
+						...gitStatus.modified,
+						...gitStatus.created,
+						...gitStatus.deleted,
+						...gitStatus.not_added,
+						...gitStatus.renamed.map(
+							(r: { from: string }) => r.from,
+						),
+					].filter(Boolean);
+					// Always discard ignored paths (e.g. tailwind.css) silently
+					// Discard the rest only if user confirmed
+					const pathsToDiscard = discardChanges
+						? allChangedPaths
+						: allChangedPaths.filter((p) =>
+								IGNORED_CHANGE_PATHS.includes(p),
+							);
+					if (pathsToDiscard.length > 0) {
+						await app.callServerTool({
+							name: "git_discard",
+							arguments: { env: userEnv, filepaths: pathsToDiscard },
+						});
+					}
+				}
+				// Fetch only this branch from remote before checkout
+				await app.callServerTool({
+					name: "git_raw",
+					arguments: {
+						env: userEnv,
+						args: ["fetch", "origin", targetBranch],
+					},
+				});
+				// Try switching to existing local branch, fall back to creating/resetting tracking branch
+				let result = await app.callServerTool({
+					name: "git_raw",
+					arguments: {
+						env: userEnv,
+						args: ["checkout", targetBranch],
+					},
+				});
+				if (result?.isError) {
+					// -B creates the branch or resets it if it already exists
+					result = await app.callServerTool({
+						name: "git_raw",
+						arguments: {
+							env: userEnv,
+							args: [
+								"checkout",
+								"-B",
+								targetBranch,
+								`origin/${targetBranch}`,
+							],
+						},
+					});
+				}
+				if (result?.isError) {
+					toast.error("Failed to switch branch");
+					return;
+				}
+				toast.success(`Switched to ${targetBranch}`);
+				// Reset UI state
+				setOpenFiles([]);
+				setFileBuffers({});
+				setSelectedFile(null);
+				setPreviewRefreshKey((k) => k + 1);
+				// Re-fetch git status
+				const statusResult = await app.callServerTool({
+					name: "git_status",
+					arguments: { env: userEnv },
+				});
+				if (!statusResult?.isError) {
+					setGitStatus((statusResult?.structuredContent as GitStatus) ?? null);
+				}
+			} catch {
+				toast.error("Failed to switch branch");
+			} finally {
+				setSwitchingBranch(false);
+				setConfirmBranchSwitch(null);
+				setBranchPopoverOpen(false);
+			}
+		},
+		[app, userEnv, gitStatus],
+	);
+
+	const handleBranchSwitch = useCallback(
+		(targetBranch: string) => {
+			if (targetBranch === currentBranch) return;
+			if (hasUncommittedChanges) {
+				setConfirmBranchSwitch(targetBranch);
+			} else {
+				executeBranchSwitch(targetBranch, false);
+			}
+		},
+		[currentBranch, hasUncommittedChanges, executeBranchSwitch],
+	);
+
+	const handleCreateBranch = useCallback(async () => {
+		const name = newBranchName.trim();
+		if (!name || !app || !userEnv) return;
+		setCreatingBranch(true);
+		try {
+			const result = await app.callServerTool({
+				name: "git_raw",
+				arguments: {
+					env: userEnv,
+					args: ["checkout", "-b", name],
+				},
+			});
+			if (result?.isError) {
+				toast.error("Failed to create branch");
+				return;
+			}
+			toast.success(`Created and switched to ${name}`);
+			setNewBranchName("");
+			setBranchPopoverOpen(false);
+			// Re-fetch git status
+			const statusResult = await app.callServerTool({
+				name: "git_status",
+				arguments: { env: userEnv },
+			});
+			if (!statusResult?.isError) {
+				setGitStatus(
+					(statusResult?.structuredContent as GitStatus) ?? null,
+				);
+			}
+		} catch {
+			toast.error("Failed to create branch");
+		} finally {
+			setCreatingBranch(false);
+		}
+	}, [app, userEnv, newBranchName]);
 
 	// Env warm-up
 	useEffect(() => {
@@ -5912,16 +6116,144 @@ function FileExplorerWorkspace({
 								</div>
 							</div>
 
-							{/* Right: Publish (fixed width) */}
-							<Button
-								type="button"
-								size="sm"
-								className="shrink-0"
-								onClick={() => setPublishDialogOpen(true)}
-								disabled={envStatus !== "ready"}
-							>
-								Publish
-							</Button>
+							{/* Right: Branch selector + Publish */}
+							<div className="flex shrink-0 items-center gap-1.5">
+								<Popover
+									open={branchPopoverOpen}
+									onOpenChange={(open) => {
+										setBranchPopoverOpen(open);
+										if (open) {
+											setBranchSearch("");
+											fetchBranches();
+										}
+									}}
+								>
+									<PopoverTrigger asChild>
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											className="max-w-[180px] gap-1.5"
+											disabled={envStatus !== "ready" || switchingBranch}
+										>
+											<GitBranch className="h-3.5 w-3.5 shrink-0" />
+											<span className="truncate">
+												{switchingBranch
+													? "Switching…"
+													: (currentBranch ?? "—")}
+											</span>
+											<ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
+										</Button>
+									</PopoverTrigger>
+									<PopoverContent align="end" className="w-64 p-0">
+										<div className="flex items-center gap-1.5 border-b p-2">
+											<Input
+												placeholder="Search branches…"
+												value={branchSearch}
+												onChange={(e) => setBranchSearch(e.target.value)}
+												className="h-8 text-sm"
+											/>
+											<a
+												href={`https://github.com/deco-sites/${site}`}
+												target="_blank"
+												rel="noopener noreferrer"
+												className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+											>
+												<Github className="h-4 w-4" />
+											</a>
+										</div>
+										<div className="max-h-60 overflow-y-auto">
+											{branchesLoading ? (
+												<div className="flex items-center justify-center gap-2 px-4 py-5 text-xs text-muted-foreground">
+													<Loader2 className="h-3.5 w-3.5 animate-spin" />
+													Loading branches…
+												</div>
+											) : branches.filter((b) =>
+													b.toLowerCase().includes(branchSearch.toLowerCase()),
+												).length === 0 ? (
+												<div className="px-4 py-5 text-center text-xs text-muted-foreground">
+													No branches found
+												</div>
+											) : (
+												<div className="p-1">
+													{branches
+														.filter((b) =>
+															b
+																.toLowerCase()
+																.includes(branchSearch.toLowerCase()),
+														)
+														.map((branch) => (
+															<button
+																key={branch}
+																type="button"
+																className={cn(
+																	"flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground",
+																	branch === currentBranch &&
+																		"bg-accent/50 font-medium",
+																)}
+																onClick={() => handleBranchSwitch(branch)}
+																disabled={switchingBranch}
+															>
+																<GitBranch className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+																<span className="min-w-0 flex-1 truncate">
+																	{branch}
+																</span>
+																{branch === currentBranch && (
+																	<span className="shrink-0 text-xs text-muted-foreground">
+																		current
+																	</span>
+																)}
+															</button>
+														))}
+												</div>
+											)}
+										</div>
+										<div className="border-t p-2">
+											<form
+												onSubmit={(e) => {
+													e.preventDefault();
+													handleCreateBranch();
+												}}
+												className="flex items-center gap-1.5"
+											>
+												<Input
+													placeholder="New branch name…"
+													value={newBranchName}
+													onChange={(e) =>
+														setNewBranchName(e.target.value)
+													}
+													className="h-8 text-sm"
+												/>
+												<Button
+													type="submit"
+													size="sm"
+													className="shrink-0"
+													disabled={
+														creatingBranch ||
+														!newBranchName.trim()
+													}
+												>
+													{creatingBranch ? (
+														<Loader2 className="h-3.5 w-3.5 animate-spin" />
+													) : (
+														<Plus className="h-3.5 w-3.5" />
+													)}
+												</Button>
+											</form>
+										</div>
+									</PopoverContent>
+								</Popover>
+
+								<Button
+									type="button"
+									size="sm"
+									className="shrink-0"
+									onClick={() => setPublishDialogOpen(true)}
+									disabled={envStatus !== "ready"}
+								>
+									Publish
+								</Button>
+							</div>
 						</div>
 
 						{/* ── main content ── */}
@@ -6880,6 +7212,40 @@ function FileExplorerWorkspace({
 					</form>
 				</DialogContent>
 			</Dialog>
+
+			{/* ── branch switch confirmation ── */}
+			<AlertDialog
+				open={confirmBranchSwitch !== null}
+				onOpenChange={(open) => {
+					if (!open) setConfirmBranchSwitch(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+						<AlertDialogDescription>
+							You have uncommitted changes. Switching to{" "}
+							<span className="font-mono font-medium">
+								{confirmBranchSwitch}
+							</span>{" "}
+							will discard all local changes. This action cannot be undone.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogAction
+							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+							onClick={() => {
+								if (confirmBranchSwitch) {
+									executeBranchSwitch(confirmBranchSwitch, true);
+								}
+							}}
+						>
+							Discard & Switch
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 
 			{/* ── publish dialog ── */}
 			<PublishDialog
