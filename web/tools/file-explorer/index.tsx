@@ -112,6 +112,11 @@ import {
 	EmptyTitle,
 } from "@/components/ui/empty.tsx";
 import { Input } from "@/components/ui/input.tsx";
+import {
+	ResizableHandle,
+	ResizablePanel,
+	ResizablePanelGroup,
+} from "@/components/ui/resizable.tsx";
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import {
 	Tooltip,
@@ -6299,10 +6304,18 @@ function FileExplorerWorkspace({
 										</>
 									) : (
 										/* Preview / visual editor */
-										<div className="min-h-0 flex-1 overflow-hidden bg-muted/10 flex">
+										<ResizablePanelGroup
+											orientation="horizontal"
+											className="min-h-0 flex-1 overflow-hidden bg-muted/10"
+										>
 											{/* Docked CMS panel */}
 											{cmsOpen && cmsPanelVisible && (
-												<div className="flex h-full w-[42%] min-w-[420px] max-w-[600px] shrink-0 flex-col overflow-hidden border-r bg-background">
+												<ResizablePanel
+													defaultSize="42%"
+													minSize="420px"
+													maxSize="70%"
+													className="flex h-full flex-col overflow-hidden bg-background"
+												>
 													<CmsPanel
 														loading={cmsLoading}
 														error={cmsError}
@@ -6367,9 +6380,12 @@ function FileExplorerWorkspace({
 														onDuplicatePageVariant={handleDuplicatePageVariant}
 														onRemovePageVariant={handleRemovePageVariant}
 													/>
-												</div>
+												</ResizablePanel>
 											)}
-											<div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
+											{cmsOpen && cmsPanelVisible && (
+												<ResizableHandle withHandle />
+											)}
+											<ResizablePanel className="flex h-full min-w-0 flex-col overflow-hidden">
 												{envStatus === "warming-up" ? (
 													<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background/80">
 														<div className="flex flex-col items-center gap-3 text-muted-foreground">
@@ -6741,8 +6757,8 @@ function FileExplorerWorkspace({
 														</div>
 													</div>
 												)}
-											</div>
-										</div>
+											</ResizablePanel>
+										</ResizablePanelGroup>
 									)}
 								</div>
 							</div>
