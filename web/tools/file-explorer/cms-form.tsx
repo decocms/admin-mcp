@@ -184,12 +184,19 @@ export function TextField({
 	value: string;
 	onChange: (v: string) => void;
 }) {
+	const [local, setLocal] = useState(value);
+	useEffect(() => {
+		setLocal(value);
+	}, [value]);
 	return (
 		<div className="space-y-2">
 			<FieldLabel label={label} description={description} />
 			<Input
-				value={value}
-				onChange={(e) => onChange(e.target.value)}
+				value={local}
+				onChange={(e) => {
+					setLocal(e.target.value);
+					onChange(e.target.value);
+				}}
 				className="h-9 text-sm"
 			/>
 		</div>
@@ -209,12 +216,19 @@ function TextareaField({
 	value: string;
 	onChange: (v: string) => void;
 }) {
+	const [local, setLocal] = useState(value);
+	useEffect(() => {
+		setLocal(value);
+	}, [value]);
 	return (
 		<div className="space-y-2">
 			<FieldLabel label={label} description={description} />
 			<Textarea
-				value={value}
-				onChange={(e) => onChange(e.target.value)}
+				value={local}
+				onChange={(e) => {
+					setLocal(e.target.value);
+					onChange(e.target.value);
+				}}
 				rows={4}
 				className="min-h-[unset] text-sm"
 			/>
@@ -399,6 +413,10 @@ function CodeField({
 	value: string;
 	onChange: (v: string) => void;
 }) {
+	const [local, setLocal] = useState(value);
+	useEffect(() => {
+		setLocal(value);
+	}, [value]);
 	return (
 		<div className="space-y-1">
 			<FieldLabel label={label} description={description} />
@@ -408,8 +426,11 @@ function CodeField({
 					<span className="text-[10px] text-muted-foreground">Code</span>
 				</div>
 				<textarea
-					value={value}
-					onChange={(e) => onChange(e.target.value)}
+					value={local}
+					onChange={(e) => {
+						setLocal(e.target.value);
+						onChange(e.target.value);
+					}}
 					rows={10}
 					spellCheck={false}
 					className="w-full resize-y bg-muted/10 px-3 py-2 font-mono text-xs leading-relaxed outline-none"
@@ -798,13 +819,20 @@ export function NumberField({
 	value: number;
 	onChange: (v: number) => void;
 }) {
+	const [local, setLocal] = useState(String(value));
+	useEffect(() => {
+		setLocal(String(value));
+	}, [value]);
 	return (
 		<div className="space-y-2">
 			<FieldLabel label={label} description={description} />
 			<Input
 				type="number"
-				value={value}
-				onChange={(e) => onChange(Number(e.target.value))}
+				value={local}
+				onChange={(e) => {
+					setLocal(e.target.value);
+					onChange(Number(e.target.value));
+				}}
 				className="h-9 text-sm"
 			/>
 		</div>
