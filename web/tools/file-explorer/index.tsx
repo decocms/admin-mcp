@@ -1016,7 +1016,7 @@ function MatcherPicker({
 
 // ─── Matcher label formatter ─────────────────────────────────────────────────
 
-function formatMatcherRule(rule: Record<string, unknown>): string {
+export function formatMatcherRule(rule: Record<string, unknown>): string {
 	const rt = (rule.__resolveType as string) ?? "";
 	const cap = (s: string) =>
 		s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
@@ -2789,17 +2789,13 @@ function FileExplorerWorkspace({
 						...gitStatus.created,
 						...gitStatus.deleted,
 						...gitStatus.not_added,
-						...gitStatus.renamed.map(
-							(r: { from: string }) => r.from,
-						),
+						...gitStatus.renamed.map((r: { from: string }) => r.from),
 					].filter(Boolean);
 					// Always discard ignored paths (e.g. tailwind.css) silently
 					// Discard the rest only if user confirmed
 					const pathsToDiscard = discardChanges
 						? allChangedPaths
-						: allChangedPaths.filter((p) =>
-								IGNORED_CHANGE_PATHS.includes(p),
-							);
+						: allChangedPaths.filter((p) => IGNORED_CHANGE_PATHS.includes(p));
 					if (pathsToDiscard.length > 0) {
 						await app.callServerTool({
 							name: "git_discard",
@@ -2829,12 +2825,7 @@ function FileExplorerWorkspace({
 						name: "git_raw",
 						arguments: {
 							env: userEnv,
-							args: [
-								"checkout",
-								"-B",
-								targetBranch,
-								`origin/${targetBranch}`,
-							],
+							args: ["checkout", "-B", targetBranch, `origin/${targetBranch}`],
 						},
 					});
 				}
@@ -2904,9 +2895,7 @@ function FileExplorerWorkspace({
 				arguments: { env: userEnv },
 			});
 			if (!statusResult?.isError) {
-				setGitStatus(
-					(statusResult?.structuredContent as GitStatus) ?? null,
-				);
+				setGitStatus((statusResult?.structuredContent as GitStatus) ?? null);
 			}
 		} catch {
 			toast.error("Failed to create branch");
@@ -6219,19 +6208,14 @@ function FileExplorerWorkspace({
 												<Input
 													placeholder="New branch name…"
 													value={newBranchName}
-													onChange={(e) =>
-														setNewBranchName(e.target.value)
-													}
+													onChange={(e) => setNewBranchName(e.target.value)}
 													className="h-8 text-sm"
 												/>
 												<Button
 													type="submit"
 													size="sm"
 													className="shrink-0"
-													disabled={
-														creatingBranch ||
-														!newBranchName.trim()
-													}
+													disabled={creatingBranch || !newBranchName.trim()}
 												>
 													{creatingBranch ? (
 														<Loader2 className="h-3.5 w-3.5 animate-spin" />

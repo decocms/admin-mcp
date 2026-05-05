@@ -131,7 +131,7 @@ export const fileExplorerTool = createTool({
 		let userEnvEntry = sandboxEnvs.find((e) => e.name === userEnvName) ?? null;
 		const isOldCluster = userEnvEntry?.url?.startsWith("https://sites-");
 
-		if(isOldCluster) {
+		if (isOldCluster) {
 			await callAdmin(
 				"deco-sites/admin/actions/environments/delete.ts",
 				{ site, name: userEnvName },

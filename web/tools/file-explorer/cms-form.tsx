@@ -70,6 +70,7 @@ import type {
 	UploadAssetOutput,
 } from "../../../api/tools/assets.ts";
 import type { SchemaProperty } from "../../../api/tools/files.ts";
+import { formatMatcherRule } from "./index.tsx";
 import {
 	isVtexLoader,
 	VtexLoaderButton,
@@ -1732,6 +1733,198 @@ function ArrayField({
 	);
 }
 
+// ─── multivariate field ───────────────────────────────────────────────────────
+
+function MultivariateField({
+	label,
+	description,
+	value,
+	onChange,
+}: {
+	label: string;
+	description?: string;
+	value: Record<string, FormValue>;
+	onChange: (v: Record<string, FormValue>) => void;
+}) {
+	const drill = useContext(DrillContext);
+	const variants = (value.variants ?? []) as Array<Record<string, FormValue>>;
+	const sensors = useSensors(
+		useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
+		useSensor(TouchSensor, {
+			activationConstraint: { delay: 250, tolerance: 5 },
+		}),
+	);
+	const ids = variants.map((_, i) => String(i));
+
+	const valueRef = useRef(value);
+	valueRef.current = value;
+	const onChangeRef = useRef(onChange);
+	onChangeRef.current = onChange;
+
+	const updateVariants = (next: Array<Record<string, FormValue>>) => {
+		onChange({ ...value, variants: next as FormValue[] });
+	};
+
+	const handleDragEnd = ({ active, over }: DragEndEvent) => {
+		if (!over || active.id === over.id) return;
+		const from = ids.indexOf(String(active.id));
+		const to = ids.indexOf(String(over.id));
+		if (from === -1 || to === -1) return;
+		const next = [...variants];
+		const [moved] = next.splice(from, 1);
+		next.splice(to, 0, moved);
+		updateVariants(next);
+	};
+
+	const drillVariant = (i: number) => {
+		if (!drill) return;
+
+		// Build an itemSchema that describes {rule, value} so the drill view
+		// renders both parts. The rule naturally has __resolveType so it renders
+		// as a block-ref. The value is left untyped so it infers from the data.
+		const variantItemSchema: SchemaProperty = {
+			type: "object",
+			properties: {
+				rule: { title: "Segment Rule" },
+				value: { title: "Value" },
+			},
+		};
+
+		drill.push({
+			label: formatMatcherRule(
+				(variants[i]?.rule as Record<string, unknown>) ?? {},
+			),
+			getValue: () => {
+				const cur = valueRef.current.variants as Array<
+					Record<string, FormValue>
+				>;
+				return cur[i] as FormValue;
+			},
+			setValue: (nv) => {
+				const cur = [
+					...((valueRef.current.variants ?? []) as Array<
+						Record<string, FormValue>
+					>),
+				];
+				cur[i] = nv as Record<string, FormValue>;
+				onChangeRef.current({
+					...valueRef.current,
+					variants: cur as FormValue[],
+				});
+			},
+			itemSchema: variantItemSchema,
+		});
+	};
+
+	return (
+		<div className="space-y-2">
+			<div className="flex items-center gap-1.5">
+				<span className="text-sm font-medium text-foreground">{label}</span>
+				<span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+					{variants.length} variant{variants.length !== 1 ? "s" : ""}
+				</span>
+			</div>
+			{description && (
+				<span className="block text-xs leading-snug text-muted-foreground">
+					{description}
+				</span>
+			)}
+
+			<DndContext
+				sensors={sensors}
+				modifiers={[restrictToVerticalAxis]}
+				onDragEnd={handleDragEnd}
+			>
+				<SortableContext items={ids} strategy={verticalListSortingStrategy}>
+					{variants.length > 0 && (
+						<div className="space-y-1 rounded-lg border bg-muted/10 p-1.5">
+							{variants.map((variant, i) => (
+								<SortableVariantRow
+									key={i}
+									id={String(i)}
+									rule={(variant.rule as Record<string, unknown>) ?? {}}
+									onSelect={() => drillVariant(i)}
+									onRemove={() =>
+										updateVariants(variants.filter((_, j) => j !== i))
+									}
+								/>
+							))}
+						</div>
+					)}
+				</SortableContext>
+			</DndContext>
+		</div>
+	);
+}
+
+function SortableVariantRow({
+	id,
+	rule,
+	onSelect,
+	onRemove,
+}: {
+	id: string;
+	rule: Record<string, unknown>;
+	onSelect: () => void;
+	onRemove: () => void;
+}) {
+	const {
+		attributes,
+		listeners,
+		setNodeRef,
+		transform,
+		transition,
+		isDragging,
+	} = useSortable({ id });
+
+	return (
+		<div
+			ref={setNodeRef}
+			style={{
+				transform: CSS.Transform.toString(transform),
+				transition,
+				opacity: isDragging ? 0.4 : 1,
+			}}
+			className="group flex cursor-pointer select-none items-center gap-2 rounded-md border border-transparent px-2 py-2 text-sm text-foreground transition-colors hover:border-border hover:bg-accent/40"
+		>
+			<span
+				{...listeners}
+				{...attributes}
+				className="shrink-0 cursor-grab touch-none text-muted-foreground/40 active:cursor-grabbing"
+				onClick={(e) => e.stopPropagation()}
+			>
+				<GripVertical className="h-3.5 w-3.5" />
+			</span>
+			<span className="flex-1 truncate" onClick={onSelect}>
+				{formatMatcherRule(rule)}
+			</span>
+			<DropdownMenu>
+				<DropdownMenuTrigger asChild>
+					<button
+						type="button"
+						onPointerDown={(e) => e.stopPropagation()}
+						onClick={(e) => e.stopPropagation()}
+						className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-background/80 group-hover:opacity-100"
+					>
+						<MoreHorizontal className="h-3.5 w-3.5" />
+					</button>
+				</DropdownMenuTrigger>
+				<DropdownMenuContent align="end" className="w-32">
+					<DropdownMenuItem
+						onSelect={(e) => {
+							e.stopPropagation();
+							onRemove();
+						}}
+						className="text-destructive focus:text-destructive"
+					>
+						Remove
+					</DropdownMenuItem>
+				</DropdownMenuContent>
+			</DropdownMenu>
+		</div>
+	);
+}
+
 // ─── object field ─────────────────────────────────────────────────────────────
 
 function ObjectField({
@@ -2161,6 +2354,28 @@ function FormField({
 	schemasMap?: Record<string, SchemaProperties>;
 }) {
 	const label = hideLabel ? "" : (labelOverride ?? humanize(name));
+
+	// ── multivariate wrapper (flags/multivariate) ────────────────────────
+	const isMultivariate =
+		value !== null &&
+		typeof value === "object" &&
+		!Array.isArray(value) &&
+		typeof (value as Record<string, unknown>).__resolveType === "string" &&
+		((value as Record<string, unknown>).__resolveType as string).includes(
+			"flags/multivariate",
+		);
+
+	if (isMultivariate) {
+		const objValue = value as Record<string, FormValue>;
+		return (
+			<MultivariateField
+				label={label || name}
+				description={description}
+				value={objValue}
+				onChange={onChange as (v: Record<string, FormValue>) => void}
+			/>
+		);
+	}
 
 	// ── block-ref field (loader selector) ─────────────────────────────────
 	// Two cases:
