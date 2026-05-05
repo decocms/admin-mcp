@@ -41,7 +41,7 @@ export async function getUserEnvName(apiKey: string): Promise<string> {
 	const hashHex = hashArray
 		.map((b) => b.toString(16).padStart(2, "0"))
 		.join("");
-	return `${hashHex.slice(0, 8)}`;
+	return `${hashHex.slice(0, 9)}`;
 }
 
 export const FILE_EXPLORER_RESOURCE_URI = "ui://mcp-app/file-explorer";
@@ -131,6 +131,8 @@ export const fileExplorerTool = createTool({
 		let userEnvEntry = sandboxEnvs.find((e) => e.name === userEnvName) ?? null;
 		const isOldCluster = userEnvEntry?.url?.startsWith("https://sites-");
 
+		console.log("userEnvEntry", userEnvEntry);
+
 		if (isOldCluster) {
 			await callAdmin(
 				"deco-sites/admin/actions/environments/delete.ts",
@@ -148,7 +150,8 @@ export const fileExplorerTool = createTool({
 				)) as z.infer<typeof environmentSchema>;
 				console.log("created", created);
 				userEnvEntry = created;
-			} catch {
+			} catch(e) {
+				console.log("error", e);
 				// Creation failed — frontend will keep polling until the env is ready
 			}
 		}
