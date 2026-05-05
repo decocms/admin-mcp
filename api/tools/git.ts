@@ -162,6 +162,7 @@ export const gitPublishTool = createTool({
 		"Always ask user before use this tool.Publish changes from a sandbox environment to the main branch. This commits and pushes all local changes.",
 	inputSchema: gitPublishInputSchema,
 	outputSchema: gitPublishResultSchema,
+	_meta: { ui: { visibility: ["app"] } },
 	annotations: {
 		readOnlyHint: false,
 		destructiveHint: false,
@@ -276,6 +277,7 @@ export const gitRawTool = createTool({
 		"Run a safe git command on a sandbox environment. Allowed subcommands: checkout, branch, stash, tag, log, show, diff, merge, cherry-pick, format-patch, describe, shortlog, rev-parse, rev-list, ls-files, ls-tree, cat-file. Destructive flags (--force, --hard, --global, etc.) are blocked.",
 	inputSchema: gitRawInputSchema,
 	outputSchema: gitRawOutputSchema,
+	_meta: { ui: { visibility: ["app"] } },
 	annotations: {
 		readOnlyHint: false,
 		destructiveHint: false,

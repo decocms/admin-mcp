@@ -209,6 +209,7 @@ export const mergePullRequestTool = createTool({
 		"Merge a pull request by its number for the configured deco.cx site. Always confirm with the user before merging.",
 	inputSchema: mergePullRequestInputSchema,
 	outputSchema: mergePullRequestOutputSchema,
+	_meta: { ui: { visibility: ["app"] } },
 	annotations: {
 		readOnlyHint: false,
 		destructiveHint: false,
