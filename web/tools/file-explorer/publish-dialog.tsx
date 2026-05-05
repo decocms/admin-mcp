@@ -76,6 +76,8 @@ export function PublishDialog({
 	const [discardConfirmFile, setDiscardConfirmFile] = useState<string | null>(
 		null,
 	);
+	const [discardAllConfirm, setDiscardAllConfirm] = useState(false);
+	const [isDiscardingAll, setIsDiscardingAll] = useState(false);
 	const [suggestion, setSuggestion] =
 		useState<SuggestCommitMessageOutput | null>(null);
 	const [isGeneratingSuggestion, setIsGeneratingSuggestion] = useState(false);
@@ -217,12 +219,21 @@ export function PublishDialog({
 
 	// ─── discard ────────────────────────────────────────────────────────────────
 
-	const handleDiscardFile = async (filepath: string) => {
-		if (!app || !userEnv) return;
-		setDiscardConfirmFile(null);
-
-		try {
-			const result = await app.callServerTool({
+	const discardOrDelete = async (filepath: string) => {
+		const isNewFile = gitDiff?.diffs[filepath]?.from === null;
+		if (isNewFile) {
+			const result = await app!.callServerTool({
+				name: "delete_file",
+				arguments: { env: userEnv, filepath },
+			});
+			if (result?.isError) {
+				const text = result.content?.find((b) => b.type === "text");
+				throw new Error(
+					text?.type === "text" ? text.text : "Failed to delete file",
+				);
+			}
+		} else {
+			const result = await app!.callServerTool({
 				name: "git_discard",
 				arguments: { env: userEnv, filepaths: [filepath] },
 			});
@@ -232,6 +243,15 @@ export function PublishDialog({
 					text?.type === "text" ? text.text : "Failed to discard changes",
 				);
 			}
+		}
+	};
+
+	const handleDiscardFile = async (filepath: string) => {
+		if (!app || !userEnv) return;
+		setDiscardConfirmFile(null);
+
+		try {
+			await discardOrDelete(filepath);
 
 			toast.success(`Discarded changes to ${filepath}`);
 
@@ -255,6 +275,63 @@ export function PublishDialog({
 			toast.error(
 				error instanceof Error ? error.message : "Failed to discard changes",
 			);
+		}
+	};
+
+	// ─── discard all ─────────────────────────────────────────────────────────────
+
+	const handleDiscardAll = async () => {
+		if (!app || !userEnv || !gitDiff) return;
+		setDiscardAllConfirm(false);
+		setIsDiscardingAll(true);
+
+		try {
+			const allFiles = Object.keys(gitDiff.diffs);
+			if (allFiles.length === 0) return;
+
+			// New files must be deleted; modified/deleted files are discarded via git
+			const newFiles = allFiles.filter((f) => gitDiff.diffs[f].from === null);
+			const existingFiles = allFiles.filter(
+				(f) => gitDiff.diffs[f].from !== null,
+			);
+
+			await Promise.all([
+				...newFiles.map((f) =>
+					app.callServerTool({
+						name: "delete_file",
+						arguments: { env: userEnv, filepath: f },
+					}),
+				),
+				...(existingFiles.length > 0
+					? [
+							app.callServerTool({
+								name: "git_discard",
+								arguments: { env: userEnv, filepaths: existingFiles },
+							}),
+						]
+					: []),
+			]);
+
+			toast.success("All changes discarded");
+			setGitDiff(null);
+			setExpandedDiffFile(null);
+
+			const statusResult = await app.callServerTool({
+				name: "git_status",
+				arguments: { env: userEnv },
+			});
+			if (!statusResult?.isError) {
+				const data = statusResult?.structuredContent as GitStatus | undefined;
+				onGitStatusChange(data ?? null);
+			}
+
+			onOpenChange(false);
+		} catch (error) {
+			toast.error(
+				error instanceof Error ? error.message : "Failed to discard changes",
+			);
+		} finally {
+			setIsDiscardingAll(false);
 		}
 	};
 
@@ -319,14 +396,57 @@ export function PublishDialog({
 								{diffCount} {diffCount === 1 ? "change" : "changes"} to publish
 							</div>
 						</div>
-						<TabsList className="h-8 w-auto">
-							<TabsTrigger value="description" className="px-3 text-xs">
-								Description
-							</TabsTrigger>
-							<TabsTrigger value="changes" className="px-3 text-xs">
-								Changes
-							</TabsTrigger>
-						</TabsList>
+						{discardAllConfirm ? (
+							<div className="flex items-center justify-between gap-3 rounded-md bg-destructive/5 px-3 py-2">
+								<span className="text-xs text-destructive">
+									Discard all changes? This cannot be undone.
+								</span>
+								<div className="flex shrink-0 items-center gap-2">
+									<Button
+										type="button"
+										variant="ghost"
+										size="sm"
+										className="h-7 px-2 text-xs"
+										onClick={() => setDiscardAllConfirm(false)}
+									>
+										Cancel
+									</Button>
+									<Button
+										type="button"
+										size="sm"
+										className="h-7 bg-destructive px-2 text-xs text-destructive-foreground hover:bg-destructive/90"
+										onClick={handleDiscardAll}
+										disabled={isDiscardingAll}
+									>
+										{isDiscardingAll && (
+											<Loader2 className="h-3 w-3 animate-spin" />
+										)}
+										Discard all
+									</Button>
+								</div>
+							</div>
+						) : (
+							<div className="flex items-center justify-between">
+								<TabsList className="h-8 w-auto">
+									<TabsTrigger value="description" className="px-3 text-xs">
+										Description
+									</TabsTrigger>
+									<TabsTrigger value="changes" className="px-3 text-xs">
+										Changes
+									</TabsTrigger>
+								</TabsList>
+								{diffCount > 0 && (
+									<button
+										type="button"
+										className="text-xs text-muted-foreground transition-colors hover:text-destructive disabled:opacity-50"
+										onClick={() => setDiscardAllConfirm(true)}
+										disabled={isPublishing || isDiscardingAll}
+									>
+										Discard all
+									</button>
+								)}
+							</div>
+						)}
 					</div>
 
 					<div className="border-t" />
@@ -650,7 +770,7 @@ export function PublishDialog({
 					</div>
 
 					{/* Footer */}
-					<div className="shrink-0 border-t px-6 py-4">
+					<div className="shrink-0 border-t px-6 py-3">
 						<div className="flex items-center gap-3">
 							<Button
 								type="button"

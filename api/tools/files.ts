@@ -150,7 +150,7 @@ export const fileExplorerTool = createTool({
 				)) as z.infer<typeof environmentSchema>;
 				console.log("created", created);
 				userEnvEntry = created;
-			} catch(e) {
+			} catch (e) {
 				console.log("error", e);
 				// Creation failed — frontend will keep polling until the env is ready
 			}
