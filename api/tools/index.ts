@@ -66,6 +66,13 @@ import {
 	revertCommitTool,
 } from "./releases.ts";
 import { renderHtmlTool } from "./render-html.ts";
+import {
+	addChangeToReleaseTool,
+	cancelScheduledReleaseTool,
+	createScheduledReleaseTool,
+	listScheduledReleasesTool,
+	rescheduleScheduledReleaseTool,
+} from "./scheduled-releases.ts";
 import { testLoaderTool } from "./test-loader.ts";
 
 export const tools = [
@@ -126,5 +133,10 @@ export const tools = [
 	getErrorRateSeriesTool,
 	podLogsTool,
 	renderHtmlTool,
+	listScheduledReleasesTool,
+	createScheduledReleaseTool,
+	addChangeToReleaseTool,
+	cancelScheduledReleaseTool,
+	rescheduleScheduledReleaseTool,
 	testLoaderTool,
 ];
