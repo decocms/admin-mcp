@@ -14,6 +14,7 @@ import MonitorPage from "./tools/monitor/index.tsx";
 import PullRequestsPage from "./tools/pull-requests/index.tsx";
 import ReleasesPage from "./tools/releases/index.tsx";
 import RenderHtmlPage from "./tools/render-html/index.tsx";
+import ScheduledReleasesPage from "./tools/scheduled-releases/index.tsx";
 
 const TOOL_PAGES: Record<string, React.ComponentType> = {
 	fetch_assets: AssetsPage,
@@ -22,6 +23,7 @@ const TOOL_PAGES: Record<string, React.ComponentType> = {
 	list_issues: IssuesPage,
 	list_pull_requests: PullRequestsPage,
 	list_releases: ReleasesPage,
+	list_scheduled_releases: ScheduledReleasesPage,
 	render_html: RenderHtmlPage,
 };
 

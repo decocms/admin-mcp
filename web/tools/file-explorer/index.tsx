@@ -170,7 +170,7 @@ import type {
 import type { GitRawOutput, GitStatus } from "../../../api/tools/git.ts";
 import type { SchemaProperties } from "./cms-form.tsx";
 import { SectionForm } from "./cms-form.tsx";
-import { PublishDialog } from "./publish-dialog.tsx";
+import { PublishDialog, type UpcomingRelease } from "./publish-dialog.tsx";
 import type {
 	CmsInspectPayload,
 	EnvStatus,
@@ -658,8 +658,63 @@ type CodeSelectionPrompt = {
 
 // ─── sortable section row ─────────────────────────────────────────────────────
 
+const sectionBadgeDateFormatter = new Intl.DateTimeFormat(undefined, {
+	month: "short",
+	day: "numeric",
+});
+
+function ScheduledChangesBadge({
+	changes,
+}: {
+	changes: Array<{ releaseName: string; releaseStartDate: string | null }>;
+}) {
+	const next = changes
+		.filter((c) => !!c.releaseStartDate)
+		.sort(
+			(a, b) =>
+				new Date(a.releaseStartDate!).getTime() -
+				new Date(b.releaseStartDate!).getTime(),
+		)[0];
+	const label =
+		changes.length === 1
+			? changes[0].releaseName
+			: `${changes.length} scheduled`;
+	const dateLabel = next?.releaseStartDate
+		? ` · ${sectionBadgeDateFormatter.format(new Date(next.releaseStartDate))}`
+		: "";
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<span
+					onPointerDown={(e) => e.stopPropagation()}
+					className="shrink-0 truncate rounded-sm border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-sky-700 dark:text-sky-300"
+				>
+					<Clock className="mr-1 inline h-2.5 w-2.5" />
+					{label}
+					{dateLabel}
+				</span>
+			</TooltipTrigger>
+			<TooltipContent side="top">
+				{changes.length === 1
+					? `In release "${changes[0].releaseName}"`
+					: `In ${changes.length} releases`}
+				{next?.releaseStartDate && (
+					<>
+						<br />
+						Next:{" "}
+						{new Intl.DateTimeFormat(undefined, {
+							dateStyle: "medium",
+						}).format(new Date(next.releaseStartDate))}
+					</>
+				)}
+			</TooltipContent>
+		</Tooltip>
+	);
+}
+
 function SortableSectionItem({
 	section,
+	scheduledChanges,
 	onSelect,
 	onDuplicate,
 	onRemove,
@@ -675,6 +730,10 @@ function SortableSectionItem({
 		isSavedBlock?: boolean;
 		isMultivariate?: boolean;
 	};
+	scheduledChanges?: Array<{
+		releaseName: string;
+		releaseStartDate: string | null;
+	}>;
 	onSelect: () => void;
 	onDuplicate: () => void;
 	onRemove: () => void;
@@ -735,6 +794,9 @@ function SortableSectionItem({
 			>
 				{section.label}
 			</span>
+			{scheduledChanges && scheduledChanges.length > 0 && (
+				<ScheduledChangesBadge changes={scheduledChanges} />
+			)}
 			<Tooltip>
 				<TooltipTrigger asChild>
 					<button
@@ -1519,6 +1581,12 @@ interface CmsPanelProps {
 	onAddPageVariant?: () => void;
 	onDuplicatePageVariant?: (idx: number) => void;
 	onRemovePageVariant?: (idx: number) => void;
+	scheduledChanges?: Array<{
+		pagePath: string;
+		sectionIndex: number;
+		releaseName: string;
+		releaseStartDate: string | null;
+	}>;
 }
 
 function CmsPanel({
@@ -1570,7 +1638,26 @@ function CmsPanel({
 	onAddPageVariant,
 	onDuplicatePageVariant,
 	onRemovePageVariant,
+	scheduledChanges,
 }: CmsPanelProps) {
+	const scheduledChangesByIndex = useMemo(() => {
+		const map = new Map<
+			number,
+			Array<{ releaseName: string; releaseStartDate: string | null }>
+		>();
+		const pageKey = data?.pageKey;
+		if (!pageKey || !scheduledChanges) return map;
+		for (const change of scheduledChanges) {
+			if (change.pagePath !== pageKey) continue;
+			const list = map.get(change.sectionIndex) ?? [];
+			list.push({
+				releaseName: change.releaseName,
+				releaseStartDate: change.releaseStartDate,
+			});
+			map.set(change.sectionIndex, list);
+		}
+		return map;
+	}, [scheduledChanges, data?.pageKey]);
 	const sensors = useSensors(
 		useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
 		useSensor(TouchSensor, {
@@ -2099,6 +2186,9 @@ function CmsPanel({
 											<SortableSectionItem
 												key={String(section.index)}
 												section={section}
+												scheduledChanges={scheduledChangesByIndex?.get(
+													section.index,
+												)}
 												onSelect={() => onSelectSection(section.index)}
 												onDuplicate={() => onDuplicateSection(section.index)}
 												onRemove={() => onRemoveSection(section.index)}
@@ -2146,6 +2236,9 @@ function CmsPanel({
 											<SortableSectionItem
 												key={String(section.index)}
 												section={section}
+												scheduledChanges={scheduledChangesByIndex?.get(
+													section.index,
+												)}
 												onSelect={() => onSelectSection(section.index)}
 												onDuplicate={() => onDuplicateSection(section.index)}
 												onRemove={() => onRemoveSection(section.index)}
@@ -2233,6 +2326,72 @@ function FileExplorerWorkspace({
 	// ── publish ─────────────────────────────────────────────────────────────────
 	const [gitStatus, setGitStatus] = useState<GitStatus | null>(null);
 	const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+	const cmsDataRef = useRef<GetPageSectionsOutput | null>(null);
+	const cmsSelectedSectionRef = useRef<number | null>(null);
+	const [upcomingReleases, setUpcomingReleases] = useState<UpcomingRelease[]>(
+		[],
+	);
+	const [scheduledChangesIndex, setScheduledChangesIndex] = useState<
+		Array<{
+			pagePath: string;
+			sectionIndex: number;
+			releaseName: string;
+			releaseStartDate: string | null;
+			releaseStatus: string;
+		}>
+	>([]);
+
+	// Fetch releases so the schedule modal can offer them.
+	const refreshReleases = useCallback(async () => {
+		if (!app) return;
+		try {
+			const result = await app.callServerTool({
+				name: "list_scheduled_releases",
+				arguments: {},
+			});
+			const text = result?.content?.find((c) => c.type === "text");
+			if (text?.type !== "text") return;
+			const data = JSON.parse(text.text) as {
+				releases?: Array<{
+					id: string;
+					name: string;
+					startDate: string | null;
+					status: string;
+					changes?: Array<{ pagePath: string; sectionIndex: number }>;
+				}>;
+			};
+			const all = data.releases ?? [];
+			const upcoming = all
+				.filter((r) => r.status !== "ended")
+				.map((r) => ({
+					id: r.id,
+					name: r.name,
+					startDate: r.startDate,
+				}));
+			setUpcomingReleases(upcoming);
+
+			const flatChanges: typeof scheduledChangesIndex = [];
+			for (const r of all) {
+				if (r.status === "ended") continue;
+				for (const c of r.changes ?? []) {
+					flatChanges.push({
+						pagePath: c.pagePath,
+						sectionIndex: c.sectionIndex,
+						releaseName: r.name,
+						releaseStartDate: r.startDate,
+						releaseStatus: r.status,
+					});
+				}
+			}
+			setScheduledChangesIndex(flatChanges);
+		} catch {
+			// Non-fatal — schedule modal will show only "+ New release".
+		}
+	}, [app]);
+
+	useEffect(() => {
+		void refreshReleases();
+	}, [refreshReleases]);
 
 	// ── branch selector ─────────────────────────────────────────────────────────
 	const [branches, setBranches] = useState<string[]>([]);
@@ -2260,8 +2419,6 @@ function FileExplorerWorkspace({
 		unknown
 	> | null>(null);
 	const [cmsAutoSaving, setCmsAutoSaving] = useState(false);
-	const cmsDataRef = useRef<GetPageSectionsOutput | null>(null);
-	const cmsSelectedSectionRef = useRef<number | null>(null);
 	const cmsAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
 		null,
 	);
@@ -5718,11 +5875,13 @@ function FileExplorerWorkspace({
 				const data = result?.structuredContent as GetPagesOutput | undefined;
 				setPages(data?.pages ?? []);
 				setGlobalSections(data?.globalSections ?? []);
-				setPagesLoaded(true);
 			}
 		} catch {
 			// silently fail
 		} finally {
+			// Always flag loaded so the eager-load effect doesn't infinite-retry
+			// when the call returns isError or throws.
+			setPagesLoaded(true);
 			setPagesLoading(false);
 		}
 	}, [app, userEnv, pagesLoaded, pagesLoading]);
@@ -6695,6 +6854,7 @@ function FileExplorerWorkspace({
 														onAddPageVariant={handleAddPageVariant}
 														onDuplicatePageVariant={handleDuplicatePageVariant}
 														onRemovePageVariant={handleRemovePageVariant}
+														scheduledChanges={scheduledChangesIndex}
 													/>
 												</ResizablePanel>
 											)}
@@ -7241,6 +7401,16 @@ function FileExplorerWorkspace({
 				editorTheme={editorTheme}
 				gitStatus={gitStatus}
 				onGitStatusChange={setGitStatus}
+				upcomingReleases={upcomingReleases}
+				onScheduled={() => void refreshReleases()}
+				currentPagePath={cmsDataRef.current?.pageKey}
+				currentSectionLabel={
+					cmsSelectedSectionRef.current !== null
+						? (cmsDataRef.current?.sections[cmsSelectedSectionRef.current]
+								?.label ?? undefined)
+						: undefined
+				}
+				currentSectionIndex={cmsSelectedSectionRef.current}
 			/>
 
 			{/* ── app config modal ── */}
