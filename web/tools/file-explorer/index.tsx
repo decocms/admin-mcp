@@ -125,15 +125,15 @@ import {
 } from "@/components/ui/empty.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import {
-	ResizableHandle,
-	ResizablePanel,
-	ResizablePanelGroup,
-} from "@/components/ui/resizable.tsx";
-import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover.tsx";
+import {
+	ResizableHandle,
+	ResizablePanel,
+	ResizablePanelGroup,
+} from "@/components/ui/resizable.tsx";
 
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import {
