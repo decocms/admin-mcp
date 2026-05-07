@@ -120,9 +120,8 @@ export type FormValue =
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function nestClass(_depth: number): string {
-	// Nested fields always get an indent + left rule so hierarchy is obvious.
-	// ml-3 lands the rule roughly under the parent's chevron; pl-4 then
-	// puts child content under the parent label text. 3+ levels still fit.
+	// ml-3 lands the rule under the parent's chevron; pl-4 aligns child
+	// content under the parent label text.
 	return "ml-3 border-l border-border/60 pl-4";
 }
 
@@ -2680,13 +2679,14 @@ function FormField({
 				/>
 			);
 		}
-		if (schemaFormat === "multi-select" && Array.isArray(itemSchema?.enum)) {
+		const enumOpts = itemSchema?.enum;
+		if (schemaFormat === "multi-select" && Array.isArray(enumOpts)) {
 			return (
 				<MultiSelectField
 					label={label || name}
 					description={description}
 					value={(effectiveValue as FormValue[]).map(String)}
-					options={(itemSchema?.enum as unknown[]).map(String)}
+					options={enumOpts.map(String)}
 					onChange={(v) => (onChange as (v: FormValue[]) => void)(v)}
 				/>
 			);
