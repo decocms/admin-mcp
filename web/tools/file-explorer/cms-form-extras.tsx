@@ -1,21 +1,71 @@
 import { format as formatDate } from "date-fns";
-import * as LucideIcons from "lucide-react";
 import {
+	Award,
+	Bell,
+	Bike,
+	Bookmark,
+	Bus,
 	Calendar as CalendarIcon,
+	Camera,
+	Car,
 	Check,
 	ChevronDown,
 	Clock,
+	Cloud,
+	Coffee,
+	Cookie,
+	CreditCard,
+	Download,
 	Eye,
+	EyeOff,
 	FileText,
+	Flag,
+	Gift,
+	Globe,
+	Headphones,
+	Heart,
+	Home,
+	Image,
 	Link as LinkIcon,
 	Lock,
 	type LucideIcon,
+	Mail,
+	MapPin,
+	MessageCircle,
+	Mic,
+	Minus,
+	Moon,
+	Music,
+	Package,
+	Phone,
+	Pizza,
+	Plane,
+	Plus,
 	Search,
+	Send,
+	Settings,
+	Share,
+	Shield,
+	ShoppingBag,
+	ShoppingCart,
+	Smile,
+	Star,
+	Sun,
+	Tag,
+	ThumbsUp,
+	Train,
+	Trophy,
+	Truck,
 	Unlock,
+	Upload,
+	User,
+	Users,
+	Utensils,
+	Video,
 	X,
+	Zap,
 } from "lucide-react";
-import { marked } from "marked";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button.tsx";
 import { Calendar } from "@/components/ui/calendar.tsx";
 import { Input } from "@/components/ui/input.tsx";
@@ -45,16 +95,7 @@ export function SwitchField({
 }) {
 	return (
 		<div className="flex items-start justify-between gap-3 rounded-lg border bg-muted/10 px-4 py-3">
-			<div className="min-w-0 flex-1 space-y-0.5">
-				<span className="block text-sm font-medium text-foreground">
-					{label}
-				</span>
-				{description && (
-					<span className="block text-xs leading-snug text-muted-foreground">
-						{description}
-					</span>
-				)}
-			</div>
+			<FieldLabel label={label} description={description} className="flex-1" />
 			<Switch
 				checked={value}
 				onCheckedChange={onChange}
@@ -313,17 +354,14 @@ export function UrlField({
 	value: string;
 	onChange: (v: string) => void;
 }) {
-	const [local, setLocal] = useState(value);
-	useEffect(() => setLocal(value), [value]);
-
 	let url: URL | null = null;
 	try {
-		url = local ? new URL(local) : null;
+		url = value ? new URL(value) : null;
 	} catch {
 		url = null;
 	}
 	const isValid = Boolean(url);
-	const isInternal = local.startsWith("/");
+	const isInternal = value.startsWith("/");
 	const favicon =
 		url?.hostname && !isInternal
 			? `https://www.google.com/s2/favicons?domain=${url.hostname}&sz=32`
@@ -348,15 +386,12 @@ export function UrlField({
 					)}
 				</span>
 				<input
-					value={local}
-					onChange={(e) => {
-						setLocal(e.target.value);
-						onChange(e.target.value);
-					}}
+					value={value}
+					onChange={(e) => onChange(e.target.value)}
 					placeholder="https://example.com or /internal-path"
 					className="flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground"
 				/>
-				{local && (
+				{value && (
 					<span
 						className={cn(
 							"mr-3 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
@@ -377,6 +412,20 @@ export function UrlField({
 
 // ─── 6. MarkdownField — split-view editor ────────────────────────────────────
 
+// Marked is only needed when the preview tab is open. Lazy-load and cache.
+let markedParser: ((src: string) => string) | null = null;
+let markedLoading: Promise<void> | null = null;
+
+function loadMarked(): Promise<void> {
+	if (markedParser) return Promise.resolve();
+	if (!markedLoading) {
+		markedLoading = import("marked").then(({ marked }) => {
+			markedParser = (s) => marked.parse(s, { async: false }) as string;
+		});
+	}
+	return markedLoading;
+}
+
 export function MarkdownField({
 	label,
 	description,
@@ -389,16 +438,27 @@ export function MarkdownField({
 	onChange: (v: string) => void;
 }) {
 	const [tab, setTab] = useState<"write" | "preview">("write");
-	const [local, setLocal] = useState(value);
-	useEffect(() => setLocal(value), [value]);
+	const [, forceUpdate] = useState(0);
 
-	const html = useMemo(() => {
+	useEffect(() => {
+		if (tab !== "preview" || markedParser) return;
+		let cancelled = false;
+		loadMarked().then(() => {
+			if (!cancelled) forceUpdate((n) => n + 1);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [tab]);
+
+	const html = (() => {
+		if (!markedParser) return null;
 		try {
-			return marked.parse(local || "", { async: false }) as string;
+			return markedParser(value || "");
 		} catch {
 			return "";
 		}
-	}, [local]);
+	})();
 
 	return (
 		<div className="space-y-2">
@@ -437,16 +497,17 @@ export function MarkdownField({
 				</div>
 				{tab === "write" ? (
 					<Textarea
-						value={local}
-						onChange={(e) => {
-							setLocal(e.target.value);
-							onChange(e.target.value);
-						}}
+						value={value}
+						onChange={(e) => onChange(e.target.value)}
 						rows={10}
 						spellCheck={false}
 						placeholder="# Hello world&#10;&#10;Type some **markdown** here…"
 						className="min-h-[unset] resize-y rounded-none border-0 text-xs leading-relaxed shadow-none focus-visible:ring-0"
 					/>
+				) : html === null ? (
+					<div className="flex min-h-[200px] items-center justify-center text-xs text-muted-foreground">
+						Loading preview…
+					</div>
 				) : (
 					<div
 						className="prose prose-sm min-h-[200px] max-w-none px-4 py-3 text-sm prose-headings:font-semibold prose-headings:mt-3 prose-headings:mb-1.5 prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-a:text-primary prose-a:underline prose-code:rounded prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:text-xs"
@@ -784,7 +845,6 @@ function parseTime(value: string): { h: string; m: string } | null {
 }
 
 function normalizeTimeInput(raw: string): string | null {
-	// Accept "9", "9:3", "09:30", "1234" → "HH:MM" if valid; null otherwise.
 	const cleaned = raw.replace(/[^\d:]/g, "");
 	if (!cleaned) return null;
 	let h: string;
@@ -842,7 +902,6 @@ export function TimeField({
 			onChange(normalized);
 			setDraft(normalized);
 		} else {
-			// invalid — revert to last good value
 			setDraft(value);
 		}
 	};
@@ -970,68 +1029,69 @@ function TimeColumn({
 
 // ─── 11. IconField — pick from Lucide library ───────────────────────────────
 
-const POPULAR_ICONS: string[] = [
-	"Home",
-	"Search",
-	"User",
-	"Users",
-	"Settings",
-	"Heart",
-	"Star",
-	"Bell",
-	"Mail",
-	"Phone",
-	"MapPin",
-	"Calendar",
-	"Clock",
-	"ShoppingCart",
-	"ShoppingBag",
-	"Package",
-	"Truck",
-	"CreditCard",
-	"Tag",
-	"Gift",
-	"Zap",
-	"Award",
-	"Trophy",
-	"Flag",
-	"Bookmark",
-	"Camera",
-	"Image",
-	"Video",
-	"Music",
-	"Headphones",
-	"Mic",
-	"Globe",
-	"Link",
-	"Share",
-	"Download",
-	"Upload",
-	"Cloud",
-	"Lock",
-	"Shield",
-	"Eye",
-	"EyeOff",
-	"Sun",
-	"Moon",
-	"Coffee",
-	"Cookie",
-	"Pizza",
-	"Utensils",
-	"Plane",
-	"Car",
-	"Bike",
-	"Train",
-	"Bus",
-	"Smile",
-	"ThumbsUp",
-	"MessageCircle",
-	"Send",
-	"Plus",
-	"Minus",
-	"Check",
-	"X",
-];
+const ICON_MAP: Record<string, LucideIcon> = {
+	Award,
+	Bell,
+	Bike,
+	Bookmark,
+	Bus,
+	Calendar: CalendarIcon,
+	Camera,
+	Car,
+	Check,
+	Clock,
+	Cloud,
+	Coffee,
+	Cookie,
+	CreditCard,
+	Download,
+	Eye,
+	EyeOff,
+	Flag,
+	Gift,
+	Globe,
+	Headphones,
+	Heart,
+	Home,
+	Image,
+	Link: LinkIcon,
+	Lock,
+	Mail,
+	MapPin,
+	MessageCircle,
+	Mic,
+	Minus,
+	Moon,
+	Music,
+	Package,
+	Phone,
+	Pizza,
+	Plane,
+	Plus,
+	Search,
+	Send,
+	Settings,
+	Share,
+	Shield,
+	ShoppingBag,
+	ShoppingCart,
+	Smile,
+	Star,
+	Sun,
+	Tag,
+	ThumbsUp,
+	Train,
+	Trophy,
+	Truck,
+	Upload,
+	User,
+	Users,
+	Utensils,
+	Video,
+	X,
+	Zap,
+};
+const POPULAR_ICONS = Object.keys(ICON_MAP);
 
 export function IconField({
 	label,
@@ -1047,9 +1107,7 @@ export function IconField({
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState("");
 
-	const Selected = (LucideIcons as unknown as Record<string, LucideIcon>)[
-		value
-	];
+	const Selected = ICON_MAP[value];
 	const filtered = query
 		? POPULAR_ICONS.filter((n) => n.toLowerCase().includes(query.toLowerCase()))
 		: POPULAR_ICONS;
@@ -1093,9 +1151,7 @@ export function IconField({
 					</div>
 					<div className="grid max-h-64 grid-cols-7 gap-1 overflow-y-auto p-2">
 						{filtered.map((name) => {
-							const Icon = (
-								LucideIcons as unknown as Record<string, LucideIcon>
-							)[name];
+							const Icon = ICON_MAP[name];
 							if (!Icon) return null;
 							const active = value === name;
 							return (

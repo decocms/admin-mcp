@@ -179,13 +179,15 @@ function defaultForSchemaType(
 export function FieldLabel({
 	label,
 	description,
+	className,
 }: {
 	label: string;
 	description?: string;
+	className?: string;
 }) {
 	if (!label) return null;
 	return (
-		<div className="min-w-0 space-y-1">
+		<div className={cn("min-w-0 space-y-1", className)}>
 			<span className="block truncate text-sm font-medium text-foreground">
 				{label}
 			</span>
