@@ -91,7 +91,6 @@ import {
 	MultiSelectField,
 	RangeField,
 	ReferenceField,
-	SlugField,
 	SwitchField,
 	TagsField,
 	TimeField,
@@ -2757,16 +2756,6 @@ function FormField({
 				);
 			}
 			// ── format-based widgets ──────────────────────────────────
-			if (schemaFormat === "slug") {
-				return (
-					<SlugField
-						label={label}
-						description={description}
-						value={effectiveValue as string}
-						onChange={onChange as (v: string) => void}
-					/>
-				);
-			}
 			if (schemaFormat === "url") {
 				return (
 					<UrlField

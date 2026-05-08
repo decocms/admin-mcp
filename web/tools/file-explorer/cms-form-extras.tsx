@@ -56,7 +56,6 @@ import {
 	Train,
 	Trophy,
 	Truck,
-	Unlock,
 	Upload,
 	User,
 	Users,
@@ -169,87 +168,6 @@ export function TagsField({
 					className="min-w-[80px] flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
 				/>
 			</div>
-		</div>
-	);
-}
-
-// ─── 3. SlugField — auto-generated URL slug with lock ────────────────────────
-
-function slugify(input: string): string {
-	return input
-		.toLowerCase()
-		.normalize("NFKD")
-		.replace(/[̀-ͯ]/g, "")
-		.replace(/[^a-z0-9\s-]/g, "")
-		.trim()
-		.replace(/\s+/g, "-")
-		.replace(/-+/g, "-");
-}
-
-export function SlugField({
-	label,
-	description,
-	value,
-	onChange,
-	prefix = "/",
-}: {
-	label: string;
-	description?: string;
-	value: string;
-	onChange: (v: string) => void;
-	prefix?: string;
-}) {
-	const [locked, setLocked] = useState(true);
-	const [draft, setDraft] = useState(value);
-
-	useEffect(() => {
-		setDraft(value);
-	}, [value]);
-
-	return (
-		<div className="space-y-2">
-			<FieldLabel label={label} description={description} />
-			<div className="flex h-10 w-full items-center rounded-md border border-input bg-transparent text-sm shadow-xs focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
-				<span className="flex h-full select-none items-center border-r bg-muted/30 px-3 font-mono text-xs text-muted-foreground">
-					{prefix}
-				</span>
-				<input
-					value={draft}
-					disabled={locked}
-					onChange={(e) => {
-						const v = slugify(e.target.value);
-						setDraft(v);
-						onChange(v);
-					}}
-					placeholder="my-awesome-page"
-					className="flex-1 bg-transparent px-3 font-mono text-sm outline-none placeholder:text-muted-foreground disabled:opacity-60"
-				/>
-				<button
-					type="button"
-					onClick={() => setLocked((l) => !l)}
-					className="flex h-full items-center gap-1.5 border-l px-3 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-					title={locked ? "Unlock to edit" : "Lock"}
-				>
-					{locked ? (
-						<>
-							<Lock className="h-3 w-3" />
-							Locked
-						</>
-					) : (
-						<>
-							<Unlock className="h-3 w-3" />
-							Edit
-						</>
-					)}
-				</button>
-			</div>
-			<p className="text-xs text-muted-foreground">
-				Preview:{" "}
-				<span className="font-mono text-foreground">
-					{prefix}
-					{draft || "your-slug"}
-				</span>
-			</p>
 		</div>
 	);
 }
