@@ -1551,6 +1551,7 @@ interface CmsPanelProps {
 	onDuplicateVariant: (variantIdx: number) => void;
 	onRemoveVariant: (variantIdx: number) => void;
 	onRemoveAllVariants: () => void;
+	onRemoveAllPageVariants?: () => void;
 	pageVariants?: GetPageSectionsOutput["pageVariants"];
 	selectedPageVariant?: number | null;
 	onSelectPageVariant?: (idx: number) => void;
@@ -1605,6 +1606,7 @@ function CmsPanel({
 	onDuplicateVariant,
 	onRemoveVariant,
 	onRemoveAllVariants,
+	onRemoveAllPageVariants,
 	pageVariants,
 	selectedPageVariant,
 	onSelectPageVariant,
@@ -1635,6 +1637,11 @@ function CmsPanel({
 	const [variantCardOpen, setVariantCardOpen] = useState<boolean>(
 		() => localStorage.getItem("variant-card-open") !== "false",
 	);
+
+	const [discardSectionVariantsConfirm, setDiscardSectionVariantsConfirm] =
+		useState(false);
+	const [discardPageVariantsConfirm, setDiscardPageVariantsConfirm] =
+		useState(false);
 	const toggleVariantCard = () => {
 		setVariantCardOpen((prev) => {
 			const next = !prev;
@@ -1705,6 +1712,7 @@ function CmsPanel({
 		: undefined;
 
 	return (
+		<>
 		<div
 			className="flex h-full w-full flex-col overflow-hidden bg-background transition-colors"
 			style={
@@ -1761,7 +1769,7 @@ function CmsPanel({
 					actions={
 						<button
 							type="button"
-							onClick={onRemoveAllVariants}
+							onClick={() => setDiscardSectionVariantsConfirm(true)}
 							className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
 							title="Remove all variants"
 						>
@@ -2059,6 +2067,19 @@ function CmsPanel({
 			) : isPageVariantList ? (
 				/* ── Page-level variant list ─────────────────────────────── */
 				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+					<div className="shrink-0 flex items-center justify-between border-b px-3 py-2">
+						<span className="text-xs text-muted-foreground">
+							Page variants
+						</span>
+						<button
+							type="button"
+							onClick={() => setDiscardPageVariantsConfirm(true)}
+							className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+							title="Discard all page variants"
+						>
+							<Trash2 className="h-3.5 w-3.5" />
+						</button>
+					</div>
 					<div className="min-h-0 flex-1 overflow-y-auto p-2">
 						<DndContext
 							sensors={sensors}
@@ -2299,6 +2320,61 @@ function CmsPanel({
 				</div>
 			)}
 		</div>
+
+		<AlertDialog
+			open={discardSectionVariantsConfirm}
+			onOpenChange={setDiscardSectionVariantsConfirm}
+		>
+			<AlertDialogContent>
+				<AlertDialogHeader>
+					<AlertDialogTitle>Remove all variants?</AlertDialogTitle>
+					<AlertDialogDescription>
+						This will remove all variants from this section and keep only the
+						default content. This action cannot be undone.
+					</AlertDialogDescription>
+				</AlertDialogHeader>
+				<AlertDialogFooter>
+					<AlertDialogCancel>Cancel</AlertDialogCancel>
+					<AlertDialogAction
+						className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+						onClick={() => {
+							setDiscardSectionVariantsConfirm(false);
+							onRemoveAllVariants();
+						}}
+					>
+						Remove all variants
+					</AlertDialogAction>
+				</AlertDialogFooter>
+			</AlertDialogContent>
+		</AlertDialog>
+
+		<AlertDialog
+			open={discardPageVariantsConfirm}
+			onOpenChange={setDiscardPageVariantsConfirm}
+		>
+			<AlertDialogContent>
+				<AlertDialogHeader>
+					<AlertDialogTitle>Discard all page variants?</AlertDialogTitle>
+					<AlertDialogDescription>
+						This will revert the page to a single version using the default
+						variant. All other variants will be permanently removed.
+					</AlertDialogDescription>
+				</AlertDialogHeader>
+				<AlertDialogFooter>
+					<AlertDialogCancel>Cancel</AlertDialogCancel>
+					<AlertDialogAction
+						className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+						onClick={() => {
+							setDiscardPageVariantsConfirm(false);
+							onRemoveAllPageVariants?.();
+						}}
+					>
+						Discard all variants
+					</AlertDialogAction>
+				</AlertDialogFooter>
+			</AlertDialogContent>
+		</AlertDialog>
+		</>
 	);
 }
 
@@ -4129,6 +4205,66 @@ function FileExplorerWorkspace({
 		cmsDataRef.current = next;
 
 		// Auto-save
+		setCmsAutoSaving(true);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			try {
+				const result = await app.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: next.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				setPreviewRefreshKey((k) => k + 1);
+			} catch {
+				toast.error("Auto-save failed");
+			} finally {
+				setCmsAutoSaving(false);
+			}
+		}, 300);
+	};
+
+	const handleRemoveAllPageVariants = () => {
+		const snap = cmsDataRef.current;
+		if (!snap?.pageVariants || !app || !userEnv) return;
+
+		const mv = snap.pageData.sections as Record<string, unknown>;
+		const rawVariants = (
+			mv.variants as Array<{ value: unknown; rule: Record<string, unknown> }>
+		) ?? [];
+
+		const ALWAYS_TYPES = [
+			"website/matchers/always.ts",
+			"$live/matchers/MatchAlways.ts",
+		];
+		const alwaysVariant = rawVariants.find((v) => {
+			const rt = (v.rule.__resolveType as string) ?? "";
+			return ALWAYS_TYPES.includes(rt) || rt === "";
+		});
+		const baseValue = alwaysVariant?.value ?? rawVariants[0]?.value ?? [];
+
+		const updatedPageData = { ...snap.pageData, sections: baseValue };
+
+		const alwaysDisplayVariant =
+			snap.pageVariants.find((pv) => {
+				const rt = (pv.rule.__resolveType as string) ?? "";
+				return ALWAYS_TYPES.includes(rt) || rt === "";
+			}) ?? snap.pageVariants[0];
+
+		const next: GetPageSectionsOutput = {
+			...snap,
+			pageData: updatedPageData,
+			pageVariants: undefined,
+			sections: alwaysDisplayVariant?.sections ?? snap.sections,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+		setCmsSelectedPageVariant(null);
+		cmsSelectedPageVariantRef.current = null;
+
 		setCmsAutoSaving(true);
 		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
 		cmsAutoSaveTimerRef.current = setTimeout(async () => {
@@ -7046,6 +7182,9 @@ function FileExplorerWorkspace({
 														onDuplicateVariant={handleDuplicateVariant}
 														onRemoveVariant={handleRemoveVariant}
 														onRemoveAllVariants={handleRemoveAllVariants}
+														onRemoveAllPageVariants={
+															handleRemoveAllPageVariants
+														}
 														pageVariants={cmsData?.pageVariants}
 														selectedPageVariant={cmsSelectedPageVariant}
 														onSelectPageVariant={handleSelectPageVariant}
