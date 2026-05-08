@@ -376,7 +376,6 @@ function DateField({
 
 	const handleBlur = () => {
 		setFocused(false);
-		// If user typed an unparseable value, snap back to the source-of-truth value.
 		const formatted = formatForNativeInput(value, mode);
 		if (formatted !== local) {
 			setLocal(formatted);
@@ -384,28 +383,14 @@ function DateField({
 		}
 	};
 
-	const handleClear = (e: React.MouseEvent) => {
-		e.preventDefault();
-		e.stopPropagation();
+	const handleClear = () => {
 		setLocal("");
 		prevFormattedRef.current = "";
 		onChange("");
 	};
 
-	const openPicker = (e: React.MouseEvent) => {
-		e.preventDefault();
-		e.stopPropagation();
-		const el = inputRef.current;
-		if (!el) return;
-		if (typeof el.showPicker === "function") {
-			try {
-				el.showPicker();
-				return;
-			} catch {
-				// fall through to focus
-			}
-		}
-		el.focus();
+	const openPicker = () => {
+		inputRef.current?.showPicker();
 	};
 
 	const display = formatDateDisplay(value, mode);
@@ -453,11 +438,10 @@ function DateField({
 							/>
 						</svg>
 						<span
-							className={
-								display
-									? "flex-1 truncate"
-									: "flex-1 truncate text-muted-foreground/40"
-							}
+							className={cn(
+								"flex-1 truncate",
+								!display && "text-muted-foreground/40",
+							)}
 						>
 							{display || placeholder}
 						</span>

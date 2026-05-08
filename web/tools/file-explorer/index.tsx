@@ -1632,21 +1632,13 @@ function CmsPanel({
 		(data?.pageData.path as string | undefined) ?? "",
 	);
 
-	const [variantCardOpen, setVariantCardOpen] = useState<boolean>(() => {
-		try {
-			return localStorage.getItem("variant-card-open") !== "false";
-		} catch {
-			return true;
-		}
-	});
+	const [variantCardOpen, setVariantCardOpen] = useState<boolean>(
+		() => localStorage.getItem("variant-card-open") !== "false",
+	);
 	const toggleVariantCard = () => {
 		setVariantCardOpen((prev) => {
 			const next = !prev;
-			try {
-				localStorage.setItem("variant-card-open", String(next));
-			} catch {
-				// ignore
-			}
+			localStorage.setItem("variant-card-open", String(next));
 			return next;
 		});
 	};
@@ -1739,31 +1731,17 @@ function CmsPanel({
 							onClick: onDeselectVariant,
 							color: "oklch(0.45 0.15 160)",
 						},
-						{
-							label:
-								(
-									activeSection?.variants?.[selectedVariant ?? 0] as
-										| {
-												name?: string;
-										  }
-										| undefined
-								)?.name ||
-								activeSection?.variants?.[selectedVariant ?? 0]?.label ||
-								`Variant ${(selectedVariant ?? 0) + 1}`,
-							editable: true,
-							editValue:
-								(
-									activeSection?.variants?.[selectedVariant ?? 0] as
-										| {
-												name?: string;
-										  }
-										| undefined
-								)?.name ?? "",
-							placeholder:
-								activeSection?.variants?.[selectedVariant ?? 0]?.label ||
-								`Variant ${(selectedVariant ?? 0) + 1}`,
-							onLabelChange: onChangeVariantName,
-						},
+						(() => {
+							const v = activeSection?.variants?.[selectedVariant ?? 0];
+							const fallback = `Variant ${(selectedVariant ?? 0) + 1}`;
+							return {
+								label: v?.name || v?.label || fallback,
+								editable: true,
+								editValue: v?.name ?? "",
+								placeholder: v?.label || fallback,
+								onLabelChange: onChangeVariantName,
+							};
+						})(),
 					]}
 					actions={
 						autoSaving && (
@@ -1835,13 +1813,11 @@ function CmsPanel({
 						{ label: editName || "Page", onClick: onDeselectPageVariant },
 						{
 							label:
-								(activePageVariant as { name?: string } | undefined)?.name ||
+								activePageVariant?.name ||
 								`Variant ${selectedPageVariant! + 1}`,
 							color: "oklch(0.45 0.15 160)",
 							editable: true,
-							editValue:
-								(activePageVariant as { name?: string } | undefined)?.name ??
-								"",
+							editValue: activePageVariant?.name ?? "",
 							placeholder: `Variant ${selectedPageVariant! + 1}`,
 							onLabelChange: (v: string) => onChangePageVariantName?.(v),
 						},
@@ -2041,9 +2017,7 @@ function CmsPanel({
 										<SortableVariantItem
 											key={String(vIdx)}
 											id={String(vIdx)}
-											label={
-												(variant as { name?: string }).name || variant.label
-											}
+											label={variant.name || variant.label}
 											valueLabel={valueLabel}
 											onSelect={() => onSelectVariant(vIdx)}
 											onDuplicate={() => onDuplicateVariant(vIdx)}
@@ -2104,7 +2078,7 @@ function CmsPanel({
 												? "1 section"
 												: `${pv.sections.length} sections`
 										}
-										valueLabel={(pv as { name?: string }).name || pv.label}
+										valueLabel={pv.name || pv.label}
 										onSelect={() => onSelectPageVariant?.(i)}
 										onDuplicate={() => onDuplicatePageVariant?.(i)}
 										onRemove={() => onRemovePageVariant?.(i)}
@@ -3854,19 +3828,16 @@ function FileExplorerWorkspace({
 	const handleChangePageVariantName = (newName: string) => {
 		const pvIdx = cmsSelectedPageVariantRef.current;
 		if (pvIdx === null || !cmsData) return;
+		const trimmed = newName.trim();
 
 		const mv = {
 			...(cmsData.pageData.sections as Record<string, unknown>),
 		};
 		const variants = [...((mv.variants as unknown[]) ?? [])];
-		const current = (variants[pvIdx] as Record<string, unknown>) ?? {};
-		const updated = { ...current };
-		if (newName.trim()) {
-			updated.name = newName;
-		} else {
-			delete updated.name;
-		}
-		variants[pvIdx] = updated;
+		variants[pvIdx] = {
+			...(variants[pvIdx] as Record<string, unknown>),
+			name: trimmed || undefined,
+		};
 		const updatedPageData = {
 			...cmsData.pageData,
 			sections: { ...mv, variants },
@@ -3876,10 +3847,9 @@ function FileExplorerWorkspace({
 			? [...cmsData.pageVariants]
 			: undefined;
 		if (newPageVariants?.[pvIdx]) {
-			const trimmed = newName.trim();
 			newPageVariants[pvIdx] = {
 				...newPageVariants[pvIdx],
-				...(trimmed ? { name: trimmed } : { name: undefined }),
+				name: trimmed || undefined,
 			};
 		}
 
@@ -4466,16 +4436,10 @@ function FileExplorerWorkspace({
 		};
 		const variants = [...(mvContainer.variants ?? [])];
 		const trimmed = newName.trim();
-		const updated = { ...variants[cmsSelectedVariant] } as Record<
-			string,
-			unknown
-		>;
-		if (trimmed) {
-			updated.name = trimmed;
-		} else {
-			delete updated.name;
-		}
-		variants[cmsSelectedVariant] = updated as (typeof variants)[number];
+		variants[cmsSelectedVariant] = {
+			...variants[cmsSelectedVariant],
+			name: trimmed || undefined,
+		};
 		mvContainer.variants = variants;
 		rawSections[sectionIdx] = rebuildRawSection(
 			rawSection,
@@ -4487,12 +4451,10 @@ function FileExplorerWorkspace({
 		const updatedDisplaySection = { ...newDisplaySections[sectionIdx] };
 		if (updatedDisplaySection.variants) {
 			const newVariants = [...updatedDisplaySection.variants];
-			const target = {
+			newVariants[cmsSelectedVariant] = {
 				...newVariants[cmsSelectedVariant],
-			} as (typeof newVariants)[number] & { name?: string };
-			if (trimmed) target.name = trimmed;
-			else target.name = undefined;
-			newVariants[cmsSelectedVariant] = target;
+				name: trimmed || undefined,
+			};
 			updatedDisplaySection.variants = newVariants;
 		}
 		newDisplaySections[sectionIdx] = updatedDisplaySection;
