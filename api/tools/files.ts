@@ -1147,9 +1147,7 @@ export const getPageSectionsTool = createTool({
 							value,
 							rule,
 							label: formatMatcher(rule),
-							...(typeof v.name === "string" && v.name
-								? { name: v.name }
-								: {}),
+							...(typeof v.name === "string" && v.name ? { name: v.name } : {}),
 						};
 					});
 					const firstValueRt = (

@@ -99,12 +99,6 @@ import {
 	CardTitle,
 } from "@/components/ui/card.tsx";
 import {
-	ContextMenu,
-	ContextMenuContent,
-	ContextMenuItem,
-	ContextMenuTrigger,
-} from "@/components/ui/context-menu.tsx";
-import {
 	CommandDialog,
 	CommandEmpty,
 	CommandGroup,
@@ -112,6 +106,12 @@ import {
 	CommandItem,
 	CommandList,
 } from "@/components/ui/command.tsx";
+import {
+	ContextMenu,
+	ContextMenuContent,
+	ContextMenuItem,
+	ContextMenuTrigger,
+} from "@/components/ui/context-menu.tsx";
 import {
 	Dialog,
 	DialogContent,
@@ -134,15 +134,15 @@ import {
 } from "@/components/ui/empty.tsx";
 import { Input } from "@/components/ui/input.tsx";
 import {
-	ResizableHandle,
-	ResizablePanel,
-	ResizablePanelGroup,
-} from "@/components/ui/resizable.tsx";
-import {
 	Popover,
 	PopoverContent,
 	PopoverTrigger,
 } from "@/components/ui/popover.tsx";
+import {
+	ResizableHandle,
+	ResizablePanel,
+	ResizablePanelGroup,
+} from "@/components/ui/resizable.tsx";
 
 import { ScrollArea } from "@/components/ui/scroll-area.tsx";
 import {
@@ -1697,7 +1697,6 @@ function CmsPanel({
 			onReorderPageVariants?.(srcIdx, destIdx);
 	};
 
-
 	const editingGlobally = savedBlock === "editing";
 
 	// Page-level multivariate derived state
@@ -1742,16 +1741,24 @@ function CmsPanel({
 						},
 						{
 							label:
-								(activeSection?.variants?.[selectedVariant ?? 0] as {
-									name?: string;
-								} | undefined)?.name ||
+								(
+									activeSection?.variants?.[selectedVariant ?? 0] as
+										| {
+												name?: string;
+										  }
+										| undefined
+								)?.name ||
 								activeSection?.variants?.[selectedVariant ?? 0]?.label ||
 								`Variant ${(selectedVariant ?? 0) + 1}`,
 							editable: true,
 							editValue:
-								(activeSection?.variants?.[selectedVariant ?? 0] as {
-									name?: string;
-								} | undefined)?.name ?? "",
+								(
+									activeSection?.variants?.[selectedVariant ?? 0] as
+										| {
+												name?: string;
+										  }
+										| undefined
+								)?.name ?? "",
 							placeholder:
 								activeSection?.variants?.[selectedVariant ?? 0]?.label ||
 								`Variant ${(selectedVariant ?? 0) + 1}`,
@@ -1949,47 +1956,47 @@ function CmsPanel({
 								/>
 							</button>
 							{variantCardOpen && (
-							<div className="pt-4">
-								{(() => {
-									const variant =
-										activeSection?.variants?.[selectedVariant ?? 0];
-									const ruleData = variant?.rule ?? {};
-									const ruleRt = (ruleData.__resolveType as string) ?? "";
-									const ruleLabel = ruleRt
-										? ruleRt
-												.split("/")
-												.pop()
-												?.replace(/\.(tsx|ts)$/, "")
-										: "Always";
-									return (
-										<>
-											<div className="space-y-1 px-5">
-												<FieldLabel label="Rule" />
-												<MatcherPicker
-													currentRt={ruleRt}
-													currentLabel={ruleLabel ?? "Always"}
-													matchers={availableMatchers}
-													onFetchMatchers={onFetchMatchers}
-													onSelect={onChangeMatcherType}
-												/>
-											</div>
-											{variantRuleSchema ? (
-												<SectionForm
-													key={`variant-${selectedSection}-${selectedVariant}-rule`}
-													data={ruleData}
-													schema={variantRuleSchema}
-													schemasMap={schemasMap}
-													onChange={(d) => onChangeVariantData("rule", d)}
-												/>
-											) : ruleRt ? (
-												<div className="py-1 text-[10px] text-muted-foreground/60">
-													Loading schema…
+								<div className="pt-4">
+									{(() => {
+										const variant =
+											activeSection?.variants?.[selectedVariant ?? 0];
+										const ruleData = variant?.rule ?? {};
+										const ruleRt = (ruleData.__resolveType as string) ?? "";
+										const ruleLabel = ruleRt
+											? ruleRt
+													.split("/")
+													.pop()
+													?.replace(/\.(tsx|ts)$/, "")
+											: "Always";
+										return (
+											<>
+												<div className="space-y-1 px-5">
+													<FieldLabel label="Rule" />
+													<MatcherPicker
+														currentRt={ruleRt}
+														currentLabel={ruleLabel ?? "Always"}
+														matchers={availableMatchers}
+														onFetchMatchers={onFetchMatchers}
+														onSelect={onChangeMatcherType}
+													/>
 												</div>
-											) : null}
-										</>
-									);
-								})()}
-							</div>
+												{variantRuleSchema ? (
+													<SectionForm
+														key={`variant-${selectedSection}-${selectedVariant}-rule`}
+														data={ruleData}
+														schema={variantRuleSchema}
+														schemasMap={schemasMap}
+														onChange={(d) => onChangeVariantData("rule", d)}
+													/>
+												) : ruleRt ? (
+													<div className="py-1 text-[10px] text-muted-foreground/60">
+														Loading schema…
+													</div>
+												) : null}
+											</>
+										);
+									})()}
+								</div>
 							)}
 						</div>
 					</div>
@@ -2097,9 +2104,7 @@ function CmsPanel({
 												? "1 section"
 												: `${pv.sections.length} sections`
 										}
-										valueLabel={
-											(pv as { name?: string }).name || pv.label
-										}
+										valueLabel={(pv as { name?: string }).name || pv.label}
 										onSelect={() => onSelectPageVariant?.(i)}
 										onDuplicate={() => onDuplicatePageVariant?.(i)}
 										onRemove={() => onRemovePageVariant?.(i)}
@@ -2164,47 +2169,47 @@ function CmsPanel({
 									/>
 								</button>
 								{variantCardOpen && (
-								<div className="pt-4">
-									{(() => {
-										const pvRule = activePageVariant?.rule ?? {};
-										const pvRuleRt = (pvRule.__resolveType as string) ?? "";
-										const pvRuleLabel = pvRuleRt
-											? pvRuleRt
-													.split("/")
-													.pop()
-													?.replace(/\.(tsx|ts)$/, "")
-											: "Always";
-										return (
-											<>
-												<div className="space-y-1 px-5">
-													<FieldLabel label="Rule" />
-													<MatcherPicker
-														currentRt={pvRuleRt}
-														currentLabel={pvRuleLabel ?? "Always"}
-														matchers={availableMatchers}
-														onFetchMatchers={onFetchMatchers}
-														onSelect={(rt) =>
-															onChangePageVariantMatcherType?.(rt)
-														}
-													/>
-												</div>
-												{pageVariantRuleSchema ? (
-													<SectionForm
-														key={`page-variant-${selectedPageVariant}-rule`}
-														data={pvRule}
-														schema={pageVariantRuleSchema}
-														schemasMap={schemasMap}
-														onChange={(d) => onChangePageVariantRule?.(d)}
-													/>
-												) : pvRuleRt ? (
-													<div className="py-1 text-[10px] text-muted-foreground/60">
-														Loading schema…
+									<div className="pt-4">
+										{(() => {
+											const pvRule = activePageVariant?.rule ?? {};
+											const pvRuleRt = (pvRule.__resolveType as string) ?? "";
+											const pvRuleLabel = pvRuleRt
+												? pvRuleRt
+														.split("/")
+														.pop()
+														?.replace(/\.(tsx|ts)$/, "")
+												: "Always";
+											return (
+												<>
+													<div className="space-y-1 px-5">
+														<FieldLabel label="Rule" />
+														<MatcherPicker
+															currentRt={pvRuleRt}
+															currentLabel={pvRuleLabel ?? "Always"}
+															matchers={availableMatchers}
+															onFetchMatchers={onFetchMatchers}
+															onSelect={(rt) =>
+																onChangePageVariantMatcherType?.(rt)
+															}
+														/>
 													</div>
-												) : null}
-											</>
-										);
-									})()}
-								</div>
+													{pageVariantRuleSchema ? (
+														<SectionForm
+															key={`page-variant-${selectedPageVariant}-rule`}
+															data={pvRule}
+															schema={pageVariantRuleSchema}
+															schemasMap={schemasMap}
+															onChange={(d) => onChangePageVariantRule?.(d)}
+														/>
+													) : pvRuleRt ? (
+														<div className="py-1 text-[10px] text-muted-foreground/60">
+															Loading schema…
+														</div>
+													) : null}
+												</>
+											);
+										})()}
+									</div>
 								)}
 							</div>
 						</div>
@@ -2237,7 +2242,9 @@ function CmsPanel({
 													onSelect={() => onSelectSection(section.index)}
 													onDuplicate={() => onDuplicateSection(section.index)}
 													onRemove={() => onRemoveSection(section.index)}
-													onToggleLazy={() => onToggleLazySection(section.index)}
+													onToggleLazy={() =>
+														onToggleLazySection(section.index)
+													}
 													onToggleHidden={() =>
 														onToggleHiddenSection(section.index)
 													}
@@ -4442,7 +4449,10 @@ function FileExplorerWorkspace({
 				cmsSelectedPageVariantRef.current,
 			) as Record<string, unknown>[]),
 		];
-		const rawSection = { ...rawSections[sectionIdx] } as Record<string, unknown>;
+		const rawSection = { ...rawSections[sectionIdx] } as Record<
+			string,
+			unknown
+		>;
 		const displaySection = cmsData.sections[sectionIdx]!;
 		const mvContainer = {
 			...getMultivariateContainer(rawSection, displaySection),
@@ -4456,7 +4466,10 @@ function FileExplorerWorkspace({
 		};
 		const variants = [...(mvContainer.variants ?? [])];
 		const trimmed = newName.trim();
-		const updated = { ...variants[cmsSelectedVariant] } as Record<string, unknown>;
+		const updated = { ...variants[cmsSelectedVariant] } as Record<
+			string,
+			unknown
+		>;
 		if (trimmed) {
 			updated.name = trimmed;
 		} else {
@@ -4474,7 +4487,9 @@ function FileExplorerWorkspace({
 		const updatedDisplaySection = { ...newDisplaySections[sectionIdx] };
 		if (updatedDisplaySection.variants) {
 			const newVariants = [...updatedDisplaySection.variants];
-			const target = { ...newVariants[cmsSelectedVariant] } as (typeof newVariants)[number] & { name?: string };
+			const target = {
+				...newVariants[cmsSelectedVariant],
+			} as (typeof newVariants)[number] & { name?: string };
 			if (trimmed) target.name = trimmed;
 			else target.name = undefined;
 			newVariants[cmsSelectedVariant] = target;
@@ -7063,7 +7078,9 @@ function FileExplorerWorkspace({
 														onChangePageVariantMatcherType={
 															handleChangePageVariantMatcherType
 														}
-														onChangePageVariantName={handleChangePageVariantName}
+														onChangePageVariantName={
+															handleChangePageVariantName
+														}
 														onAddPageVariant={handleAddPageVariant}
 														onDuplicatePageVariant={handleDuplicatePageVariant}
 														onRemovePageVariant={handleRemovePageVariant}

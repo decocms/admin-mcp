@@ -314,10 +314,17 @@ function formatDateDisplay(
 	if (!dateStr) return "";
 	const date = new Date(dateStr);
 	if (Number.isNaN(date.getTime())) return "";
-	return new Intl.DateTimeFormat("en-US",
+	return new Intl.DateTimeFormat(
+		"en-US",
 		mode === "date"
 			? { month: "short", day: "numeric", year: "numeric" }
-			: { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" },
+			: {
+					month: "short",
+					day: "numeric",
+					year: "numeric",
+					hour: "numeric",
+					minute: "2-digit",
+				},
 	).format(date);
 }
 
@@ -428,11 +435,30 @@ function DateField({
 							aria-hidden="true"
 							className="shrink-0 text-muted-foreground"
 						>
-							<rect x="1" y="3" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
+							<rect
+								x="1"
+								y="3"
+								width="14"
+								height="12"
+								rx="2"
+								stroke="currentColor"
+								strokeWidth="1.5"
+							/>
 							<path d="M1 7h14" stroke="currentColor" strokeWidth="1.5" />
-							<path d="M5 1v4M11 1v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+							<path
+								d="M5 1v4M11 1v4"
+								stroke="currentColor"
+								strokeWidth="1.5"
+								strokeLinecap="round"
+							/>
 						</svg>
-						<span className={display ? "flex-1 truncate" : "flex-1 truncate text-muted-foreground/40"}>
+						<span
+							className={
+								display
+									? "flex-1 truncate"
+									: "flex-1 truncate text-muted-foreground/40"
+							}
+						>
 							{display || placeholder}
 						</span>
 					</div>
@@ -462,9 +488,22 @@ function DateField({
 						fill="none"
 						aria-hidden="true"
 					>
-						<rect x="1" y="3" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
+						<rect
+							x="1"
+							y="3"
+							width="14"
+							height="12"
+							rx="2"
+							stroke="currentColor"
+							strokeWidth="1.5"
+						/>
 						<path d="M1 7h14" stroke="currentColor" strokeWidth="1.5" />
-						<path d="M5 1v4M11 1v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+						<path
+							d="M5 1v4M11 1v4"
+							stroke="currentColor"
+							strokeWidth="1.5"
+							strokeLinecap="round"
+						/>
 					</svg>
 				</button>
 			</div>
@@ -1292,9 +1331,7 @@ function ImageField({
 						<div className="px-3 py-2">
 							<p className="truncate font-mono text-xs font-semibold">{stem}</p>
 							{ext && (
-								<p className="text-[10px] text-muted-foreground">
-									{ext}
-								</p>
+								<p className="text-[10px] text-muted-foreground">{ext}</p>
 							)}
 						</div>
 					)}
@@ -1427,9 +1464,7 @@ function MediaField({
 									{stem}
 								</p>
 								{ext && (
-									<p className="text-[10px] text-muted-foreground">
-										{ext}
-									</p>
+									<p className="text-[10px] text-muted-foreground">{ext}</p>
 								)}
 							</div>
 						</>
@@ -1441,9 +1476,7 @@ function MediaField({
 									{stem}
 								</p>
 								{ext && (
-									<p className="text-[10px] text-muted-foreground">
-										{ext}
-									</p>
+									<p className="text-[10px] text-muted-foreground">{ext}</p>
 								)}
 							</div>
 						</div>
