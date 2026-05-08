@@ -1170,12 +1170,21 @@ function SortableVariantItem({
 					</button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end" className="w-36">
-					<DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDuplicate(); }} className="cursor-pointer">
+					<DropdownMenuItem
+						onClick={(e) => {
+							e.stopPropagation();
+							onDuplicate();
+						}}
+						className="cursor-pointer"
+					>
 						<Copy className="mr-2 h-3.5 w-3.5" />
 						Duplicate
 					</DropdownMenuItem>
 					<DropdownMenuItem
-						onClick={(e) => { e.stopPropagation(); onRemove(); }}
+						onClick={(e) => {
+							e.stopPropagation();
+							onRemove();
+						}}
 						className="cursor-pointer text-destructive focus:text-destructive"
 					>
 						<Trash2 className="mr-2 h-3.5 w-3.5" />
@@ -4043,19 +4052,29 @@ function FileExplorerWorkspace({
 			const mv = {
 				__resolveType: "website/flags/multivariate.ts",
 				variants: [
-					{ value: rawSectionsArray, rule: { __resolveType: "website/matchers/always.ts" } },
-					{ value: clonedSections, rule: { __resolveType: "website/matchers/always.ts" } },
+					{
+						value: rawSectionsArray,
+						rule: { __resolveType: "website/matchers/always.ts" },
+					},
+					{
+						value: clonedSections,
+						rule: { __resolveType: "website/matchers/always.ts" },
+					},
 				],
 			};
 			updatedPageData = { ...snap.pageData, sections: mv };
 			newPageVariants = [
 				{
-					label: formatMatcherRule({ __resolveType: "website/matchers/always.ts" }),
+					label: formatMatcherRule({
+						__resolveType: "website/matchers/always.ts",
+					}),
 					rule: { __resolveType: "website/matchers/always.ts" },
 					sections: snap.sections,
 				},
 				{
-					label: formatMatcherRule({ __resolveType: "website/matchers/always.ts" }),
+					label: formatMatcherRule({
+						__resolveType: "website/matchers/always.ts",
+					}),
 					rule: { __resolveType: "website/matchers/always.ts" },
 					sections: [...snap.sections],
 				},
@@ -4090,8 +4109,13 @@ function FileExplorerWorkspace({
 						JSON.stringify(lastDisplay),
 					) as (typeof snap.pageVariants)[number])
 				: {
-						label: formatMatcherRule({ __resolveType: "website/matchers/always.ts" }),
-						rule: { __resolveType: "website/matchers/always.ts" } as Record<string, unknown>,
+						label: formatMatcherRule({
+							__resolveType: "website/matchers/always.ts",
+						}),
+						rule: { __resolveType: "website/matchers/always.ts" } as Record<
+							string,
+							unknown
+						>,
 						sections: [] as GetPageSectionsOutput["sections"],
 					};
 			newPageVariants = [...snap.pageVariants, clonedDisplay];
@@ -4908,7 +4932,10 @@ function FileExplorerWorkspace({
 		const multivariate = {
 			__resolveType: "website/flags/multivariate/section.ts",
 			variants: [
-				{ value: { ...originalSection }, rule: { __resolveType: "website/matchers/always.ts" } },
+				{
+					value: { ...originalSection },
+					rule: { __resolveType: "website/matchers/always.ts" },
+				},
 				{
 					value: { ...originalSection },
 					rule: { __resolveType: "website/matchers/always.ts" },
