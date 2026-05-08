@@ -1170,12 +1170,21 @@ function SortableVariantItem({
 					</button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end" className="w-36">
-					<DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDuplicate(); }} className="cursor-pointer">
+					<DropdownMenuItem
+						onClick={(e) => {
+							e.stopPropagation();
+							onDuplicate();
+						}}
+						className="cursor-pointer"
+					>
 						<Copy className="mr-2 h-3.5 w-3.5" />
 						Duplicate
 					</DropdownMenuItem>
 					<DropdownMenuItem
-						onClick={(e) => { e.stopPropagation(); onRemove(); }}
+						onClick={(e) => {
+							e.stopPropagation();
+							onRemove();
+						}}
 						className="cursor-pointer text-destructive focus:text-destructive"
 					>
 						<Trash2 className="mr-2 h-3.5 w-3.5" />
@@ -1551,6 +1560,7 @@ interface CmsPanelProps {
 	onDuplicateVariant: (variantIdx: number) => void;
 	onRemoveVariant: (variantIdx: number) => void;
 	onRemoveAllVariants: () => void;
+	onRemoveAllPageVariants?: () => void;
 	pageVariants?: GetPageSectionsOutput["pageVariants"];
 	selectedPageVariant?: number | null;
 	onSelectPageVariant?: (idx: number) => void;
@@ -1605,6 +1615,7 @@ function CmsPanel({
 	onDuplicateVariant,
 	onRemoveVariant,
 	onRemoveAllVariants,
+	onRemoveAllPageVariants,
 	pageVariants,
 	selectedPageVariant,
 	onSelectPageVariant,
@@ -1635,6 +1646,11 @@ function CmsPanel({
 	const [variantCardOpen, setVariantCardOpen] = useState<boolean>(
 		() => localStorage.getItem("variant-card-open") !== "false",
 	);
+
+	const [discardSectionVariantsConfirm, setDiscardSectionVariantsConfirm] =
+		useState(false);
+	const [discardPageVariantsConfirm, setDiscardPageVariantsConfirm] =
+		useState(false);
 	const toggleVariantCard = () => {
 		setVariantCardOpen((prev) => {
 			const next = !prev;
@@ -1705,404 +1721,194 @@ function CmsPanel({
 		: undefined;
 
 	return (
-		<div
-			className="flex h-full w-full flex-col overflow-hidden bg-background transition-colors"
-			style={
-				editingGlobally
-					? {
-							background: "oklch(0.97 0.01 289)",
-						}
-					: undefined
-			}
-		>
-			{/* Header */}
-			{isEditingVariant ? (
-				<PanelBreadcrumb
-					crumbs={[
-						{
-							label: editName || "Page",
-							onClick: () => {
-								onDeselectVariant();
-								onDeselectSection();
+		<>
+			<div
+				className="flex h-full w-full flex-col overflow-hidden bg-background transition-colors"
+				style={
+					editingGlobally
+						? {
+								background: "oklch(0.97 0.01 289)",
+							}
+						: undefined
+				}
+			>
+				{/* Header */}
+				{isEditingVariant ? (
+					<PanelBreadcrumb
+						crumbs={[
+							{
+								label: editName || "Page",
+								onClick: () => {
+									onDeselectVariant();
+									onDeselectSection();
+								},
 							},
-						},
-						{
-							label: activeSection?.label ?? "Variants",
-							onClick: onDeselectVariant,
-							color: "oklch(0.45 0.15 160)",
-						},
-						(() => {
-							const v = activeSection?.variants?.[selectedVariant ?? 0];
-							const fallback = `Variant ${(selectedVariant ?? 0) + 1}`;
-							return {
-								label: v?.name || v?.label || fallback,
-								editable: true,
-								editValue: v?.name ?? "",
-								placeholder: v?.label || fallback,
-								onLabelChange: onChangeVariantName,
-							};
-						})(),
-					]}
-					actions={
-						autoSaving && (
-							<Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-						)
-					}
-				/>
-			) : isMultivariate ? (
-				<PanelBreadcrumb
-					crumbs={[
-						{ label: editName || "Page", onClick: onDeselectSection },
-						{
-							label: activeSection?.label ?? "Variants",
-							color: "oklch(0.45 0.15 160)",
-						},
-					]}
-					actions={
-						<button
-							type="button"
-							onClick={onRemoveAllVariants}
-							className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-							title="Remove all variants"
-						>
-							<Trash2 className="h-3.5 w-3.5" />
-						</button>
-					}
-				/>
-			) : isEditing ? (
-				<PanelBreadcrumb
-					crumbs={[
-						{ label: editName || "Page", onClick: onDeselectSection },
-						{ label: activeSection?.label ?? "Edit" },
-					]}
-					borderColor={
-						editingGlobally ? "oklch(0.7278 0.151 289 / 0.2)" : undefined
-					}
-					actions={
-						<>
-							{editingGlobally && (
-								<span
-									className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
-									style={{
-										background: "oklch(0.7278 0.151 289 / 0.12)",
-										color: "oklch(0.5 0.15 289)",
-									}}
-								>
-									editing
-								</span>
-							)}
-							{!savedBlock && !activeSection?.isMultivariate && (
-								<button
-									type="button"
-									onClick={onWrapWithVariants}
-									className="shrink-0 rounded p-1 text-muted-foreground hover:text-[oklch(0.45_0.15_160)] hover:bg-[oklch(0.65_0.15_160/0.12)]"
-									title="Turn into variant"
-								>
-									<Flag className="h-3.5 w-3.5" />
-								</button>
-							)}
-							{autoSaving && !savedBlock && (
+							{
+								label: activeSection?.label ?? "Variants",
+								onClick: onDeselectVariant,
+								color: "oklch(0.45 0.15 160)",
+							},
+							(() => {
+								const v = activeSection?.variants?.[selectedVariant ?? 0];
+								const fallback = `Variant ${(selectedVariant ?? 0) + 1}`;
+								return {
+									label: v?.name || v?.label || fallback,
+									editable: true,
+									editValue: v?.name ?? "",
+									placeholder: v?.label || fallback,
+									onLabelChange: onChangeVariantName,
+								};
+							})(),
+						]}
+						actions={
+							autoSaving && (
 								<Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-							)}
-						</>
-					}
-				/>
-			) : isPageVariantSections ? (
-				<PanelBreadcrumb
-					crumbs={[
-						{ label: editName || "Page", onClick: onDeselectPageVariant },
-						{
-							label:
-								activePageVariant?.name ||
-								`Variant ${selectedPageVariant! + 1}`,
-							color: "oklch(0.45 0.15 160)",
-							editable: true,
-							editValue: activePageVariant?.name ?? "",
-							placeholder: `Variant ${selectedPageVariant! + 1}`,
-							onLabelChange: (v: string) => onChangePageVariantName?.(v),
-						},
-					]}
-					actions={
-						<>
-							{(pageVariants?.length ?? 0) > 1 && (
-								<button
-									type="button"
-									onClick={() => {
-										onRemovePageVariant?.(selectedPageVariant!);
-										onDeselectPageVariant?.();
-									}}
-									className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-									title="Delete variant"
-								>
-									<Trash2 className="h-3.5 w-3.5" />
-								</button>
-							)}
-							{autoSaving && (
-								<Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-							)}
-						</>
-					}
-				/>
-			) : (
-				<div className="shrink-0 border-b px-5 py-4">
-					<div className="flex items-start gap-2">
-						<div className="flex flex-1 flex-col gap-0">
-							<input
-								value={editName}
-								onChange={(e) => {
-									setEditName(e.target.value);
-									onPageMetaChange(e.target.value, editPath);
-								}}
-								className="-mx-2 truncate rounded bg-transparent px-2 py-0.5 text-lg font-semibold leading-tight outline-none placeholder:text-muted-foreground/50 hover:bg-accent/40 focus:bg-accent/60"
-								placeholder="Page name"
-							/>
-							<input
-								value={editPath}
-								onChange={(e) => {
-									setEditPath(e.target.value);
-									onPageMetaChange(editName, e.target.value);
-								}}
-								className="-mx-2 truncate rounded bg-transparent px-2 py-0.5 text-sm leading-tight text-muted-foreground outline-none placeholder:text-muted-foreground/40 hover:bg-accent/40 focus:bg-accent/60"
-								placeholder="/path"
-							/>
-						</div>
-						<button
-							type="button"
-							onClick={onClose}
-							className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-							title="Exit CMS mode"
-						>
-							<X className="h-4 w-4" />
-						</button>
-					</div>
-				</div>
-			)}
-
-			{/* Body */}
-			{loading ? (
-				<div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
-					<Loader2 className="h-4 w-4 animate-spin" />
-					<span className="text-sm">Loading sections…</span>
-				</div>
-			) : error ? (
-				<div className="p-3 text-xs text-destructive">{error}</div>
-			) : !data ? (
-				<div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
-					No page data
-				</div>
-			) : isEditingVariant && sectionData ? (
-				/* ── Variant editing: rule + section ── */
-				<div className="min-h-0 flex-1 overflow-y-auto">
-					{/* Variant card */}
-					<div className="px-3 pt-3">
-						<div
-							className={cn(
-								"overflow-hidden rounded-lg border",
-								!variantCardOpen && "border-dashed",
-							)}
-							style={{ borderColor: "oklch(0.55 0.15 160 / 0.35)" }}
-						>
+							)
+						}
+					/>
+				) : isMultivariate ? (
+					<PanelBreadcrumb
+						crumbs={[
+							{ label: editName || "Page", onClick: onDeselectSection },
+							{
+								label: activeSection?.label ?? "Variants",
+								color: "oklch(0.45 0.15 160)",
+							},
+						]}
+						actions={
 							<button
 								type="button"
-								onClick={toggleVariantCard}
-								className="flex w-full items-center gap-1.5 border-b px-3 py-1.5 text-left transition-colors hover:bg-[oklch(0.65_0.15_160/0.12)]"
-								style={{
-									borderColor: variantCardOpen
-										? "oklch(0.55 0.15 160 / 0.2)"
-										: "transparent",
-									background: "oklch(0.65 0.15 160 / 0.08)",
-								}}
+								onClick={() => setDiscardSectionVariantsConfirm(true)}
+								className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+								title="Remove all variants"
 							>
-								<Flag
-									className="h-3 w-3"
-									style={{ color: "oklch(0.4 0.15 160)" }}
-								/>
-								<span
-									className="flex-1 text-sm font-semibold"
-									style={{ color: "oklch(0.4 0.15 160)" }}
-								>
-									Variant
-								</span>
-								<ChevronDown
-									className={cn(
-										"h-3.5 w-3.5 transition-transform",
-										!variantCardOpen && "-rotate-90",
-									)}
-									style={{ color: "oklch(0.4 0.15 160 / 0.7)" }}
-								/>
+								<Trash2 className="h-3.5 w-3.5" />
 							</button>
-							{variantCardOpen && (
-								<div className="pt-4">
-									{(() => {
-										const variant =
-											activeSection?.variants?.[selectedVariant ?? 0];
-										const ruleData = variant?.rule ?? {};
-										const ruleRt = (ruleData.__resolveType as string) ?? "";
-										const ruleLabel = ruleRt
-											? ruleRt
-													.split("/")
-													.pop()
-													?.replace(/\.(tsx|ts)$/, "")
-											: "Always";
-										return (
-											<>
-												<div className="space-y-1 px-5">
-													<FieldLabel label="Rule" />
-													<MatcherPicker
-														currentRt={ruleRt}
-														currentLabel={ruleLabel ?? "Always"}
-														matchers={availableMatchers}
-														onFetchMatchers={onFetchMatchers}
-														onSelect={onChangeMatcherType}
-													/>
-												</div>
-												{variantRuleSchema ? (
-													<SectionForm
-														key={`variant-${selectedSection}-${selectedVariant}-rule`}
-														data={ruleData}
-														schema={variantRuleSchema}
-														schemasMap={schemasMap}
-														onChange={(d) => onChangeVariantData("rule", d)}
-													/>
-												) : ruleRt ? (
-													<div className="py-1 text-[10px] text-muted-foreground/60">
-														Loading schema…
-													</div>
-												) : null}
-											</>
-										);
-									})()}
-								</div>
-							)}
+						}
+					/>
+				) : isEditing ? (
+					<PanelBreadcrumb
+						crumbs={[
+							{ label: editName || "Page", onClick: onDeselectSection },
+							{ label: activeSection?.label ?? "Edit" },
+						]}
+						borderColor={
+							editingGlobally ? "oklch(0.7278 0.151 289 / 0.2)" : undefined
+						}
+						actions={
+							<>
+								{editingGlobally && (
+									<span
+										className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
+										style={{
+											background: "oklch(0.7278 0.151 289 / 0.12)",
+											color: "oklch(0.5 0.15 289)",
+										}}
+									>
+										editing
+									</span>
+								)}
+								{!savedBlock && !activeSection?.isMultivariate && (
+									<button
+										type="button"
+										onClick={onWrapWithVariants}
+										className="shrink-0 rounded p-1 text-muted-foreground hover:text-[oklch(0.45_0.15_160)] hover:bg-[oklch(0.65_0.15_160/0.12)]"
+										title="Turn into variant"
+									>
+										<Flag className="h-3.5 w-3.5" />
+									</button>
+								)}
+								{autoSaving && !savedBlock && (
+									<Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+								)}
+							</>
+						}
+					/>
+				) : isPageVariantSections ? (
+					<PanelBreadcrumb
+						crumbs={[
+							{ label: editName || "Page", onClick: onDeselectPageVariant },
+							{
+								label:
+									activePageVariant?.name ||
+									`Variant ${selectedPageVariant! + 1}`,
+								color: "oklch(0.45 0.15 160)",
+								editable: true,
+								editValue: activePageVariant?.name ?? "",
+								placeholder: `Variant ${selectedPageVariant! + 1}`,
+								onLabelChange: (v: string) => onChangePageVariantName?.(v),
+							},
+						]}
+						actions={
+							<>
+								{(pageVariants?.length ?? 0) > 1 && (
+									<button
+										type="button"
+										onClick={() => {
+											onRemovePageVariant?.(selectedPageVariant!);
+											onDeselectPageVariant?.();
+										}}
+										className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+										title="Delete variant"
+									>
+										<Trash2 className="h-3.5 w-3.5" />
+									</button>
+								)}
+								{autoSaving && (
+									<Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+								)}
+							</>
+						}
+					/>
+				) : (
+					<div className="shrink-0 border-b px-5 py-4">
+						<div className="flex items-start gap-2">
+							<div className="flex flex-1 flex-col gap-0">
+								<input
+									value={editName}
+									onChange={(e) => {
+										setEditName(e.target.value);
+										onPageMetaChange(e.target.value, editPath);
+									}}
+									className="-mx-2 truncate rounded bg-transparent px-2 py-0.5 text-lg font-semibold leading-tight outline-none placeholder:text-muted-foreground/50 hover:bg-accent/40 focus:bg-accent/60"
+									placeholder="Page name"
+								/>
+								<input
+									value={editPath}
+									onChange={(e) => {
+										setEditPath(e.target.value);
+										onPageMetaChange(editName, e.target.value);
+									}}
+									className="-mx-2 truncate rounded bg-transparent px-2 py-0.5 text-sm leading-tight text-muted-foreground outline-none placeholder:text-muted-foreground/40 hover:bg-accent/40 focus:bg-accent/60"
+									placeholder="/path"
+								/>
+							</div>
+							<button
+								type="button"
+								onClick={onClose}
+								className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+								title="Exit CMS mode"
+							>
+								<X className="h-4 w-4" />
+							</button>
 						</div>
 					</div>
-					{/* Section content */}
-					<div className="px-5 pt-4 pb-1">
-						<span className="text-sm font-semibold text-muted-foreground/70">
-							Content
-						</span>
+				)}
+
+				{/* Body */}
+				{loading ? (
+					<div className="flex flex-1 items-center justify-center gap-2 text-muted-foreground">
+						<Loader2 className="h-4 w-4 animate-spin" />
+						<span className="text-sm">Loading sections…</span>
 					</div>
-					<div className="px-1 pb-2">
-						<SectionForm
-							key={`variant-${selectedSection}-${selectedVariant}-value`}
-							data={sectionData}
-							schema={sectionSchema ?? undefined}
-							schemasMap={schemasMap}
-							onChange={(d) => onChangeVariantData("value", d)}
-						/>
+				) : error ? (
+					<div className="p-3 text-xs text-destructive">{error}</div>
+				) : !data ? (
+					<div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+						No page data
 					</div>
-				</div>
-			) : isMultivariate && activeSection?.variants ? (
-				/* ── Variant list (DnD reorderable) ── */
-				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-					<div className="min-h-0 flex-1 overflow-y-auto p-2">
-						<DndContext
-							sensors={sensors}
-							modifiers={[restrictToVerticalAxis]}
-							onDragEnd={handleVariantDragEnd}
-						>
-							<SortableContext
-								items={variantSortableIds}
-								strategy={verticalListSortingStrategy}
-							>
-								{activeSection.variants.map((variant, vIdx) => {
-									const valueRt = (variant.value.__resolveType as string) ?? "";
-									const valueLabel = valueRt
-										? (valueRt
-												.split("/")
-												.pop()
-												?.replace(/\.(tsx|ts)$/, "") ?? "Section")
-										: "Section";
-									return (
-										<SortableVariantItem
-											key={String(vIdx)}
-											id={String(vIdx)}
-											label={variant.name || variant.label}
-											valueLabel={valueLabel}
-											onSelect={() => onSelectVariant(vIdx)}
-											onDuplicate={() => onDuplicateVariant(vIdx)}
-											onRemove={() => onRemoveVariant(vIdx)}
-										/>
-									);
-								})}
-							</SortableContext>
-						</DndContext>
-					</div>
-					<div className="shrink-0 border-t p-2">
-						<button
-							type="button"
-							onClick={onAddVariant}
-							className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-[oklch(0.65_0.15_160/0.12)]"
-							style={{ color: "oklch(0.45 0.15 160)" }}
-						>
-							<Plus className="h-3.5 w-3.5" />
-							Add variant
-						</button>
-					</div>
-				</div>
-			) : isEditing && sectionData ? (
-				<SectionForm
-					key={`section-${selectedSection}`}
-					data={sectionData}
-					schema={sectionSchema ?? undefined}
-					schemasMap={schemasMap}
-					onChange={onChangeSectionData}
-					readOnly={savedBlock === "readonly"}
-					savedBlockKey={
-						savedBlock ? (activeSection?.savedBlockKey ?? undefined) : undefined
-					}
-					onEditGlobally={onSavedBlockEdit}
-					onSaveGlobally={onSavedBlockSave}
-					onCancelGlobally={onSavedBlockCancel}
-					saving={autoSaving && savedBlock === "editing"}
-				/>
-			) : isPageVariantList ? (
-				/* ── Page-level variant list ─────────────────────────────── */
-				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-					<div className="min-h-0 flex-1 overflow-y-auto p-2">
-						<DndContext
-							sensors={sensors}
-							modifiers={[restrictToVerticalAxis]}
-							onDragEnd={handlePageVariantDragEnd}
-						>
-							<SortableContext
-								items={pageVariantSortableIds}
-								strategy={verticalListSortingStrategy}
-							>
-								{pageVariants?.map((pv, i) => (
-									<SortableVariantItem
-										key={String(i)}
-										id={String(i)}
-										label={
-											pv.sections.length === 1
-												? "1 section"
-												: `${pv.sections.length} sections`
-										}
-										valueLabel={pv.name || pv.label}
-										onSelect={() => onSelectPageVariant?.(i)}
-										onDuplicate={() => onDuplicatePageVariant?.(i)}
-										onRemove={() => onRemovePageVariant?.(i)}
-									/>
-								))}
-							</SortableContext>
-						</DndContext>
-					</div>
-					<div className="shrink-0 border-t p-2">
-						<button
-							type="button"
-							onClick={onAddPageVariant}
-							className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-[oklch(0.65_0.15_160/0.12)]"
-							style={{ color: "oklch(0.45 0.15 160)" }}
-						>
-							<Plus className="h-3.5 w-3.5" />
-							Add variant
-						</button>
-					</div>
-				</div>
-			) : isPageVariantSections ? (
-				/* ── Page-level variant sections with Segment Rule ───────── */
-				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-					{/* Scrollable: variant card + sections */}
+				) : isEditingVariant && sectionData ? (
+					/* ── Variant editing: rule + section ── */
 					<div className="min-h-0 flex-1 overflow-y-auto">
 						{/* Variant card */}
 						<div className="px-3 pt-3">
@@ -2145,10 +1951,12 @@ function CmsPanel({
 								{variantCardOpen && (
 									<div className="pt-4">
 										{(() => {
-											const pvRule = activePageVariant?.rule ?? {};
-											const pvRuleRt = (pvRule.__resolveType as string) ?? "";
-											const pvRuleLabel = pvRuleRt
-												? pvRuleRt
+											const variant =
+												activeSection?.variants?.[selectedVariant ?? 0];
+											const ruleData = variant?.rule ?? {};
+											const ruleRt = (ruleData.__resolveType as string) ?? "";
+											const ruleLabel = ruleRt
+												? ruleRt
 														.split("/")
 														.pop()
 														?.replace(/\.(tsx|ts)$/, "")
@@ -2158,24 +1966,22 @@ function CmsPanel({
 													<div className="space-y-1 px-5">
 														<FieldLabel label="Rule" />
 														<MatcherPicker
-															currentRt={pvRuleRt}
-															currentLabel={pvRuleLabel ?? "Always"}
+															currentRt={ruleRt}
+															currentLabel={ruleLabel ?? "Always"}
 															matchers={availableMatchers}
 															onFetchMatchers={onFetchMatchers}
-															onSelect={(rt) =>
-																onChangePageVariantMatcherType?.(rt)
-															}
+															onSelect={onChangeMatcherType}
 														/>
 													</div>
-													{pageVariantRuleSchema ? (
+													{variantRuleSchema ? (
 														<SectionForm
-															key={`page-variant-${selectedPageVariant}-rule`}
-															data={pvRule}
-															schema={pageVariantRuleSchema}
+															key={`variant-${selectedSection}-${selectedVariant}-rule`}
+															data={ruleData}
+															schema={variantRuleSchema}
 															schemasMap={schemasMap}
-															onChange={(d) => onChangePageVariantRule?.(d)}
+															onChange={(d) => onChangeVariantData("rule", d)}
 														/>
-													) : pvRuleRt ? (
+													) : ruleRt ? (
 														<div className="py-1 text-[10px] text-muted-foreground/60">
 															Loading schema…
 														</div>
@@ -2187,13 +1993,292 @@ function CmsPanel({
 								)}
 							</div>
 						</div>
-						{/* Sections title */}
+						{/* Section content */}
 						<div className="px-5 pt-4 pb-1">
 							<span className="text-sm font-semibold text-muted-foreground/70">
-								Sections
+								Content
 							</span>
 						</div>
-						<div className="p-2 pt-1">
+						<div className="px-1 pb-2">
+							<SectionForm
+								key={`variant-${selectedSection}-${selectedVariant}-value`}
+								data={sectionData}
+								schema={sectionSchema ?? undefined}
+								schemasMap={schemasMap}
+								onChange={(d) => onChangeVariantData("value", d)}
+							/>
+						</div>
+					</div>
+				) : isMultivariate && activeSection?.variants ? (
+					/* ── Variant list (DnD reorderable) ── */
+					<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+						<div className="min-h-0 flex-1 overflow-y-auto p-2">
+							<DndContext
+								sensors={sensors}
+								modifiers={[restrictToVerticalAxis]}
+								onDragEnd={handleVariantDragEnd}
+							>
+								<SortableContext
+									items={variantSortableIds}
+									strategy={verticalListSortingStrategy}
+								>
+									{activeSection.variants.map((variant, vIdx) => {
+										const valueRt =
+											(variant.value.__resolveType as string) ?? "";
+										const valueLabel = valueRt
+											? (valueRt
+													.split("/")
+													.pop()
+													?.replace(/\.(tsx|ts)$/, "") ?? "Section")
+											: "Section";
+										return (
+											<SortableVariantItem
+												key={String(vIdx)}
+												id={String(vIdx)}
+												label={variant.name || variant.label}
+												valueLabel={valueLabel}
+												onSelect={() => onSelectVariant(vIdx)}
+												onDuplicate={() => onDuplicateVariant(vIdx)}
+												onRemove={() => onRemoveVariant(vIdx)}
+											/>
+										);
+									})}
+								</SortableContext>
+							</DndContext>
+						</div>
+						<div className="shrink-0 border-t p-2">
+							<button
+								type="button"
+								onClick={onAddVariant}
+								className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-[oklch(0.65_0.15_160/0.12)]"
+								style={{ color: "oklch(0.45 0.15 160)" }}
+							>
+								<Plus className="h-3.5 w-3.5" />
+								Add variant
+							</button>
+						</div>
+					</div>
+				) : isEditing && sectionData ? (
+					<SectionForm
+						key={`section-${selectedSection}`}
+						data={sectionData}
+						schema={sectionSchema ?? undefined}
+						schemasMap={schemasMap}
+						onChange={onChangeSectionData}
+						readOnly={savedBlock === "readonly"}
+						savedBlockKey={
+							savedBlock
+								? (activeSection?.savedBlockKey ?? undefined)
+								: undefined
+						}
+						onEditGlobally={onSavedBlockEdit}
+						onSaveGlobally={onSavedBlockSave}
+						onCancelGlobally={onSavedBlockCancel}
+						saving={autoSaving && savedBlock === "editing"}
+					/>
+				) : isPageVariantList ? (
+					/* ── Page-level variant list ─────────────────────────────── */
+					<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+						<div className="shrink-0 flex items-center justify-between border-b px-3 py-2">
+							<span className="text-xs text-muted-foreground">
+								Page variants
+							</span>
+							<button
+								type="button"
+								onClick={() => setDiscardPageVariantsConfirm(true)}
+								className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+								title="Discard all page variants"
+							>
+								<Trash2 className="h-3.5 w-3.5" />
+							</button>
+						</div>
+						<div className="min-h-0 flex-1 overflow-y-auto p-2">
+							<DndContext
+								sensors={sensors}
+								modifiers={[restrictToVerticalAxis]}
+								onDragEnd={handlePageVariantDragEnd}
+							>
+								<SortableContext
+									items={pageVariantSortableIds}
+									strategy={verticalListSortingStrategy}
+								>
+									{pageVariants?.map((pv, i) => (
+										<SortableVariantItem
+											key={String(i)}
+											id={String(i)}
+											label={
+												pv.sections.length === 1
+													? "1 section"
+													: `${pv.sections.length} sections`
+											}
+											valueLabel={pv.name || pv.label}
+											onSelect={() => onSelectPageVariant?.(i)}
+											onDuplicate={() => onDuplicatePageVariant?.(i)}
+											onRemove={() => onRemovePageVariant?.(i)}
+										/>
+									))}
+								</SortableContext>
+							</DndContext>
+						</div>
+						<div className="shrink-0 border-t p-2">
+							<button
+								type="button"
+								onClick={onAddPageVariant}
+								className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-xs transition-colors hover:bg-[oklch(0.65_0.15_160/0.12)]"
+								style={{ color: "oklch(0.45 0.15 160)" }}
+							>
+								<Plus className="h-3.5 w-3.5" />
+								Add variant
+							</button>
+						</div>
+					</div>
+				) : isPageVariantSections ? (
+					/* ── Page-level variant sections with Segment Rule ───────── */
+					<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+						{/* Scrollable: variant card + sections */}
+						<div className="min-h-0 flex-1 overflow-y-auto">
+							{/* Variant card */}
+							<div className="px-3 pt-3">
+								<div
+									className={cn(
+										"overflow-hidden rounded-lg border",
+										!variantCardOpen && "border-dashed",
+									)}
+									style={{ borderColor: "oklch(0.55 0.15 160 / 0.35)" }}
+								>
+									<button
+										type="button"
+										onClick={toggleVariantCard}
+										className="flex w-full items-center gap-1.5 border-b px-3 py-1.5 text-left transition-colors hover:bg-[oklch(0.65_0.15_160/0.12)]"
+										style={{
+											borderColor: variantCardOpen
+												? "oklch(0.55 0.15 160 / 0.2)"
+												: "transparent",
+											background: "oklch(0.65 0.15 160 / 0.08)",
+										}}
+									>
+										<Flag
+											className="h-3 w-3"
+											style={{ color: "oklch(0.4 0.15 160)" }}
+										/>
+										<span
+											className="flex-1 text-sm font-semibold"
+											style={{ color: "oklch(0.4 0.15 160)" }}
+										>
+											Variant
+										</span>
+										<ChevronDown
+											className={cn(
+												"h-3.5 w-3.5 transition-transform",
+												!variantCardOpen && "-rotate-90",
+											)}
+											style={{ color: "oklch(0.4 0.15 160 / 0.7)" }}
+										/>
+									</button>
+									{variantCardOpen && (
+										<div className="pt-4">
+											{(() => {
+												const pvRule = activePageVariant?.rule ?? {};
+												const pvRuleRt = (pvRule.__resolveType as string) ?? "";
+												const pvRuleLabel = pvRuleRt
+													? pvRuleRt
+															.split("/")
+															.pop()
+															?.replace(/\.(tsx|ts)$/, "")
+													: "Always";
+												return (
+													<>
+														<div className="space-y-1 px-5">
+															<FieldLabel label="Rule" />
+															<MatcherPicker
+																currentRt={pvRuleRt}
+																currentLabel={pvRuleLabel ?? "Always"}
+																matchers={availableMatchers}
+																onFetchMatchers={onFetchMatchers}
+																onSelect={(rt) =>
+																	onChangePageVariantMatcherType?.(rt)
+																}
+															/>
+														</div>
+														{pageVariantRuleSchema ? (
+															<SectionForm
+																key={`page-variant-${selectedPageVariant}-rule`}
+																data={pvRule}
+																schema={pageVariantRuleSchema}
+																schemasMap={schemasMap}
+																onChange={(d) => onChangePageVariantRule?.(d)}
+															/>
+														) : pvRuleRt ? (
+															<div className="py-1 text-[10px] text-muted-foreground/60">
+																Loading schema…
+															</div>
+														) : null}
+													</>
+												);
+											})()}
+										</div>
+									)}
+								</div>
+							</div>
+							{/* Sections title */}
+							<div className="px-5 pt-4 pb-1">
+								<span className="text-sm font-semibold text-muted-foreground/70">
+									Sections
+								</span>
+							</div>
+							<div className="p-2 pt-1">
+								{data.sections.length === 0 ? (
+									<div className="px-2 py-3 text-xs text-muted-foreground">
+										No sections on this page.
+									</div>
+								) : (
+									<DndContext
+										sensors={sensors}
+										modifiers={[restrictToVerticalAxis]}
+										onDragEnd={handleDragEnd}
+									>
+										<SortableContext
+											items={sortableIds}
+											strategy={verticalListSortingStrategy}
+										>
+											<div className="space-y-1.5">
+												{data.sections.map((section) => (
+													<SortableSectionItem
+														key={String(section.index)}
+														section={section}
+														onSelect={() => onSelectSection(section.index)}
+														onDuplicate={() =>
+															onDuplicateSection(section.index)
+														}
+														onRemove={() => onRemoveSection(section.index)}
+														onToggleLazy={() =>
+															onToggleLazySection(section.index)
+														}
+														onToggleHidden={() =>
+															onToggleHiddenSection(section.index)
+														}
+													/>
+												))}
+											</div>
+										</SortableContext>
+									</DndContext>
+								)}
+							</div>
+						</div>
+						<div className="shrink-0 border-t p-3">
+							<button
+								type="button"
+								onClick={onAddSection}
+								className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+							>
+								<Plus className="h-3.5 w-3.5" />
+								Add section
+							</button>
+						</div>
+					</div>
+				) : (
+					<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+						<div className="min-h-0 flex-1 overflow-y-auto p-2">
 							{data.sections.length === 0 ? (
 								<div className="px-2 py-3 text-xs text-muted-foreground">
 									No sections on this page.
@@ -2229,76 +2314,83 @@ function CmsPanel({
 								</DndContext>
 							)}
 						</div>
-					</div>
-					<div className="shrink-0 border-t p-3">
-						<button
-							type="button"
-							onClick={onAddSection}
-							className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-						>
-							<Plus className="h-3.5 w-3.5" />
-							Add section
-						</button>
-					</div>
-				</div>
-			) : (
-				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-					<div className="min-h-0 flex-1 overflow-y-auto p-2">
-						{data.sections.length === 0 ? (
-							<div className="px-2 py-3 text-xs text-muted-foreground">
-								No sections on this page.
-							</div>
-						) : (
-							<DndContext
-								sensors={sensors}
-								modifiers={[restrictToVerticalAxis]}
-								onDragEnd={handleDragEnd}
+						<div className="shrink-0 border-t p-3 space-y-1">
+							<button
+								type="button"
+								onClick={onAddSection}
+								className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
 							>
-								<SortableContext
-									items={sortableIds}
-									strategy={verticalListSortingStrategy}
-								>
-									<div className="space-y-1.5">
-										{data.sections.map((section) => (
-											<SortableSectionItem
-												key={String(section.index)}
-												section={section}
-												onSelect={() => onSelectSection(section.index)}
-												onDuplicate={() => onDuplicateSection(section.index)}
-												onRemove={() => onRemoveSection(section.index)}
-												onToggleLazy={() => onToggleLazySection(section.index)}
-												onToggleHidden={() =>
-													onToggleHiddenSection(section.index)
-												}
-											/>
-										))}
-									</div>
-								</SortableContext>
-							</DndContext>
-						)}
+								<Plus className="h-3.5 w-3.5" />
+								Add section
+							</button>
+							<button
+								type="button"
+								onClick={onAddPageVariant}
+								className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-sm transition-colors hover:bg-[oklch(0.65_0.15_160/0.12)]"
+								style={{ color: "oklch(0.45 0.15 160)" }}
+							>
+								<Flag className="h-3.5 w-3.5" />
+								Add page variant
+							</button>
+						</div>
 					</div>
-					<div className="shrink-0 border-t p-3 space-y-1">
-						<button
-							type="button"
-							onClick={onAddSection}
-							className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+				)}
+			</div>
+
+			<AlertDialog
+				open={discardSectionVariantsConfirm}
+				onOpenChange={setDiscardSectionVariantsConfirm}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Remove all variants?</AlertDialogTitle>
+						<AlertDialogDescription>
+							This will remove all variants from this section and keep only the
+							default content. This action cannot be undone.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogAction
+							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+							onClick={() => {
+								setDiscardSectionVariantsConfirm(false);
+								onRemoveAllVariants();
+							}}
 						>
-							<Plus className="h-3.5 w-3.5" />
-							Add section
-						</button>
-						<button
-							type="button"
-							onClick={onAddPageVariant}
-							className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-sm transition-colors hover:bg-[oklch(0.65_0.15_160/0.12)]"
-							style={{ color: "oklch(0.45 0.15 160)" }}
+							Remove all variants
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+
+			<AlertDialog
+				open={discardPageVariantsConfirm}
+				onOpenChange={setDiscardPageVariantsConfirm}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Discard all page variants?</AlertDialogTitle>
+						<AlertDialogDescription>
+							This will revert the page to a single version using the default
+							variant. All other variants will be permanently removed.
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogAction
+							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+							onClick={() => {
+								setDiscardPageVariantsConfirm(false);
+								onRemoveAllPageVariants?.();
+							}}
 						>
-							<Flag className="h-3.5 w-3.5" />
-							Add page variant
-						</button>
-					</div>
-				</div>
-			)}
-		</div>
+							Discard all variants
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+		</>
 	);
 }
 
@@ -3960,19 +4052,29 @@ function FileExplorerWorkspace({
 			const mv = {
 				__resolveType: "website/flags/multivariate.ts",
 				variants: [
-					{ value: rawSectionsArray, rule: { __resolveType: "website/matchers/always.ts" } },
-					{ value: clonedSections, rule: { __resolveType: "website/matchers/always.ts" } },
+					{
+						value: rawSectionsArray,
+						rule: { __resolveType: "website/matchers/always.ts" },
+					},
+					{
+						value: clonedSections,
+						rule: { __resolveType: "website/matchers/always.ts" },
+					},
 				],
 			};
 			updatedPageData = { ...snap.pageData, sections: mv };
 			newPageVariants = [
 				{
-					label: formatMatcherRule({ __resolveType: "website/matchers/always.ts" }),
+					label: formatMatcherRule({
+						__resolveType: "website/matchers/always.ts",
+					}),
 					rule: { __resolveType: "website/matchers/always.ts" },
 					sections: snap.sections,
 				},
 				{
-					label: formatMatcherRule({ __resolveType: "website/matchers/always.ts" }),
+					label: formatMatcherRule({
+						__resolveType: "website/matchers/always.ts",
+					}),
 					rule: { __resolveType: "website/matchers/always.ts" },
 					sections: [...snap.sections],
 				},
@@ -4007,8 +4109,13 @@ function FileExplorerWorkspace({
 						JSON.stringify(lastDisplay),
 					) as (typeof snap.pageVariants)[number])
 				: {
-						label: formatMatcherRule({ __resolveType: "website/matchers/always.ts" }),
-						rule: { __resolveType: "website/matchers/always.ts" } as Record<string, unknown>,
+						label: formatMatcherRule({
+							__resolveType: "website/matchers/always.ts",
+						}),
+						rule: { __resolveType: "website/matchers/always.ts" } as Record<
+							string,
+							unknown
+						>,
 						sections: [] as GetPageSectionsOutput["sections"],
 					};
 			newPageVariants = [...snap.pageVariants, clonedDisplay];
@@ -4129,6 +4236,68 @@ function FileExplorerWorkspace({
 		cmsDataRef.current = next;
 
 		// Auto-save
+		setCmsAutoSaving(true);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			try {
+				const result = await app.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: next.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				setPreviewRefreshKey((k) => k + 1);
+			} catch {
+				toast.error("Auto-save failed");
+			} finally {
+				setCmsAutoSaving(false);
+			}
+		}, 300);
+	};
+
+	const handleRemoveAllPageVariants = () => {
+		const snap = cmsDataRef.current;
+		if (!snap?.pageVariants || !app || !userEnv) return;
+
+		const mv = snap.pageData.sections as Record<string, unknown>;
+		const rawVariants =
+			(mv.variants as Array<{
+				value: unknown;
+				rule: Record<string, unknown>;
+			}>) ?? [];
+
+		const ALWAYS_TYPES = [
+			"website/matchers/always.ts",
+			"$live/matchers/MatchAlways.ts",
+		];
+		const alwaysVariant = rawVariants.find((v) => {
+			const rt = (v.rule.__resolveType as string) ?? "";
+			return ALWAYS_TYPES.includes(rt) || rt === "";
+		});
+		const baseValue = alwaysVariant?.value ?? rawVariants[0]?.value ?? [];
+
+		const updatedPageData = { ...snap.pageData, sections: baseValue };
+
+		const alwaysDisplayVariant =
+			snap.pageVariants.find((pv) => {
+				const rt = (pv.rule.__resolveType as string) ?? "";
+				return ALWAYS_TYPES.includes(rt) || rt === "";
+			}) ?? snap.pageVariants[0];
+
+		const next: GetPageSectionsOutput = {
+			...snap,
+			pageData: updatedPageData,
+			pageVariants: undefined,
+			sections: alwaysDisplayVariant?.sections ?? snap.sections,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+		setCmsSelectedPageVariant(null);
+		cmsSelectedPageVariantRef.current = null;
+
 		setCmsAutoSaving(true);
 		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
 		cmsAutoSaveTimerRef.current = setTimeout(async () => {
@@ -4763,7 +4932,10 @@ function FileExplorerWorkspace({
 		const multivariate = {
 			__resolveType: "website/flags/multivariate/section.ts",
 			variants: [
-				{ value: { ...originalSection }, rule: { __resolveType: "website/matchers/always.ts" } },
+				{
+					value: { ...originalSection },
+					rule: { __resolveType: "website/matchers/always.ts" },
+				},
 				{
 					value: { ...originalSection },
 					rule: { __resolveType: "website/matchers/always.ts" },
@@ -7046,6 +7218,9 @@ function FileExplorerWorkspace({
 														onDuplicateVariant={handleDuplicateVariant}
 														onRemoveVariant={handleRemoveVariant}
 														onRemoveAllVariants={handleRemoveAllVariants}
+														onRemoveAllPageVariants={
+															handleRemoveAllPageVariants
+														}
 														pageVariants={cmsData?.pageVariants}
 														selectedPageVariant={cmsSelectedPageVariant}
 														onSelectPageVariant={handleSelectPageVariant}
