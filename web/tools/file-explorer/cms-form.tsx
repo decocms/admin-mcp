@@ -29,6 +29,7 @@ import {
 	Trash2,
 	Upload,
 	VideoIcon,
+	X,
 } from "lucide-react";
 import {
 	createContext,
@@ -306,6 +307,20 @@ function formatForNativeInput(
 	return `${y}-${m}-${d}T${hh}:${mm}`;
 }
 
+function formatDateDisplay(
+	dateStr: string | undefined,
+	mode: "date" | "date-time",
+): string {
+	if (!dateStr) return "";
+	const date = new Date(dateStr);
+	if (Number.isNaN(date.getTime())) return "";
+	return new Intl.DateTimeFormat("en-US",
+		mode === "date"
+			? { month: "short", day: "numeric", year: "numeric" }
+			: { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" },
+	).format(date);
+}
+
 function DateField({
 	label,
 	description,
@@ -322,10 +337,9 @@ function DateField({
 	const inputType = mode === "date" ? "date" : "datetime-local";
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [local, setLocal] = useState(() => formatForNativeInput(value, mode));
+	const [focused, setFocused] = useState(false);
 
-	// Sync external value changes, but only if the formatted value actually
-	// differs from what we already have — avoids re-renders that kill the
-	// native date picker popup.
+	// Sync external value changes without clobbering an open picker.
 	const prevFormattedRef = useRef(local);
 	useEffect(() => {
 		const formatted = formatForNativeInput(value, mode);
@@ -353,47 +367,104 @@ function DateField({
 		}
 	};
 
+	const handleBlur = () => {
+		setFocused(false);
+		// If user typed an unparseable value, snap back to the source-of-truth value.
+		const formatted = formatForNativeInput(value, mode);
+		if (formatted !== local) {
+			setLocal(formatted);
+			prevFormattedRef.current = formatted;
+		}
+	};
+
+	const handleClear = (e: React.MouseEvent) => {
+		e.preventDefault();
+		e.stopPropagation();
+		setLocal("");
+		prevFormattedRef.current = "";
+		onChange("");
+	};
+
+	const openPicker = (e: React.MouseEvent) => {
+		e.preventDefault();
+		e.stopPropagation();
+		const el = inputRef.current;
+		if (!el) return;
+		if (typeof el.showPicker === "function") {
+			try {
+				el.showPicker();
+				return;
+			} catch {
+				// fall through to focus
+			}
+		}
+		el.focus();
+	};
+
+	const display = formatDateDisplay(value, mode);
+	const placeholder = mode === "date" ? "Set a date…" : "Set date & time…";
+	const showOverlay = !focused;
+
 	return (
 		<div className="space-y-1">
 			<FieldLabel label={label} description={description} />
-			<div className="relative flex items-center">
+			<div className="relative">
 				<input
 					ref={inputRef}
 					type={inputType}
 					value={local}
 					onChange={handleChange}
-					className="flex h-7 w-full rounded-md border border-input bg-transparent px-2 pr-7 text-xs shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 [&::-webkit-calendar-picker-indicator]{opacity:0;width:0}"
+					onFocus={() => setFocused(true)}
+					onBlur={handleBlur}
+					className="flex h-9 w-full rounded-md border border-input bg-background px-3 pr-9 text-sm shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
 				/>
+				{showOverlay && (
+					<div className="pointer-events-none absolute inset-0 flex items-center gap-2 rounded-md border border-input bg-background px-3 pr-9 text-sm shadow-xs">
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 16 16"
+							fill="none"
+							aria-hidden="true"
+							className="shrink-0 text-muted-foreground"
+						>
+							<rect x="1" y="3" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
+							<path d="M1 7h14" stroke="currentColor" strokeWidth="1.5" />
+							<path d="M5 1v4M11 1v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+						</svg>
+						<span className={display ? "flex-1 truncate" : "flex-1 truncate text-muted-foreground/40"}>
+							{display || placeholder}
+						</span>
+					</div>
+				)}
+				{value && !focused && (
+					<button
+						type="button"
+						onMouseDown={(e) => e.preventDefault()}
+						onClick={handleClear}
+						className="absolute right-8 top-1/2 z-10 -translate-y-1/2 rounded p-0.5 text-muted-foreground/60 hover:text-foreground"
+						title="Clear"
+					>
+						<X className="h-3.5 w-3.5" />
+					</button>
+				)}
 				<button
 					type="button"
-					onClick={() => inputRef.current?.showPicker()}
-					className="absolute right-1.5 flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+					onMouseDown={(e) => e.preventDefault()}
+					onClick={openPicker}
+					className="absolute right-1 top-1/2 z-10 -translate-y-1/2 rounded p-1 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
 					title="Open picker"
 				>
 					<svg
-						width="12"
-						height="12"
+						width="14"
+						height="14"
 						viewBox="0 0 16 16"
 						fill="none"
 						aria-hidden="true"
 					>
-						<title>Calendar</title>
-						<rect
-							x="1"
-							y="3"
-							width="14"
-							height="12"
-							rx="2"
-							stroke="currentColor"
-							strokeWidth="1.5"
-						/>
+						<rect x="1" y="3" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.5" />
 						<path d="M1 7h14" stroke="currentColor" strokeWidth="1.5" />
-						<path
-							d="M5 1v4M11 1v4"
-							stroke="currentColor"
-							strokeWidth="1.5"
-							strokeLinecap="round"
-						/>
+						<path d="M5 1v4M11 1v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
 					</svg>
 				</button>
 			</div>
@@ -1221,7 +1292,7 @@ function ImageField({
 						<div className="px-3 py-2">
 							<p className="truncate font-mono text-xs font-semibold">{stem}</p>
 							{ext && (
-								<p className="text-[10px] uppercase text-muted-foreground">
+								<p className="text-[10px] text-muted-foreground">
 									{ext}
 								</p>
 							)}
@@ -1356,7 +1427,7 @@ function MediaField({
 									{stem}
 								</p>
 								{ext && (
-									<p className="text-[10px] uppercase text-muted-foreground">
+									<p className="text-[10px] text-muted-foreground">
 										{ext}
 									</p>
 								)}
@@ -1370,7 +1441,7 @@ function MediaField({
 									{stem}
 								</p>
 								{ext && (
-									<p className="text-[10px] uppercase text-muted-foreground">
+									<p className="text-[10px] text-muted-foreground">
 										{ext}
 									</p>
 								)}

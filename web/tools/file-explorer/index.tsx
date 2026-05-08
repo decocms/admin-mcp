@@ -50,6 +50,7 @@ import {
 	MousePointer2,
 	Package,
 	PanelLeft,
+	Pencil,
 	Plus,
 	RefreshCw,
 	Save,
@@ -103,6 +104,14 @@ import {
 	ContextMenuItem,
 	ContextMenuTrigger,
 } from "@/components/ui/context-menu.tsx";
+import {
+	CommandDialog,
+	CommandEmpty,
+	CommandGroup,
+	CommandInput,
+	CommandItem,
+	CommandList,
+} from "@/components/ui/command.tsx";
 import {
 	Dialog,
 	DialogContent,
@@ -169,7 +178,7 @@ import type {
 } from "../../../api/tools/files.ts";
 import type { GitRawOutput, GitStatus } from "../../../api/tools/git.ts";
 import type { SchemaProperties } from "./cms-form.tsx";
-import { SectionForm } from "./cms-form.tsx";
+import { FieldLabel, SectionForm } from "./cms-form.tsx";
 import { PublishDialog } from "./publish-dialog.tsx";
 import type {
 	CmsInspectPayload,
@@ -872,21 +881,16 @@ function MatcherPicker({
 	onSelect: (resolveType: string) => void;
 }) {
 	const [open, setOpen] = useState(false);
-	const [search, setSearch] = useState("");
 
 	const handleOpen = () => {
 		setOpen(true);
-		setSearch("");
 		onFetchMatchers();
 	};
 
-	const filtered = matchers?.filter(
-		(m) =>
-			!search ||
-			m.title.toLowerCase().includes(search.toLowerCase()) ||
-			m.resolveType.toLowerCase().includes(search.toLowerCase()) ||
-			m.description?.toLowerCase().includes(search.toLowerCase()),
-	);
+	const handleSelect = (rt: string) => {
+		onSelect(rt);
+		setOpen(false);
+	};
 
 	const CurrentIcon = matcherIcon(
 		matchers?.find((m) => m.resolveType === currentRt)?.icon,
@@ -894,122 +898,76 @@ function MatcherPicker({
 
 	return (
 		<>
-			{/* Trigger */}
 			<button
 				type="button"
 				onClick={handleOpen}
-				className="flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent/40"
+				className="flex h-9 w-full items-center gap-2 rounded-md border border-input bg-transparent px-3 text-left text-sm shadow-xs transition-colors hover:bg-accent/40"
 			>
 				<CurrentIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
 				<span className="flex-1 truncate">{currentLabel}</span>
-				<ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+				<ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
 			</button>
 
-			{/* Modal */}
-			{open && (
-				<div
-					className="fixed inset-0 z-[100] flex items-center justify-center bg-black/30 backdrop-blur-[2px]"
-					onClick={(e) => {
-						if (e.target === e.currentTarget) setOpen(false);
-					}}
-					onKeyDown={(e) => {
-						if (e.key === "Escape") setOpen(false);
-					}}
-				>
-					<div className="relative flex max-h-[80vh] w-[620px] flex-col overflow-hidden rounded-xl border bg-popover shadow-2xl">
-						{/* Header + search */}
-						<div className="flex shrink-0 items-center gap-3 border-b px-4 py-3">
-							<span className="shrink-0 text-sm font-semibold">
-								Segment Rule
-							</span>
-							<div className="flex flex-1 items-center gap-2 rounded-md border px-2.5 py-1">
-								<Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-								<input
-									value={search}
-									onChange={(e) => setSearch(e.target.value)}
-									placeholder="Search…"
-									className="w-full bg-transparent text-xs outline-none placeholder:text-muted-foreground/50"
-								/>
-							</div>
-							<button
-								type="button"
-								onClick={() => setOpen(false)}
-								className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-							>
-								<X className="h-3.5 w-3.5" />
-							</button>
+			<CommandDialog
+				open={open}
+				onOpenChange={setOpen}
+				title="Choose a rule"
+				description="Pick how to target users for this variant"
+				className="sm:max-w-lg"
+			>
+				<CommandInput placeholder="Search rules…" />
+				<CommandList>
+					{!matchers ? (
+						<div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+							<Loader2 className="h-4 w-4 animate-spin" />
+							Loading rules…
 						</div>
-
-						{/* Grid */}
-						<div className="min-h-0 flex-1 overflow-y-auto p-3">
-							{!matchers ? (
-								<div className="flex items-center justify-center gap-2 py-16 text-xs text-muted-foreground">
-									<Loader2 className="h-4 w-4 animate-spin" />
-									Loading matchers\u2026
-								</div>
-							) : (
-								<div className="grid grid-cols-3 gap-2">
-									{/* Always card */}
-									<button
-										type="button"
-										onClick={() => {
-											onSelect("");
-											setOpen(false);
-										}}
-										className={cn(
-											"flex flex-col gap-2 rounded-lg border p-3 text-left transition-colors hover:bg-accent/50",
-											!currentRt && "border-ring bg-accent/40",
-										)}
-									>
-										<Eye className="h-5 w-5 text-muted-foreground" />
-										<div>
-											<div className="text-xs font-medium">Always</div>
-											<div className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
-												Target all users
-											</div>
-										</div>
-									</button>
-
-									{(filtered ?? []).map((m) => {
-										const Icon = matcherIcon(m.icon);
-										return (
-											<button
-												key={m.resolveType}
-												type="button"
-												onClick={() => {
-													onSelect(m.resolveType);
-													setOpen(false);
-												}}
-												className={cn(
-													"flex flex-col gap-2 rounded-lg border p-3 text-left transition-colors hover:bg-accent/50",
-													currentRt === m.resolveType &&
-														"border-ring bg-accent/40",
+					) : (
+						<>
+							<CommandEmpty>No rules found.</CommandEmpty>
+							<CommandGroup>
+								<CommandItem
+									value="always Target all users"
+									onSelect={() => handleSelect("")}
+									className={cn("gap-2.5", !currentRt && "bg-accent/60")}
+								>
+									<Eye className="size-4 shrink-0 text-muted-foreground" />
+									<div className="flex min-w-0 flex-1 flex-col">
+										<span className="text-sm">Always</span>
+										<span className="text-xs text-muted-foreground">
+											Target all users
+										</span>
+									</div>
+								</CommandItem>
+								{matchers.map((m) => {
+									const Icon = matcherIcon(m.icon);
+									return (
+										<CommandItem
+											key={m.resolveType}
+											value={`${m.title} ${m.resolveType} ${m.description ?? ""}`}
+											onSelect={() => handleSelect(m.resolveType)}
+											className={cn(
+												"gap-2.5",
+												currentRt === m.resolveType && "bg-accent/60",
+											)}
+										>
+											<Icon className="size-4 shrink-0 text-muted-foreground" />
+											<div className="flex min-w-0 flex-1 flex-col">
+												<span className="text-sm">{m.title}</span>
+												{m.description && (
+													<span className="truncate text-xs text-muted-foreground">
+														{m.description}
+													</span>
 												)}
-											>
-												<Icon className="h-5 w-5 text-muted-foreground" />
-												<div>
-													<div className="text-xs font-medium">{m.title}</div>
-													{m.description && (
-														<div className="mt-0.5 text-[10px] leading-snug text-muted-foreground">
-															{m.description}
-														</div>
-													)}
-												</div>
-											</button>
-										);
-									})}
-								</div>
-							)}
-
-							{matchers && filtered?.length === 0 && (
-								<div className="py-8 text-center text-xs text-muted-foreground">
-									No matchers found
-								</div>
-							)}
-						</div>
-					</div>
-				</div>
-			)}
+											</div>
+										</CommandItem>
+									);
+								})}
+							</CommandGroup>
+						</>
+					)}
+				</CommandList>
+			</CommandDialog>
 		</>
 	);
 }
@@ -1193,7 +1151,7 @@ function SortableVariantItem({
 			}}
 			className="group flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 text-[oklch(0.45_0.15_160)] hover:bg-[oklch(0.65_0.15_160/0.12)] dark:text-[oklch(0.78_0.15_160)] dark:hover:bg-[oklch(0.65_0.15_160/0.15)]"
 		>
-			<GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
+			<Flag className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
 			<div className="flex flex-1 flex-col gap-0.5 overflow-hidden">
 				<span className="truncate text-xs font-medium">{valueLabel}</span>
 				<span className="truncate text-[10px] text-muted-foreground">
@@ -1310,7 +1268,7 @@ function AppsPanel({
 							.sort(([a], [b]) => a.localeCompare(b))
 							.map(([category, apps]) => (
 								<div key={category} className="flex flex-col gap-1">
-									<span className="px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+									<span className="px-3 text-sm font-semibold text-muted-foreground">
 										{category}
 									</span>
 									<div className="flex flex-col">
@@ -1411,6 +1369,82 @@ interface BreadcrumbCrumb {
 	label: string;
 	onClick?: () => void;
 	color?: string;
+	editable?: boolean;
+	editValue?: string;
+	placeholder?: string;
+	onLabelChange?: (v: string) => void;
+}
+
+function EditableBreadcrumbLabel({
+	value,
+	placeholder,
+	color,
+	onChange,
+}: {
+	value: string;
+	placeholder: string;
+	color?: string;
+	onChange: (v: string) => void;
+}) {
+	const [editing, setEditing] = useState(false);
+	const [draft, setDraft] = useState(value);
+	const inputRef = useRef<HTMLInputElement>(null);
+
+	useEffect(() => {
+		if (!editing) setDraft(value);
+	}, [value, editing]);
+
+	useEffect(() => {
+		if (editing) {
+			inputRef.current?.focus();
+			inputRef.current?.select();
+		}
+	}, [editing]);
+
+	const commit = () => {
+		setEditing(false);
+		if (draft !== value) onChange(draft);
+	};
+
+	if (editing) {
+		return (
+			<input
+				ref={inputRef}
+				value={draft}
+				placeholder={placeholder}
+				onChange={(e) => setDraft(e.target.value)}
+				onBlur={commit}
+				onKeyDown={(e) => {
+					if (e.key === "Enter") {
+						e.preventDefault();
+						commit();
+					} else if (e.key === "Escape") {
+						setDraft(value);
+						setEditing(false);
+					}
+				}}
+				className="-mx-1 min-w-0 flex-1 truncate rounded bg-transparent px-1 py-0.5 font-semibold outline-none ring-1 ring-ring/40 focus:ring-2 focus:ring-ring/40"
+				style={color ? { color } : undefined}
+			/>
+		);
+	}
+
+	return (
+		<button
+			type="button"
+			onClick={() => setEditing(true)}
+			className="group -mx-1 flex min-w-0 items-center gap-1 rounded px-1 py-0.5 transition-colors hover:bg-accent/50"
+			title="Rename"
+		>
+			<span
+				className="truncate font-semibold"
+				style={color ? { color } : undefined}
+			>
+				{value || placeholder}
+			</span>
+			<Pencil className="h-3 w-3 shrink-0 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100" />
+		</button>
+	);
 }
 
 function PanelBreadcrumb({
@@ -1435,7 +1469,14 @@ function PanelBreadcrumb({
 							{i > 0 && (
 								<ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" />
 							)}
-							{isLast || !c.onClick ? (
+							{isLast && c.editable && c.onLabelChange ? (
+								<EditableBreadcrumbLabel
+									value={c.editValue ?? ""}
+									placeholder={c.placeholder ?? c.label}
+									color={c.color}
+									onChange={c.onLabelChange}
+								/>
+							) : isLast || !c.onClick ? (
 								<span
 									className={cn(
 										"truncate font-semibold",
@@ -1500,6 +1541,7 @@ interface CmsPanelProps {
 		field: "value" | "rule",
 		data: Record<string, unknown>,
 	) => void;
+	onChangeVariantName: (name: string) => void;
 	onReorderVariants: (srcIdx: number, destIdx: number) => void;
 	availableMatchers: ListMatchersOutput["matchers"] | null;
 	onFetchMatchers: () => void;
@@ -1516,9 +1558,11 @@ interface CmsPanelProps {
 	pageVariantRuleSchema?: SchemaProperties | null;
 	onChangePageVariantRule?: (data: Record<string, unknown>) => void;
 	onChangePageVariantMatcherType?: (resolveType: string) => void;
+	onChangePageVariantName?: (name: string) => void;
 	onAddPageVariant?: () => void;
 	onDuplicatePageVariant?: (idx: number) => void;
 	onRemovePageVariant?: (idx: number) => void;
+	onReorderPageVariants?: (srcIdx: number, destIdx: number) => void;
 }
 
 function CmsPanel({
@@ -1551,6 +1595,7 @@ function CmsPanel({
 	onSelectVariant,
 	onDeselectVariant,
 	onChangeVariantData,
+	onChangeVariantName,
 	onReorderVariants,
 	availableMatchers,
 	onFetchMatchers,
@@ -1567,9 +1612,11 @@ function CmsPanel({
 	pageVariantRuleSchema,
 	onChangePageVariantRule,
 	onChangePageVariantMatcherType,
+	onChangePageVariantName,
 	onAddPageVariant,
 	onDuplicatePageVariant,
 	onRemovePageVariant,
+	onReorderPageVariants,
 }: CmsPanelProps) {
 	const sensors = useSensors(
 		useSensor(MouseSensor, { activationConstraint: { distance: 3 } }),
@@ -1584,6 +1631,25 @@ function CmsPanel({
 	const [editPath, setEditPath] = useState(
 		(data?.pageData.path as string | undefined) ?? "",
 	);
+
+	const [variantCardOpen, setVariantCardOpen] = useState<boolean>(() => {
+		try {
+			return localStorage.getItem("variant-card-open") !== "false";
+		} catch {
+			return true;
+		}
+	});
+	const toggleVariantCard = () => {
+		setVariantCardOpen((prev) => {
+			const next = !prev;
+			try {
+				localStorage.setItem("variant-card-open", String(next));
+			} catch {
+				// ignore
+			}
+			return next;
+		});
+	};
 
 	useEffect(() => {
 		setEditName((data?.pageData.name as string | undefined) ?? "");
@@ -1621,9 +1687,16 @@ function CmsPanel({
 			onReorderVariants(srcIdx, destIdx);
 	};
 
-	const [variantRuleOpen, setVariantRuleOpen] = useState(true);
-	const [variantSectionOpen, setVariantSectionOpen] = useState(true);
-	const [pageVariantRuleOpen, setPageVariantRuleOpen] = useState(true);
+	const pageVariantSortableIds = (pageVariants ?? []).map((_, i) => String(i));
+
+	const handlePageVariantDragEnd = ({ active, over }: DragEndEvent) => {
+		if (!over || active.id === over.id) return;
+		const srcIdx = Number(active.id);
+		const destIdx = Number(over.id);
+		if (!Number.isNaN(srcIdx) && !Number.isNaN(destIdx))
+			onReorderPageVariants?.(srcIdx, destIdx);
+	};
+
 
 	const editingGlobally = savedBlock === "editing";
 
@@ -1669,8 +1742,20 @@ function CmsPanel({
 						},
 						{
 							label:
-								activeSection?.variants?.[selectedVariant ?? 0]?.label ??
+								(activeSection?.variants?.[selectedVariant ?? 0] as {
+									name?: string;
+								} | undefined)?.name ||
+								activeSection?.variants?.[selectedVariant ?? 0]?.label ||
 								`Variant ${(selectedVariant ?? 0) + 1}`,
+							editable: true,
+							editValue:
+								(activeSection?.variants?.[selectedVariant ?? 0] as {
+									name?: string;
+								} | undefined)?.name ?? "",
+							placeholder:
+								activeSection?.variants?.[selectedVariant ?? 0]?.label ||
+								`Variant ${(selectedVariant ?? 0) + 1}`,
+							onLabelChange: onChangeVariantName,
 						},
 					]}
 					actions={
@@ -1743,15 +1828,36 @@ function CmsPanel({
 						{ label: editName || "Page", onClick: onDeselectPageVariant },
 						{
 							label:
-								activePageVariant?.label ??
+								(activePageVariant as { name?: string } | undefined)?.name ||
 								`Variant ${selectedPageVariant! + 1}`,
 							color: "oklch(0.45 0.15 160)",
+							editable: true,
+							editValue:
+								(activePageVariant as { name?: string } | undefined)?.name ??
+								"",
+							placeholder: `Variant ${selectedPageVariant! + 1}`,
+							onLabelChange: (v: string) => onChangePageVariantName?.(v),
 						},
 					]}
 					actions={
-						autoSaving && (
-							<Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
-						)
+						<>
+							{(pageVariants?.length ?? 0) > 1 && (
+								<button
+									type="button"
+									onClick={() => {
+										onRemovePageVariant?.(selectedPageVariant!);
+										onDeselectPageVariant?.();
+									}}
+									className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+									title="Delete variant"
+								>
+									<Trash2 className="h-3.5 w-3.5" />
+								</button>
+							)}
+							{autoSaving && (
+								<Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+							)}
+						</>
 					}
 				/>
 			) : (
@@ -1802,25 +1908,48 @@ function CmsPanel({
 					No page data
 				</div>
 			) : isEditingVariant && sectionData ? (
-				/* ── Variant editing: rule + section collapsibles ── */
+				/* ── Variant editing: rule + section ── */
 				<div className="min-h-0 flex-1 overflow-y-auto">
-					{/* Segment Rule collapsible */}
-					<div className="border-b">
-						<button
-							type="button"
-							onClick={() => setVariantRuleOpen((v) => !v)}
-							className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-accent/40"
+					{/* Variant card */}
+					<div className="px-3 pt-3">
+						<div
+							className={cn(
+								"overflow-hidden rounded-lg border",
+								!variantCardOpen && "border-dashed",
+							)}
+							style={{ borderColor: "oklch(0.55 0.15 160 / 0.35)" }}
 						>
-							<ChevronDown
-								className={cn(
-									"h-3 w-3 transition-transform",
-									!variantRuleOpen && "-rotate-90",
-								)}
-							/>
-							Segment Rule
-						</button>
-						{variantRuleOpen && (
-							<div className="px-1 pb-2">
+							<button
+								type="button"
+								onClick={toggleVariantCard}
+								className="flex w-full items-center gap-1.5 border-b px-3 py-1.5 text-left transition-colors hover:bg-[oklch(0.65_0.15_160/0.12)]"
+								style={{
+									borderColor: variantCardOpen
+										? "oklch(0.55 0.15 160 / 0.2)"
+										: "transparent",
+									background: "oklch(0.65 0.15 160 / 0.08)",
+								}}
+							>
+								<Flag
+									className="h-3 w-3"
+									style={{ color: "oklch(0.4 0.15 160)" }}
+								/>
+								<span
+									className="flex-1 text-sm font-semibold"
+									style={{ color: "oklch(0.4 0.15 160)" }}
+								>
+									Variant
+								</span>
+								<ChevronDown
+									className={cn(
+										"h-3.5 w-3.5 transition-transform",
+										!variantCardOpen && "-rotate-90",
+									)}
+									style={{ color: "oklch(0.4 0.15 160 / 0.7)" }}
+								/>
+							</button>
+							{variantCardOpen && (
+							<div className="pt-4">
 								{(() => {
 									const variant =
 										activeSection?.variants?.[selectedVariant ?? 0];
@@ -1833,14 +1962,17 @@ function CmsPanel({
 												?.replace(/\.(tsx|ts)$/, "")
 										: "Always";
 									return (
-										<div className="space-y-1 px-2">
-											<MatcherPicker
-												currentRt={ruleRt}
-												currentLabel={ruleLabel ?? "Always"}
-												matchers={availableMatchers}
-												onFetchMatchers={onFetchMatchers}
-												onSelect={onChangeMatcherType}
-											/>
+										<>
+											<div className="space-y-1 px-5">
+												<FieldLabel label="Rule" />
+												<MatcherPicker
+													currentRt={ruleRt}
+													currentLabel={ruleLabel ?? "Always"}
+													matchers={availableMatchers}
+													onFetchMatchers={onFetchMatchers}
+													onSelect={onChangeMatcherType}
+												/>
+											</div>
 											{variantRuleSchema ? (
 												<SectionForm
 													key={`variant-${selectedSection}-${selectedVariant}-rule`}
@@ -1850,42 +1982,31 @@ function CmsPanel({
 													onChange={(d) => onChangeVariantData("rule", d)}
 												/>
 											) : ruleRt ? (
-												<div className="text-[10px] text-muted-foreground/60 py-1">
+												<div className="py-1 text-[10px] text-muted-foreground/60">
 													Loading schema…
 												</div>
 											) : null}
-										</div>
+										</>
 									);
 								})()}
 							</div>
-						)}
+							)}
+						</div>
 					</div>
-					{/* Section props collapsible */}
-					<div className="border-b">
-						<button
-							type="button"
-							onClick={() => setVariantSectionOpen((v) => !v)}
-							className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-accent/40"
-						>
-							<ChevronDown
-								className={cn(
-									"h-3 w-3 transition-transform",
-									!variantSectionOpen && "-rotate-90",
-								)}
-							/>
-							Section
-						</button>
-						{variantSectionOpen && (
-							<div className="px-1 pb-2">
-								<SectionForm
-									key={`variant-${selectedSection}-${selectedVariant}-value`}
-									data={sectionData}
-									schema={sectionSchema ?? undefined}
-									schemasMap={schemasMap}
-									onChange={(d) => onChangeVariantData("value", d)}
-								/>
-							</div>
-						)}
+					{/* Section content */}
+					<div className="px-5 pt-4 pb-1">
+						<span className="text-sm font-semibold text-muted-foreground/70">
+							Content
+						</span>
+					</div>
+					<div className="px-1 pb-2">
+						<SectionForm
+							key={`variant-${selectedSection}-${selectedVariant}-value`}
+							data={sectionData}
+							schema={sectionSchema ?? undefined}
+							schemasMap={schemasMap}
+							onChange={(d) => onChangeVariantData("value", d)}
+						/>
 					</div>
 				</div>
 			) : isMultivariate && activeSection?.variants ? (
@@ -1913,7 +2034,9 @@ function CmsPanel({
 										<SortableVariantItem
 											key={String(vIdx)}
 											id={String(vIdx)}
-											label={variant.label}
+											label={
+												(variant as { name?: string }).name || variant.label
+											}
 											valueLabel={valueLabel}
 											onSelect={() => onSelectVariant(vIdx)}
 											onDuplicate={() => onDuplicateVariant(vIdx)}
@@ -1956,58 +2079,34 @@ function CmsPanel({
 				/* ── Page-level variant list ─────────────────────────────── */
 				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 					<div className="min-h-0 flex-1 overflow-y-auto p-2">
-						{pageVariants?.map((pv, i) => (
-							<div
-								key={i}
-								className="group flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-accent"
+						<DndContext
+							sensors={sensors}
+							modifiers={[restrictToVerticalAxis]}
+							onDragEnd={handlePageVariantDragEnd}
+						>
+							<SortableContext
+								items={pageVariantSortableIds}
+								strategy={verticalListSortingStrategy}
 							>
-								<Flag
-									className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
-									style={{ color: "oklch(0.55 0.15 160)" }}
-								/>
-								<div
-									className="flex flex-1 flex-col gap-0.5 overflow-hidden"
-									onClick={() => onSelectPageVariant?.(i)}
-								>
-									<span className="truncate text-xs font-medium">
-										{pv.label}
-									</span>
-									<span className="truncate text-[10px] text-muted-foreground">
-										{pv.sections.length === 1
-											? "1 section"
-											: `${pv.sections.length} sections`}
-									</span>
-								</div>
-								<DropdownMenu>
-									<DropdownMenuTrigger asChild>
-										<button
-											type="button"
-											onPointerDown={(e) => e.stopPropagation()}
-											onClick={(e) => e.stopPropagation()}
-											className="shrink-0 rounded p-0.5 text-muted-foreground/30 opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
-										>
-											<MoreHorizontal className="h-3.5 w-3.5" />
-										</button>
-									</DropdownMenuTrigger>
-									<DropdownMenuContent align="end" className="w-36">
-										<DropdownMenuItem
-											onClick={() => onDuplicatePageVariant?.(i)}
-											className="cursor-pointer"
-										>
-											<Copy className="mr-2 h-3.5 w-3.5" />
-											Duplicate
-										</DropdownMenuItem>
-										<DropdownMenuItem
-											onClick={() => onRemovePageVariant?.(i)}
-											className="cursor-pointer text-destructive focus:text-destructive"
-										>
-											<Trash2 className="mr-2 h-3.5 w-3.5" />
-											Remove
-										</DropdownMenuItem>
-									</DropdownMenuContent>
-								</DropdownMenu>
-							</div>
-						))}
+								{pageVariants?.map((pv, i) => (
+									<SortableVariantItem
+										key={String(i)}
+										id={String(i)}
+										label={
+											pv.sections.length === 1
+												? "1 section"
+												: `${pv.sections.length} sections`
+										}
+										valueLabel={
+											(pv as { name?: string }).name || pv.label
+										}
+										onSelect={() => onSelectPageVariant?.(i)}
+										onDuplicate={() => onDuplicatePageVariant?.(i)}
+										onRemove={() => onRemovePageVariant?.(i)}
+									/>
+								))}
+							</SortableContext>
+						</DndContext>
 					</div>
 					<div className="shrink-0 border-t p-2">
 						<button
@@ -2024,94 +2123,131 @@ function CmsPanel({
 			) : isPageVariantSections ? (
 				/* ── Page-level variant sections with Segment Rule ───────── */
 				<div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-					{/* Segment Rule collapsible */}
-					<div className="shrink-0 border-b">
-						<button
-							type="button"
-							onClick={() => setPageVariantRuleOpen((v) => !v)}
-							className="flex w-full items-center gap-2 px-3 py-2 text-xs font-semibold text-muted-foreground hover:bg-accent/40"
-						>
-							<ChevronDown
+					{/* Scrollable: variant card + sections */}
+					<div className="min-h-0 flex-1 overflow-y-auto">
+						{/* Variant card */}
+						<div className="px-3 pt-3">
+							<div
 								className={cn(
-									"h-3 w-3 transition-transform",
-									!pageVariantRuleOpen && "-rotate-90",
+									"overflow-hidden rounded-lg border",
+									!variantCardOpen && "border-dashed",
 								)}
-							/>
-							Segment Rule
-						</button>
-						{pageVariantRuleOpen && (
-							<div className="px-1 pb-2">
-								{(() => {
-									const pvRule = activePageVariant?.rule ?? {};
-									const pvRuleRt = (pvRule.__resolveType as string) ?? "";
-									const pvRuleLabel = pvRuleRt
-										? pvRuleRt
-												.split("/")
-												.pop()
-												?.replace(/\.(tsx|ts)$/, "")
-										: "Always";
-									return (
-										<div className="space-y-1 px-2">
-											<MatcherPicker
-												currentRt={pvRuleRt}
-												currentLabel={pvRuleLabel ?? "Always"}
-												matchers={availableMatchers}
-												onFetchMatchers={onFetchMatchers}
-												onSelect={(rt) => onChangePageVariantMatcherType?.(rt)}
-											/>
-											{pageVariantRuleSchema ? (
-												<SectionForm
-													key={`page-variant-${selectedPageVariant}-rule`}
-													data={pvRule}
-													schema={pageVariantRuleSchema}
-													schemasMap={schemasMap}
-													onChange={(d) => onChangePageVariantRule?.(d)}
-												/>
-											) : pvRuleRt ? (
-												<div className="text-[10px] text-muted-foreground/60 py-1">
-													Loading schema…
-												</div>
-											) : null}
-										</div>
-									);
-								})()}
-							</div>
-						)}
-					</div>
-					{/* Sections list */}
-					<div className="min-h-0 flex-1 overflow-y-auto p-2">
-						{data.sections.length === 0 ? (
-							<div className="px-2 py-3 text-xs text-muted-foreground">
-								No sections on this page.
-							</div>
-						) : (
-							<DndContext
-								sensors={sensors}
-								modifiers={[restrictToVerticalAxis]}
-								onDragEnd={handleDragEnd}
+								style={{ borderColor: "oklch(0.55 0.15 160 / 0.35)" }}
 							>
-								<SortableContext
-									items={sortableIds}
-									strategy={verticalListSortingStrategy}
+								<button
+									type="button"
+									onClick={toggleVariantCard}
+									className="flex w-full items-center gap-1.5 border-b px-3 py-1.5 text-left transition-colors hover:bg-[oklch(0.65_0.15_160/0.12)]"
+									style={{
+										borderColor: variantCardOpen
+											? "oklch(0.55 0.15 160 / 0.2)"
+											: "transparent",
+										background: "oklch(0.65 0.15 160 / 0.08)",
+									}}
 								>
-									<div className="space-y-1.5">
-										{data.sections.map((section) => (
-											<SortableSectionItem
-												key={String(section.index)}
-												section={section}
-												onSelect={() => onSelectSection(section.index)}
-												onDuplicate={() => onDuplicateSection(section.index)}
-												onRemove={() => onRemoveSection(section.index)}
-												onToggleLazy={() => onToggleLazySection(section.index)}
-												onToggleHidden={() =>
-													onToggleHiddenSection(section.index)
-												}
-											/>
-										))}
-									</div>
-								</SortableContext>
-							</DndContext>
-						)}
+									<Flag
+										className="h-3 w-3"
+										style={{ color: "oklch(0.4 0.15 160)" }}
+									/>
+									<span
+										className="flex-1 text-sm font-semibold"
+										style={{ color: "oklch(0.4 0.15 160)" }}
+									>
+										Variant
+									</span>
+									<ChevronDown
+										className={cn(
+											"h-3.5 w-3.5 transition-transform",
+											!variantCardOpen && "-rotate-90",
+										)}
+										style={{ color: "oklch(0.4 0.15 160 / 0.7)" }}
+									/>
+								</button>
+								{variantCardOpen && (
+								<div className="pt-4">
+									{(() => {
+										const pvRule = activePageVariant?.rule ?? {};
+										const pvRuleRt = (pvRule.__resolveType as string) ?? "";
+										const pvRuleLabel = pvRuleRt
+											? pvRuleRt
+													.split("/")
+													.pop()
+													?.replace(/\.(tsx|ts)$/, "")
+											: "Always";
+										return (
+											<>
+												<div className="space-y-1 px-5">
+													<FieldLabel label="Rule" />
+													<MatcherPicker
+														currentRt={pvRuleRt}
+														currentLabel={pvRuleLabel ?? "Always"}
+														matchers={availableMatchers}
+														onFetchMatchers={onFetchMatchers}
+														onSelect={(rt) =>
+															onChangePageVariantMatcherType?.(rt)
+														}
+													/>
+												</div>
+												{pageVariantRuleSchema ? (
+													<SectionForm
+														key={`page-variant-${selectedPageVariant}-rule`}
+														data={pvRule}
+														schema={pageVariantRuleSchema}
+														schemasMap={schemasMap}
+														onChange={(d) => onChangePageVariantRule?.(d)}
+													/>
+												) : pvRuleRt ? (
+													<div className="py-1 text-[10px] text-muted-foreground/60">
+														Loading schema…
+													</div>
+												) : null}
+											</>
+										);
+									})()}
+								</div>
+								)}
+							</div>
+						</div>
+						{/* Sections title */}
+						<div className="px-5 pt-4 pb-1">
+							<span className="text-sm font-semibold text-muted-foreground/70">
+								Sections
+							</span>
+						</div>
+						<div className="p-2 pt-1">
+							{data.sections.length === 0 ? (
+								<div className="px-2 py-3 text-xs text-muted-foreground">
+									No sections on this page.
+								</div>
+							) : (
+								<DndContext
+									sensors={sensors}
+									modifiers={[restrictToVerticalAxis]}
+									onDragEnd={handleDragEnd}
+								>
+									<SortableContext
+										items={sortableIds}
+										strategy={verticalListSortingStrategy}
+									>
+										<div className="space-y-1.5">
+											{data.sections.map((section) => (
+												<SortableSectionItem
+													key={String(section.index)}
+													section={section}
+													onSelect={() => onSelectSection(section.index)}
+													onDuplicate={() => onDuplicateSection(section.index)}
+													onRemove={() => onRemoveSection(section.index)}
+													onToggleLazy={() => onToggleLazySection(section.index)}
+													onToggleHidden={() =>
+														onToggleHiddenSection(section.index)
+													}
+												/>
+											))}
+										</div>
+									</SortableContext>
+								</DndContext>
+							)}
+						</div>
 					</div>
 					<div className="shrink-0 border-t p-3">
 						<button
@@ -2160,7 +2296,7 @@ function CmsPanel({
 							</DndContext>
 						)}
 					</div>
-					<div className="shrink-0 border-t p-3">
+					<div className="shrink-0 border-t p-3 space-y-1">
 						<button
 							type="button"
 							onClick={onAddSection}
@@ -2168,6 +2304,15 @@ function CmsPanel({
 						>
 							<Plus className="h-3.5 w-3.5" />
 							Add section
+						</button>
+						<button
+							type="button"
+							onClick={onAddPageVariant}
+							className="flex w-full items-center gap-1.5 rounded-md px-2 py-2 text-sm transition-colors hover:bg-[oklch(0.65_0.15_160/0.12)]"
+							style={{ color: "oklch(0.45 0.15 160)" }}
+						>
+							<Flag className="h-3.5 w-3.5" />
+							Add page variant
 						</button>
 					</div>
 				</div>
@@ -3699,6 +3844,68 @@ function FileExplorerWorkspace({
 		}
 	};
 
+	const handleChangePageVariantName = (newName: string) => {
+		const pvIdx = cmsSelectedPageVariantRef.current;
+		if (pvIdx === null || !cmsData) return;
+
+		const mv = {
+			...(cmsData.pageData.sections as Record<string, unknown>),
+		};
+		const variants = [...((mv.variants as unknown[]) ?? [])];
+		const current = (variants[pvIdx] as Record<string, unknown>) ?? {};
+		const updated = { ...current };
+		if (newName.trim()) {
+			updated.name = newName;
+		} else {
+			delete updated.name;
+		}
+		variants[pvIdx] = updated;
+		const updatedPageData = {
+			...cmsData.pageData,
+			sections: { ...mv, variants },
+		};
+
+		const newPageVariants = cmsData.pageVariants
+			? [...cmsData.pageVariants]
+			: undefined;
+		if (newPageVariants?.[pvIdx]) {
+			const trimmed = newName.trim();
+			newPageVariants[pvIdx] = {
+				...newPageVariants[pvIdx],
+				...(trimmed ? { name: trimmed } : { name: undefined }),
+			};
+		}
+
+		const next: GetPageSectionsOutput = {
+			...cmsData,
+			pageData: updatedPageData,
+			...(newPageVariants ? { pageVariants: newPageVariants } : {}),
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+
+		setCmsAutoSaving(true);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			try {
+				const result = await app?.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: next.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				setPreviewRefreshKey((k) => k + 1);
+			} catch {
+				toast.error("Auto-save failed");
+			} finally {
+				setCmsAutoSaving(false);
+			}
+		}, 800);
+	};
+
 	const handleChangePageVariantRule = (newRule: Record<string, unknown>) => {
 		const pvIdx = cmsSelectedPageVariantRef.current;
 		if (pvIdx === null || !cmsData) return;
@@ -3762,44 +3969,73 @@ function FileExplorerWorkspace({
 
 	const handleAddPageVariant = () => {
 		const snap = cmsDataRef.current;
-		if (!snap?.pageVariants || !app || !userEnv) return;
+		if (!snap || !app || !userEnv) return;
 
-		const mv = {
-			...(snap.pageData.sections as Record<string, unknown>),
-		};
-		const rawVariants = [...((mv.variants as unknown[]) ?? [])];
+		let updatedPageData: Record<string, unknown>;
+		let newPageVariants: NonNullable<GetPageSectionsOutput["pageVariants"]>;
 
-		// Clone the last variant as template
-		const lastIdx = rawVariants.length - 1;
-		const lastRaw = rawVariants[lastIdx] as
-			| {
-					value?: unknown[];
-					rule?: Record<string, unknown>;
-			  }
-			| undefined;
-		const clonedRaw = lastRaw
-			? JSON.parse(JSON.stringify(lastRaw))
-			: { value: [], rule: {} };
-		rawVariants.push(clonedRaw);
-
-		const updatedPageData = {
-			...snap.pageData,
-			sections: { ...mv, variants: rawVariants },
-		};
-
-		// Clone the last display entry
-		const lastDisplay = snap.pageVariants[snap.pageVariants.length - 1];
-		const clonedDisplay = lastDisplay
-			? (JSON.parse(
-					JSON.stringify(lastDisplay),
-				) as (typeof snap.pageVariants)[number])
-			: {
+		if (!snap.pageVariants) {
+			// First-time: convert flat sections array into page-level multivariate
+			const rawSectionsArray = snap.pageData.sections as unknown[];
+			const clonedSections = JSON.parse(
+				JSON.stringify(rawSectionsArray),
+			) as unknown[];
+			const mv = {
+				__resolveType: "website/flags/multivariate.ts",
+				variants: [
+					{ value: rawSectionsArray, rule: {} },
+					{ value: clonedSections, rule: {} },
+				],
+			};
+			updatedPageData = { ...snap.pageData, sections: mv };
+			newPageVariants = [
+				{
 					label: formatMatcherRule({}),
-					rule: {} as Record<string, unknown>,
-					sections: [] as GetPageSectionsOutput["sections"],
-				};
-		const newPageVariants = [...snap.pageVariants];
-		newPageVariants.push(clonedDisplay);
+					rule: {},
+					sections: snap.sections,
+				},
+				{
+					label: formatMatcherRule({}),
+					rule: {},
+					sections: [...snap.sections],
+				},
+			];
+		} else {
+			const mv = {
+				...(snap.pageData.sections as Record<string, unknown>),
+			};
+			const rawVariants = [...((mv.variants as unknown[]) ?? [])];
+
+			// Clone the last variant as template
+			const lastIdx = rawVariants.length - 1;
+			const lastRaw = rawVariants[lastIdx] as
+				| {
+						value?: unknown[];
+						rule?: Record<string, unknown>;
+				  }
+				| undefined;
+			const clonedRaw = lastRaw
+				? JSON.parse(JSON.stringify(lastRaw))
+				: { value: [], rule: {} };
+			rawVariants.push(clonedRaw);
+			updatedPageData = {
+				...snap.pageData,
+				sections: { ...mv, variants: rawVariants },
+			};
+
+			// Clone the last display entry
+			const lastDisplay = snap.pageVariants[snap.pageVariants.length - 1];
+			const clonedDisplay = lastDisplay
+				? (JSON.parse(
+						JSON.stringify(lastDisplay),
+					) as (typeof snap.pageVariants)[number])
+				: {
+						label: formatMatcherRule({}),
+						rule: {} as Record<string, unknown>,
+						sections: [] as GetPageSectionsOutput["sections"],
+					};
+			newPageVariants = [...snap.pageVariants, clonedDisplay];
+		}
 
 		const next: GetPageSectionsOutput = {
 			...snap,
@@ -4195,6 +4431,92 @@ function FileExplorerWorkspace({
 		}
 	};
 
+	const handleChangeVariantName = (newName: string) => {
+		if (!cmsData || cmsSelectedVariant === null) return;
+		const sectionIdx = cmsSelectedSectionRef.current;
+		if (sectionIdx === null) return;
+
+		const rawSections = [
+			...(getActiveSectionsArray(
+				cmsData.pageData,
+				cmsSelectedPageVariantRef.current,
+			) as Record<string, unknown>[]),
+		];
+		const rawSection = { ...rawSections[sectionIdx] } as Record<string, unknown>;
+		const displaySection = cmsData.sections[sectionIdx]!;
+		const mvContainer = {
+			...getMultivariateContainer(rawSection, displaySection),
+		} as {
+			__resolveType: string;
+			variants: Array<{
+				value: Record<string, unknown>;
+				rule: Record<string, unknown>;
+				name?: string;
+			}>;
+		};
+		const variants = [...(mvContainer.variants ?? [])];
+		const trimmed = newName.trim();
+		const updated = { ...variants[cmsSelectedVariant] } as Record<string, unknown>;
+		if (trimmed) {
+			updated.name = trimmed;
+		} else {
+			delete updated.name;
+		}
+		variants[cmsSelectedVariant] = updated as (typeof variants)[number];
+		mvContainer.variants = variants;
+		rawSections[sectionIdx] = rebuildRawSection(
+			rawSection,
+			mvContainer,
+			displaySection,
+		);
+
+		const newDisplaySections = [...cmsData.sections];
+		const updatedDisplaySection = { ...newDisplaySections[sectionIdx] };
+		if (updatedDisplaySection.variants) {
+			const newVariants = [...updatedDisplaySection.variants];
+			const target = { ...newVariants[cmsSelectedVariant] } as (typeof newVariants)[number] & { name?: string };
+			if (trimmed) target.name = trimmed;
+			else target.name = undefined;
+			newVariants[cmsSelectedVariant] = target;
+			updatedDisplaySection.variants = newVariants;
+		}
+		newDisplaySections[sectionIdx] = updatedDisplaySection;
+
+		const updatedPageData = withSectionsArray(
+			cmsData.pageData,
+			cmsSelectedPageVariantRef.current,
+			rawSections,
+		);
+		const next: GetPageSectionsOutput = {
+			...cmsData,
+			pageData: updatedPageData,
+			sections: newDisplaySections,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+
+		setCmsAutoSaving(true);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			try {
+				const result = await app?.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: next.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				setPreviewRefreshKey((k) => k + 1);
+			} catch {
+				toast.error("Auto-save failed");
+			} finally {
+				setCmsAutoSaving(false);
+			}
+		}, 800);
+	};
+
 	const handleChangeVariantData = (
 		field: "value" | "rule",
 		newData: Record<string, unknown>,
@@ -4320,6 +4642,54 @@ function FileExplorerWorkspace({
 			return { ...originalRaw, section: mutatedContainer };
 		}
 		return mutatedContainer;
+	};
+
+	const handleReorderPageVariants = (srcIdx: number, destIdx: number) => {
+		if (!cmsData?.pageVariants) return;
+
+		const mv = {
+			...(cmsData.pageData.sections as Record<string, unknown>),
+		};
+		const rawVariants = [...((mv.variants as unknown[]) ?? [])];
+		const [movedRaw] = rawVariants.splice(srcIdx, 1);
+		rawVariants.splice(destIdx, 0, movedRaw);
+		const updatedPageData = {
+			...cmsData.pageData,
+			sections: { ...mv, variants: rawVariants },
+		};
+
+		const newPageVariants = [...cmsData.pageVariants];
+		const [movedDisplay] = newPageVariants.splice(srcIdx, 1);
+		newPageVariants.splice(destIdx, 0, movedDisplay);
+
+		const next: GetPageSectionsOutput = {
+			...cmsData,
+			pageData: updatedPageData,
+			pageVariants: newPageVariants,
+		};
+		setCmsData(next);
+		cmsDataRef.current = next;
+
+		setCmsAutoSaving(true);
+		if (cmsAutoSaveTimerRef.current) clearTimeout(cmsAutoSaveTimerRef.current);
+		cmsAutoSaveTimerRef.current = setTimeout(async () => {
+			try {
+				const result = await app?.callServerTool({
+					name: "write_file",
+					arguments: {
+						env: userEnv,
+						filepath: next.filePath,
+						content: JSON.stringify(updatedPageData, null, 2),
+					},
+				});
+				if (result?.isError) throw new Error("write_file failed");
+				setPreviewRefreshKey((k) => k + 1);
+			} catch {
+				toast.error("Auto-save failed");
+			} finally {
+				setCmsAutoSaving(false);
+			}
+		}, 800);
 	};
 
 	const handleReorderVariants = (srcIdx: number, destIdx: number) => {
@@ -6672,6 +7042,7 @@ function FileExplorerWorkspace({
 														onSelectVariant={handleCmsSelectVariant}
 														onDeselectVariant={handleCmsDeselectVariant}
 														onChangeVariantData={handleChangeVariantData}
+														onChangeVariantName={handleChangeVariantName}
 														onReorderVariants={handleReorderVariants}
 														availableMatchers={cmsAvailableMatchers}
 														onFetchMatchers={() => void fetchMatchersList()}
@@ -6692,9 +7063,11 @@ function FileExplorerWorkspace({
 														onChangePageVariantMatcherType={
 															handleChangePageVariantMatcherType
 														}
+														onChangePageVariantName={handleChangePageVariantName}
 														onAddPageVariant={handleAddPageVariant}
 														onDuplicatePageVariant={handleDuplicatePageVariant}
 														onRemovePageVariant={handleRemovePageVariant}
+														onReorderPageVariants={handleReorderPageVariants}
 													/>
 												</ResizablePanel>
 											)}
@@ -6896,7 +7269,7 @@ function FileExplorerWorkspace({
 																					<div className="space-y-4">
 																						{globals.length > 0 && (
 																							<div className="space-y-2">
-																								<p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+																								<p className="text-sm font-semibold text-muted-foreground">
 																									Global sections
 																								</p>
 																								<div className="grid grid-cols-3 gap-2">
@@ -6907,7 +7280,7 @@ function FileExplorerWorkspace({
 																						{types.length > 0 && (
 																							<div className="space-y-2">
 																								{globals.length > 0 && (
-																									<p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+																									<p className="text-sm font-semibold text-muted-foreground">
 																										Sections
 																									</p>
 																								)}

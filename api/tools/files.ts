@@ -757,6 +757,7 @@ export type CmsVariant = {
 	value: Record<string, unknown>;
 	rule: Record<string, unknown>;
 	label: string;
+	name?: string;
 };
 
 export type CmsSection = {
@@ -797,6 +798,7 @@ const cmsSectionItemSchema = z
 					value: z.record(z.string(), z.unknown()),
 					rule: z.record(z.string(), z.unknown()),
 					label: z.string(),
+					name: z.string().optional(),
 				}),
 			)
 			.optional(),
@@ -816,6 +818,7 @@ export const getPageSectionsOutputSchema = z.object({
 				label: z.string(),
 				rule: z.record(z.string(), z.unknown()),
 				sections: z.array(cmsSectionItemSchema),
+				name: z.string().optional(),
 			}),
 		)
 		.optional(),
@@ -1099,6 +1102,7 @@ export const getPageSectionsTool = createTool({
 						variants?: Array<{
 							value?: Record<string, unknown>;
 							rule?: Record<string, unknown>;
+							name?: string;
 						}>;
 					};
 					const rawVariants = Array.isArray(mvObj.variants)
@@ -1143,6 +1147,9 @@ export const getPageSectionsTool = createTool({
 							value,
 							rule,
 							label: formatMatcher(rule),
+							...(typeof v.name === "string" && v.name
+								? { name: v.name }
+								: {}),
 						};
 					});
 					const firstValueRt = (
@@ -1182,6 +1189,7 @@ export const getPageSectionsTool = createTool({
 			label: string;
 			rule: Record<string, unknown>;
 			sections: CmsSection[];
+			name?: string;
 		};
 
 		let pageVariants: PageVariantEntry[] | undefined;
@@ -1200,6 +1208,7 @@ export const getPageSectionsTool = createTool({
 				variants?: Array<{
 					value?: unknown[];
 					rule?: Record<string, unknown>;
+					name?: string;
 				}>;
 			};
 			const mvVariants = Array.isArray(mvField.variants)
@@ -1210,7 +1219,12 @@ export const getPageSectionsTool = createTool({
 				const rule = (v.rule ?? {}) as Record<string, unknown>;
 				const label = formatMatcher(rule);
 				const { sections } = parseSectionsFromArray(varSections);
-				return { label, rule, sections };
+				return {
+					label,
+					rule,
+					sections,
+					...(typeof v.name === "string" && v.name ? { name: v.name } : {}),
+				};
 			});
 			// Default display: first variant's sections
 			rawSections = Array.isArray(mvVariants[0]?.value)
