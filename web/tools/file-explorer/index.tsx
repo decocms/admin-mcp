@@ -1170,12 +1170,12 @@ function SortableVariantItem({
 					</button>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end" className="w-36">
-					<DropdownMenuItem onClick={onDuplicate} className="cursor-pointer">
+					<DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDuplicate(); }} className="cursor-pointer">
 						<Copy className="mr-2 h-3.5 w-3.5" />
 						Duplicate
 					</DropdownMenuItem>
 					<DropdownMenuItem
-						onClick={onRemove}
+						onClick={(e) => { e.stopPropagation(); onRemove(); }}
 						className="cursor-pointer text-destructive focus:text-destructive"
 					>
 						<Trash2 className="mr-2 h-3.5 w-3.5" />
@@ -3960,20 +3960,20 @@ function FileExplorerWorkspace({
 			const mv = {
 				__resolveType: "website/flags/multivariate.ts",
 				variants: [
-					{ value: rawSectionsArray, rule: {} },
-					{ value: clonedSections, rule: {} },
+					{ value: rawSectionsArray, rule: { __resolveType: "website/matchers/always.ts" } },
+					{ value: clonedSections, rule: { __resolveType: "website/matchers/always.ts" } },
 				],
 			};
 			updatedPageData = { ...snap.pageData, sections: mv };
 			newPageVariants = [
 				{
-					label: formatMatcherRule({}),
-					rule: {},
+					label: formatMatcherRule({ __resolveType: "website/matchers/always.ts" }),
+					rule: { __resolveType: "website/matchers/always.ts" },
 					sections: snap.sections,
 				},
 				{
-					label: formatMatcherRule({}),
-					rule: {},
+					label: formatMatcherRule({ __resolveType: "website/matchers/always.ts" }),
+					rule: { __resolveType: "website/matchers/always.ts" },
 					sections: [...snap.sections],
 				},
 			];
@@ -3993,7 +3993,7 @@ function FileExplorerWorkspace({
 				| undefined;
 			const clonedRaw = lastRaw
 				? JSON.parse(JSON.stringify(lastRaw))
-				: { value: [], rule: {} };
+				: { value: [], rule: { __resolveType: "website/matchers/always.ts" } };
 			rawVariants.push(clonedRaw);
 			updatedPageData = {
 				...snap.pageData,
@@ -4007,8 +4007,8 @@ function FileExplorerWorkspace({
 						JSON.stringify(lastDisplay),
 					) as (typeof snap.pageVariants)[number])
 				: {
-						label: formatMatcherRule({}),
-						rule: {} as Record<string, unknown>,
+						label: formatMatcherRule({ __resolveType: "website/matchers/always.ts" }),
+						rule: { __resolveType: "website/matchers/always.ts" } as Record<string, unknown>,
 						sections: [] as GetPageSectionsOutput["sections"],
 					};
 			newPageVariants = [...snap.pageVariants, clonedDisplay];
@@ -4763,7 +4763,7 @@ function FileExplorerWorkspace({
 		const multivariate = {
 			__resolveType: "website/flags/multivariate/section.ts",
 			variants: [
-				{ value: { ...originalSection }, rule: {} },
+				{ value: { ...originalSection }, rule: { __resolveType: "website/matchers/always.ts" } },
 				{
 					value: { ...originalSection },
 					rule: { __resolveType: "website/matchers/always.ts" },
@@ -4871,6 +4871,14 @@ function FileExplorerWorkspace({
 		const clonedRaw = JSON.parse(
 			JSON.stringify(rawVariants[rawVariants.length - 1]),
 		);
+		// Default rule to "always" if empty
+		if (
+			!clonedRaw.rule ||
+			Object.keys(clonedRaw.rule).length === 0 ||
+			!clonedRaw.rule.__resolveType
+		) {
+			clonedRaw.rule = { __resolveType: "website/matchers/always.ts" };
+		}
 		rawVariants.push(clonedRaw);
 		mvContainer.variants = rawVariants;
 		rawSections[idx] = rebuildRawSection(
@@ -4885,6 +4893,15 @@ function FileExplorerWorkspace({
 		const displayVariants = [...(updatedDisplay.variants ?? [])];
 		const lastDisplay = displayVariants[displayVariants.length - 1];
 		const clonedDisplay = JSON.parse(JSON.stringify(lastDisplay));
+		// Ensure display rule defaults to "always" and label reflects it
+		if (
+			!clonedDisplay.rule ||
+			Object.keys(clonedDisplay.rule).length === 0 ||
+			!(clonedDisplay.rule as Record<string, unknown>).__resolveType
+		) {
+			clonedDisplay.rule = { __resolveType: "website/matchers/always.ts" };
+			clonedDisplay.label = "Always";
+		}
 		displayVariants.push(clonedDisplay);
 		updatedDisplay.variants = displayVariants;
 		newDisplaySections[idx] = updatedDisplay;
