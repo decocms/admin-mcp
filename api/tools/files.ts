@@ -1,48 +1,14 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
-import { callAdmin, getConfig, getEnv } from "../lib/admin.ts";
+import {
+	buildEnvUrl,
+	callAdmin,
+	getConfig,
+	getEnv,
+	getUserEnvName,
+	resolveEnv,
+} from "../lib/admin.ts";
 import type { environmentSchema } from "./environments.ts";
-
-function decodeJwtPayload(token: string): Record<string, unknown> | null {
-	try {
-		const payloadB64 = token.split(".")[1];
-		if (!payloadB64) return null;
-		const json = atob(payloadB64.replace(/-/g, "+").replace(/_/g, "/"));
-		return JSON.parse(json) as Record<string, unknown>;
-	} catch {
-		return null;
-	}
-}
-
-// Mirror ENVIRONMENTS.consistentHash from admin/sdk/environments.ts
-function consistentHash(input: string): string {
-	let hash = 0;
-	for (let i = 0; i < input.length; i++) {
-		hash = (hash << 5) - hash + input.charCodeAt(i);
-		hash = hash & hash;
-	}
-	return Math.abs(hash).toString(36);
-}
-
-function buildEnvUrl(site: string, env: string): string {
-	return `https://envs-${site}--${consistentHash(env)}.decocdn.com`;
-}
-
-export async function getUserEnvName(apiKey: string): Promise<string> {
-	const payload = decodeJwtPayload(apiKey);
-	const userId =
-		(payload?.user as Record<string, unknown> | undefined)?.id ??
-		payload?.sub ??
-		apiKey;
-	const encoder = new TextEncoder();
-	const data = encoder.encode(String(userId));
-	const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-	const hashArray = Array.from(new Uint8Array(hashBuffer));
-	const hashHex = hashArray
-		.map((b) => b.toString(16).padStart(2, "0"))
-		.join("");
-	return `${hashHex.slice(0, 9)}`;
-}
 
 export const FILE_EXPLORER_RESOURCE_URI = "ui://mcp-app/file-explorer";
 
@@ -100,7 +66,9 @@ export const fileExplorerTool = createTool({
 		"Browse and edit files in a sandbox environment for the configured deco.cx site. Optionally preselect an environment and initial path.",
 	inputSchema: fileExplorerInputSchema,
 	outputSchema: fileExplorerOutputSchema,
-	_meta: { ui: { resourceUri: FILE_EXPLORER_RESOURCE_URI } },
+	_meta: {
+		ui: { resourceUri: FILE_EXPLORER_RESOURCE_URI, visibility: ["app"] },
+	},
 	annotations: {
 		readOnlyHint: false,
 		destructiveHint: false,
@@ -182,9 +150,7 @@ export const fileExplorerTool = createTool({
 	},
 });
 
-export const listFilesInputSchema = z.object({
-	env: z.string().describe("Sandbox environment name"),
-});
+export const listFilesInputSchema = z.object({});
 export type ListFilesInput = z.infer<typeof listFilesInputSchema>;
 
 export const listFilesOutputSchema = z.object({
@@ -206,26 +172,26 @@ export const listFilesTool = createTool({
 		idempotentHint: false,
 		openWorldHint: false,
 	},
-	execute: async ({ context }, ctx) => {
+	execute: async (_input, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		const files = normalizeFileList(
 			await callAdmin(
 				"deco-sites/admin/loaders/daemon/fs/ls.ts",
-				{ site, env: context.env },
+				{ site, env },
 				apiKey,
 			),
 		);
 
 		return {
 			site,
-			env: context.env,
+			env,
 			files,
 		};
 	},
 });
 
 export const readFileInputSchema = z.object({
-	env: z.string().describe("Sandbox environment name"),
 	filepath: z.string().describe("Absolute file path to read"),
 });
 export type ReadFileInput = z.infer<typeof readFileInputSchema>;
@@ -261,11 +227,12 @@ export const readFileTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		const result = (await callAdmin(
 			"deco-sites/admin/loaders/daemon/fs/read.ts",
 			{
 				site,
-				env: context.env,
+				env,
 				filepath: normalizeFilepath(context.filepath),
 			},
 			apiKey,
@@ -276,7 +243,6 @@ export const readFileTool = createTool({
 });
 
 export const writeFileInputSchema = z.object({
-	env: z.string().describe("Sandbox environment name"),
 	filepath: z.string().describe("Absolute file path to write"),
 	content: z.string().describe("Full file contents to persist"),
 });
@@ -302,12 +268,13 @@ export const writeFileTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		const filepath = normalizeFilepath(context.filepath);
 		const result = (await callAdmin(
 			"deco-sites/admin/actions/daemon/fs/patchFile.ts",
 			{
 				site,
-				env: context.env,
+				env,
 				filepath,
 				fileContent: context.content,
 				timestamp: Date.now(),
@@ -327,7 +294,6 @@ export const writeFileTool = createTool({
 });
 
 export const deleteFileInputSchema = z.object({
-	env: z.string().describe("Sandbox environment name"),
 	filepath: z.string().describe("Absolute file path to delete"),
 });
 export type DeleteFileInput = z.infer<typeof deleteFileInputSchema>;
@@ -344,6 +310,7 @@ export const deleteFileTool = createTool({
 		"Delete a file from a sandbox environment filesystem by its absolute path.",
 	inputSchema: deleteFileInputSchema,
 	outputSchema: deleteFileOutputSchema,
+	_meta: { ui: { visibility: ["app"] } },
 	annotations: {
 		readOnlyHint: false,
 		destructiveHint: true,
@@ -352,12 +319,13 @@ export const deleteFileTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		const filepath = normalizeFilepath(context.filepath);
 		await callAdmin(
 			"deco-sites/admin/actions/daemon/fs/unlink.ts",
 			{
 				site,
-				env: context.env,
+				env,
 				filepath,
 			},
 			apiKey,
@@ -373,7 +341,6 @@ export const deleteFileTool = createTool({
 // ─── grep_files ───────────────────────────────────────────────────────────────
 
 export const grepFilesInputSchema = z.object({
-	env: z.string().describe("Sandbox environment name"),
 	query: z.string().optional().describe("Text or regex pattern to search for"),
 	filepath: z
 		.string()
@@ -413,11 +380,12 @@ export const grepFilesTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		return await callAdmin(
 			"deco-sites/admin/loaders/daemon/fs/grep.ts",
 			{
 				site,
-				env: context.env,
+				env,
 				filepath: context.filepath
 					? normalizeFilepath(context.filepath)
 					: undefined,
@@ -449,7 +417,6 @@ const replacementSchema = z.object({
 });
 
 export const replaceInFileInputSchema = z.object({
-	env: z.string().describe("Sandbox environment name"),
 	filepath: z.string().describe("Absolute file path to modify"),
 	replacements: z
 		.array(replacementSchema)
@@ -477,12 +444,13 @@ export const replaceInFileTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		const filepath = normalizeFilepath(context.filepath);
 		const result = (await callAdmin(
 			"deco-sites/admin/actions/daemon/fs/replace.ts",
 			{
 				site,
-				env: context.env,
+				env,
 				filepath,
 				replacements: context.replacements,
 				timestamp: Date.now(),
@@ -504,7 +472,6 @@ export const replaceInFileTool = createTool({
 // ─── update_json ──────────────────────────────────────────────────────────────
 
 export const updateJsonInputSchema = z.object({
-	env: z.string().describe("Sandbox environment name"),
 	filepath: z.string().describe("Absolute path to the JSON file to update"),
 	key: z
 		.array(z.string())
@@ -542,11 +509,12 @@ export const updateJsonTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		return await callAdmin(
 			"deco-sites/admin/actions/decopilot/updateJson.ts",
 			{
 				site,
-				env: context.env,
+				env,
 				filepath: normalizeFilepath(context.filepath),
 				key: context.key,
 				newValue: context.newValue,
@@ -560,7 +528,6 @@ export const updateJsonTool = createTool({
 // ─── create_page ──────────────────────────────────────────────────────────────
 
 export const createPageInputSchema = z.object({
-	env: z.string().describe("Sandbox environment name"),
 	name: z.string().min(1).max(80).describe("Human-readable page name"),
 	path: z
 		.string()
@@ -591,7 +558,8 @@ export const createPageTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
-		const { env, name, path } = context;
+		const env = await resolveEnv(ctx);
+		const { name, path } = context;
 
 		const id = `pages-${encodeURIComponent(name)}-${Math.floor(Math.random() * 1e6)}`;
 		const filePath = `/.deco/blocks/${id}.json`;
@@ -638,9 +606,7 @@ export type GlobalSectionInfo = {
 	resolveType: string;
 };
 
-export const getPagesInputSchema = z.object({
-	env: z.string().describe("Sandbox environment name"),
-});
+export const getPagesInputSchema = z.object({});
 export type GetPagesInput = z.infer<typeof getPagesInputSchema>;
 
 export const getPagesOutputSchema = z.object({
@@ -675,10 +641,11 @@ export const getPagesTool = createTool({
 		idempotentHint: false,
 		openWorldHint: false,
 	},
-	execute: async ({ context }, ctx) => {
+	execute: async (_input, ctx) => {
 		const { site } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 
-		const envUrl = buildEnvUrl(site, context.env);
+		const envUrl = buildEnvUrl(site, env);
 
 		// Fetch the .decofile and _meta manifest in parallel
 		const [decofileRes, metaRes] = await Promise.all([
@@ -686,7 +653,7 @@ export const getPagesTool = createTool({
 			fetch(`${envUrl}/live/_meta`),
 		]);
 		if (!decofileRes.ok) {
-			return { site, env: context.env, pages: [], globalSections: [] };
+			return { site, env, pages: [], globalSections: [] };
 		}
 
 		type Block = {
@@ -747,7 +714,7 @@ export const getPagesTool = createTool({
 			}
 		}
 
-		return { site, env: context.env, pages, globalSections };
+		return { site, env, pages, globalSections };
 	},
 });
 
@@ -775,7 +742,6 @@ export type CmsSection = {
 };
 
 export const getPageSectionsInputSchema = z.object({
-	env: z.string().describe("Sandbox environment name"),
 	path: z.string().describe("Page path to look up (e.g. '/')"),
 });
 export type GetPageSectionsInput = z.infer<typeof getPageSectionsInputSchema>;
@@ -839,8 +805,9 @@ export const getPageSectionsTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 
-		const envUrl = buildEnvUrl(site, context.env);
+		const envUrl = buildEnvUrl(site, env);
 
 		const decofileRes = await fetch(`${envUrl}/.decofile`);
 		if (!decofileRes.ok) {
@@ -1245,7 +1212,7 @@ export const getPageSectionsTool = createTool({
 
 		return {
 			site,
-			env: context.env,
+			env,
 			pageKey,
 			filePath,
 			pageData: pageDataWithResolved,
@@ -1269,9 +1236,7 @@ interface AdminAppEntry {
 	};
 }
 
-export const listAppsInputSchema = z.object({
-	env: z.string().describe("Sandbox environment name"),
-});
+export const listAppsInputSchema = z.object({});
 export type ListAppsInput = z.infer<typeof listAppsInputSchema>;
 
 export const appEntrySchema = z.object({
@@ -1305,8 +1270,9 @@ export const listAppsTool = createTool({
 		idempotentHint: false,
 		openWorldHint: false,
 	},
-	execute: async ({ context }, ctx) => {
+	execute: async (_input, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 
 		let registryApps: AdminAppEntry[] = [];
 		try {
@@ -1320,7 +1286,7 @@ export const listAppsTool = createTool({
 			// proceed with empty list
 		}
 
-		const envUrl = buildEnvUrl(site, context.env);
+		const envUrl = buildEnvUrl(site, env);
 
 		type DecoBlock = { __resolveType?: string; [key: string]: unknown };
 		let decofile: Record<string, DecoBlock> = {};
@@ -1369,7 +1335,6 @@ export const listAppsTool = createTool({
 // ─── install_app ──────────────────────────────────────────────────────────────
 
 export const installAppInputSchema = z.object({
-	env: z.string().describe("Sandbox environment name"),
 	app: z.string().describe("App name (e.g. vtex)"),
 	vendor: z.string().describe("Vendor alias (e.g. decohub)"),
 });
@@ -1391,11 +1356,12 @@ export const installAppTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		await callAdmin(
 			"deco-sites/admin/actions/apps/install.ts",
 			{
 				site,
-				env: context.env,
+				env,
 				locator: { app: context.app, vendor: context.vendor },
 			},
 			apiKey,
@@ -1407,7 +1373,6 @@ export const installAppTool = createTool({
 // ─── uninstall_app ────────────────────────────────────────────────────────────
 
 export const uninstallAppInputSchema = z.object({
-	env: z.string().describe("Sandbox environment name"),
 	app: z.string().describe("App name (e.g. vtex)"),
 	vendor: z.string().describe("Vendor alias (e.g. decohub)"),
 });
@@ -1429,11 +1394,12 @@ export const uninstallAppTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		await callAdmin(
 			"deco-sites/admin/actions/apps/uninstall.ts",
 			{
 				site,
-				env: context.env,
+				env,
 				locator: { app: context.app, vendor: context.vendor },
 			},
 			apiKey,
@@ -1444,9 +1410,7 @@ export const uninstallAppTool = createTool({
 
 // ─── list_sections ────────────────────────────────────────────────────────────
 
-export const listSectionsInputSchema = z.object({
-	env: z.string().describe("Sandbox environment name"),
-});
+export const listSectionsInputSchema = z.object({});
 export type ListSectionsInput = z.infer<typeof listSectionsInputSchema>;
 
 export const sectionEntrySchema = z.object({
@@ -1479,11 +1443,12 @@ export const listSectionsTool = createTool({
 		idempotentHint: false,
 		openWorldHint: false,
 	},
-	execute: async ({ context }, ctx) => {
+	execute: async (_input, ctx) => {
 		const { site } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		const empty = { sections: [] };
 
-		const envUrl = buildEnvUrl(site, context.env);
+		const envUrl = buildEnvUrl(site, env);
 
 		/** Build the deco.cx section preview URL for a given resolveType or blockId */
 		const buildPreviewUrl = (blockIdOrResolveType: string): string => {
@@ -1622,9 +1587,7 @@ export const listSectionsTool = createTool({
 
 // ─── list_matchers ────────────────────────────────────────────────────────────
 
-export const listMatchersInputSchema = z.object({
-	env: z.string().describe("Sandbox environment name"),
-});
+export const listMatchersInputSchema = z.object({});
 export type ListMatchersInput = z.infer<typeof listMatchersInputSchema>;
 
 export const matcherEntrySchema = z.object({
@@ -1652,11 +1615,12 @@ export const listMatchersTool = createTool({
 		idempotentHint: false,
 		openWorldHint: false,
 	},
-	execute: async ({ context }, ctx) => {
+	execute: async (_input, ctx) => {
 		const { site } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		const empty = { matchers: [] };
 
-		const envUrl = buildEnvUrl(site, context.env);
+		const envUrl = buildEnvUrl(site, env);
 
 		try {
 			const metaRes = await fetch(`${envUrl}/live/_meta`);
@@ -1760,7 +1724,6 @@ export const listMatchersTool = createTool({
 // ─── duplicate_file ───────────────────────────────────────────────────────────
 
 export const duplicateFileInputSchema = z.object({
-	env: z.string().describe("Sandbox environment name"),
 	sourceFilepath: z.string().describe("Absolute path of the file to copy"),
 	destinationFilepath: z
 		.string()
@@ -1789,6 +1752,7 @@ export const duplicateFileTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		const sourceFilepath = normalizeFilepath(context.sourceFilepath);
 		const destinationFilepath = normalizeFilepath(context.destinationFilepath);
 
@@ -1797,7 +1761,7 @@ export const duplicateFileTool = createTool({
 			"deco-sites/admin/loaders/daemon/fs/read.ts",
 			{
 				site,
-				env: context.env,
+				env,
 				filepath: sourceFilepath,
 			},
 			apiKey,
@@ -1812,7 +1776,7 @@ export const duplicateFileTool = createTool({
 			"deco-sites/admin/actions/daemon/fs/patchFile.ts",
 			{
 				site,
-				env: context.env,
+				env,
 				filepath: destinationFilepath,
 				fileContent: readResult.content,
 				timestamp: Date.now(),
@@ -1875,7 +1839,6 @@ export const schemaPropertySchema: z.ZodType<SchemaProperty> = z.object({
 }) as z.ZodType<SchemaProperty>;
 
 export const getBlockSchemaInputSchema = z.object({
-	env: z.string().describe("Sandbox environment name"),
 	resolveType: z
 		.string()
 		.describe("The __resolveType value from the block JSON"),
@@ -1902,9 +1865,10 @@ export const getBlockSchemaTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		const empty = { resolveType: context.resolveType, properties: {} };
 
-		const envUrl = buildEnvUrl(site, context.env);
+		const envUrl = buildEnvUrl(site, env);
 
 		try {
 			const metaRes = await fetch(`${envUrl}/live/_meta`);

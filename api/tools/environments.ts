@@ -42,6 +42,7 @@ export const listEnvironmentsTool = createTool({
 		"List all sandbox environments (platform=sandbox) for the configured deco.cx site. Returns each environment's name, URL, branch/commit, and metadata.",
 	inputSchema: listEnvironmentsInputSchema,
 	outputSchema: listEnvironmentsOutputSchema,
+	_meta: { ui: { visibility: ["app"] } },
 	annotations: {
 		readOnlyHint: true,
 		destructiveHint: false,
@@ -154,6 +155,7 @@ export const createEnvironmentTool = createTool({
 		"Create a new environment for the configured deco.cx site. Provisions a Kubernetes deployment and returns the environment URL once ready (takes 1–3 minutes for deco platform).",
 	inputSchema: createEnvironmentInputSchema,
 	outputSchema: createEnvironmentOutputSchema,
+	_meta: { ui: { visibility: ["app"] } },
 	annotations: {
 		readOnlyHint: false,
 		destructiveHint: false,
@@ -211,6 +213,7 @@ export const deleteEnvironmentTool = createTool({
 		"Permanently delete a sandbox environment by name. This is irreversible — the environment and all associated resources will be removed.",
 	inputSchema: deleteEnvironmentInputSchema,
 	outputSchema: deleteEnvironmentOutputSchema,
+	_meta: { ui: { visibility: ["app"] } },
 	annotations: {
 		readOnlyHint: false,
 		destructiveHint: true,
@@ -273,6 +276,7 @@ export const previewEnvironmentTool = createTool({
 		"Get a live preview URL for a specific path in an environment. Includes a cache-busting parameter so the latest version is always served.",
 	inputSchema: previewEnvironmentInputSchema,
 	outputSchema: previewEnvironmentOutputSchema,
+	_meta: { ui: { visibility: ["app"] } },
 	annotations: {
 		readOnlyHint: true,
 		destructiveHint: false,

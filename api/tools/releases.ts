@@ -159,6 +159,7 @@ export const promoteToProductionTool = createTool({
 		"Emergency action: immediately deploy a specific commit SHA to production for the configured deco.cx site. This bypasses the normal release flow and deploys the given commit directly. Always confirm with the user before running this.",
 	inputSchema: promoteToProductionInputSchema,
 	outputSchema: promoteToProductionOutputSchema,
+	_meta: { ui: { visibility: ["app"] } },
 	annotations: {
 		readOnlyHint: false,
 		destructiveHint: true,
@@ -256,6 +257,7 @@ export const revertCommitTool = createTool({
 		"Create a revert pull request for a specific commit in the configured deco.cx site. Automatically provisions a temporary sandbox environment, creates a revert branch, pushes it, and opens a PR for team review. The sandbox is deleted after the PR is created.",
 	inputSchema: revertCommitInputSchema,
 	outputSchema: revertCommitOutputSchema,
+	_meta: { ui: { visibility: ["app"] } },
 	annotations: {
 		readOnlyHint: false,
 		destructiveHint: false,

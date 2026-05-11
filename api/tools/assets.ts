@@ -256,6 +256,7 @@ export const deleteAssetTool = createTool({
 		"Permanently delete a media asset by its ID from the configured deco.cx site. This is irreversible — the file is removed from storage and the database index.",
 	inputSchema: deleteAssetInputSchema,
 	outputSchema: deleteAssetOutputSchema,
+	_meta: { ui: { visibility: ["app"] } },
 	annotations: {
 		readOnlyHint: false,
 		destructiveHint: true,

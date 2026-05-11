@@ -1,7 +1,6 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
-import { callAdmin, getConfig, getEnv } from "../lib/admin.ts";
-import { getUserEnvName } from "./files.ts";
+import { callAdmin, getConfig, resolveEnv } from "../lib/admin.ts";
 
 export const ISSUES_RESOURCE_URI = "ui://mcp-app/issues";
 
@@ -73,9 +72,7 @@ export const listIssuesTool = createTool({
 	},
 	execute: async (_input, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
-		const env = getEnv(ctx);
-		const tokenToDecode = env.MESH_REQUEST_CONTEXT?.token;
-		const userEnv = await getUserEnvName(tokenToDecode);
+		const userEnv = await resolveEnv(ctx);
 		const maxRetries = 3;
 		for (let attempt = 0; attempt < maxRetries; attempt++) {
 			const data = await callAdmin(

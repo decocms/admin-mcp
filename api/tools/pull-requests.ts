@@ -1,6 +1,6 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
-import { callAdmin, getConfig } from "../lib/admin.ts";
+import { callAdmin, getConfig, resolveEnv } from "../lib/admin.ts";
 
 export const PULL_REQUESTS_RESOURCE_URI = "ui://mcp-app/pull-requests";
 
@@ -235,7 +235,6 @@ export const mergePullRequestTool = createTool({
 // ─── open_pull_request ────────────────────────────────────────────────────────
 
 export const openPullRequestInputSchema = z.object({
-	env: z.string().describe("The environment name"),
 	branch: z
 		.string()
 		.optional()
@@ -278,20 +277,21 @@ export const openPullRequestTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		const base = context.base ?? "main";
-		const head = context.branch ?? context.env;
+		const head = context.branch ?? env;
 
 		// 1. Create and checkout a new branch on the env's daemon
 		await callAdmin(
 			"deco-sites/admin/actions/releases/git/checkoutBranch.ts",
-			{ site, env: context.env, branchName: head },
+			{ site, env, branchName: head },
 			apiKey,
 		);
 
 		// 2. Publish (commit + push) to that new branch
 		await callAdmin(
 			"deco-sites/admin/actions/releases/git/publish.ts",
-			{ site, env: context.env, message: context.title },
+			{ site, env, message: context.title },
 			apiKey,
 		);
 
@@ -312,7 +312,7 @@ export const openPullRequestTool = createTool({
 		// 4. Checkout back to base so the environment isn't left on the PR branch
 		await callAdmin(
 			"deco-sites/admin/actions/releases/git/raw.ts",
-			{ site, env: context.env, args: ["checkout", base] },
+			{ site, env, args: ["checkout", base] },
 			apiKey,
 		);
 

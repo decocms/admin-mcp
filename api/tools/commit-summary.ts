@@ -1,6 +1,6 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
-import { callAdmin, getConfig } from "../lib/admin.ts";
+import { callAdmin, getConfig, resolveEnv } from "../lib/admin.ts";
 import type { GitStatus } from "./git.ts";
 
 const daemonDiffSchema = z.object({
@@ -10,9 +10,7 @@ const daemonDiffSchema = z.object({
 
 // ─── schemas ──────────────────────────────────────────────────────────────────
 
-export const suggestCommitMessageInputSchema = z.object({
-	env: z.string().describe("Environment name to generate suggestions for"),
-});
+export const suggestCommitMessageInputSchema = z.object({});
 export type SuggestCommitMessageInput = z.infer<
 	typeof suggestCommitMessageInputSchema
 >;
@@ -235,12 +233,13 @@ export const suggestCommitMessageTool = createTool({
 		idempotentHint: false,
 		openWorldHint: false,
 	},
-	execute: async ({ context }, ctx) => {
+	execute: async (_input, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 
 		const status = (await callAdmin(
 			"deco-sites/admin/loaders/releases/git/status.ts",
-			{ site, env: context.env },
+			{ site, env },
 			apiKey,
 		)) as GitStatus;
 
@@ -265,12 +264,7 @@ export const suggestCommitMessageTool = createTool({
 		}
 
 		// Fetch actual diff content for richer AI context
-		const diffSummary = await fetchDiffSummary(
-			site,
-			context.env,
-			apiKey,
-			changedFiles,
-		);
+		const diffSummary = await fetchDiffSummary(site, env, apiKey, changedFiles);
 
 		const filesSummary = [
 			...status.modified.map((f) => `Modified: ${f}`),

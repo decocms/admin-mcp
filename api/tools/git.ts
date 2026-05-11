@@ -1,6 +1,6 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
-import { callAdmin, getConfig } from "../lib/admin.ts";
+import { callAdmin, getConfig, resolveEnv } from "../lib/admin.ts";
 
 // ─── schemas ──────────────────────────────────────────────────────────────────
 
@@ -44,9 +44,7 @@ export type GitPublishResult = z.infer<typeof gitPublishResultSchema>;
 
 // ─── git_status ───────────────────────────────────────────────────────────────
 
-export const gitStatusInputSchema = z.object({
-	env: z.string().describe("Environment name to get git status for"),
-});
+export const gitStatusInputSchema = z.object({});
 export type GitStatusInput = z.infer<typeof gitStatusInputSchema>;
 
 export const gitStatusTool = createTool({
@@ -61,11 +59,12 @@ export const gitStatusTool = createTool({
 		idempotentHint: false,
 		openWorldHint: false,
 	},
-	execute: async ({ context }, ctx) => {
+	execute: async (_input, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		return callAdmin(
 			"deco-sites/admin/loaders/releases/git/status.ts",
-			{ site, env: context.env },
+			{ site, env },
 			apiKey,
 		) as Promise<GitStatus>;
 	},
@@ -73,9 +72,7 @@ export const gitStatusTool = createTool({
 
 // ─── git_diff ─────────────────────────────────────────────────────────────────
 
-export const gitDiffInputSchema = z.object({
-	env: z.string().describe("Environment name"),
-});
+export const gitDiffInputSchema = z.object({});
 export type GitDiffInput = z.infer<typeof gitDiffInputSchema>;
 
 export const gitDiffResultSchema = z.object({
@@ -114,11 +111,12 @@ export const gitDiffTool = createTool({
 		idempotentHint: false,
 		openWorldHint: false,
 	},
-	execute: async ({ context }, ctx) => {
+	execute: async (_input, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		const status = (await callAdmin(
 			"deco-sites/admin/loaders/releases/git/status.ts",
-			{ site, env: context.env },
+			{ site, env },
 			apiKey,
 		)) as GitStatus;
 
@@ -127,7 +125,7 @@ export const gitDiffTool = createTool({
 			paths.map(async (path) => {
 				const rawDiff = await callAdmin(
 					"deco-sites/admin/loaders/daemon/git/diff.ts",
-					{ site, env: context.env, path },
+					{ site, env, path },
 					apiKey,
 				);
 				const parsed = daemonGitDiffSchema.parse(rawDiff);
@@ -148,7 +146,6 @@ export const gitDiffTool = createTool({
 // ─── git_publish ──────────────────────────────────────────────────────────────
 
 export const gitPublishInputSchema = z.object({
-	env: z.string().describe("Environment name to publish changes from"),
 	message: z
 		.string()
 		.optional()
@@ -171,9 +168,10 @@ export const gitPublishTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		return callAdmin(
 			"deco-sites/admin/actions/releases/git/publish.ts",
-			{ site, env: context.env, message: context.message },
+			{ site, env, message: context.message },
 			apiKey,
 		) as Promise<GitPublishResult>;
 	},
@@ -182,7 +180,6 @@ export const gitPublishTool = createTool({
 // ─── git_discard ──────────────────────────────────────────────────────────────
 
 export const gitDiscardInputSchema = z.object({
-	env: z.string().describe("Environment name"),
 	filepaths: z
 		.array(z.string())
 		.describe("File paths to discard (restore to last committed state)"),
@@ -203,9 +200,10 @@ export const gitDiscardTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		return callAdmin(
 			"deco-sites/admin/actions/releases/git/discard.ts",
-			{ site, env: context.env, filepaths: context.filepaths },
+			{ site, env, filepaths: context.filepaths },
 			apiKey,
 		);
 	},
@@ -214,7 +212,6 @@ export const gitDiscardTool = createTool({
 // ─── git_checkout_branch ──────────────────────────────────────────────────────
 
 export const gitCheckoutBranchInputSchema = z.object({
-	env: z.string().describe("Environment name"),
 	branchName: z
 		.string()
 		.describe(
@@ -246,9 +243,10 @@ export const gitCheckoutBranchTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		return callAdmin(
 			"deco-sites/admin/actions/releases/git/checkoutBranch.ts",
-			{ site, env: context.env, branchName: context.branchName },
+			{ site, env, branchName: context.branchName },
 			apiKey,
 		) as Promise<GitCheckoutBranchOutput>;
 	},
@@ -257,7 +255,6 @@ export const gitCheckoutBranchTool = createTool({
 // ─── git_raw ──────────────────────────────────────────────────────────────────
 
 export const gitRawInputSchema = z.object({
-	env: z.string().describe("Environment name"),
 	args: z
 		.array(z.string())
 		.describe(
@@ -286,9 +283,10 @@ export const gitRawTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		return callAdmin(
 			"deco-sites/admin/actions/releases/git/raw.ts",
-			{ site, env: context.env, args: context.args },
+			{ site, env, args: context.args },
 			apiKey,
 		) as Promise<GitRawOutput>;
 	},
@@ -297,7 +295,6 @@ export const gitRawTool = createTool({
 // ─── fs_unlink ────────────────────────────────────────────────────────────────
 
 export const fsUnlinkInputSchema = z.object({
-	env: z.string().describe("Environment name"),
 	filepath: z.string().describe("Path of the new/untracked file to delete"),
 });
 export type FsUnlinkInput = z.infer<typeof fsUnlinkInputSchema>;
@@ -316,9 +313,10 @@ export const fsUnlinkTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
 		return callAdmin(
 			"deco-sites/admin/actions/daemon/fs/unlink.ts",
-			{ site, env: context.env, filepath: context.filepath },
+			{ site, env, filepath: context.filepath },
 			apiKey,
 		);
 	},

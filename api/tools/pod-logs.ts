@@ -1,7 +1,6 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
-import { callAdmin, getConfig, getEnv } from "../lib/admin.ts";
-import { getUserEnvName } from "./files.ts";
+import { callAdmin, getConfig, resolveEnv } from "../lib/admin.ts";
 
 // ─── pod_logs ─────────────────────────────────────────────────────────────────
 
@@ -50,12 +49,7 @@ export const podLogsTool = createTool({
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
 
-		let environment = context.environment;
-		if (!environment) {
-			const env = getEnv(ctx);
-			const tokenToDecode = env.MESH_REQUEST_CONTEXT?.token;
-			environment = await getUserEnvName(tokenToDecode);
-		}
+		const environment = context.environment ?? (await resolveEnv(ctx));
 
 		const data = (await callAdmin(
 			"deco-sites/admin/loaders/environments/podLogs.ts",
