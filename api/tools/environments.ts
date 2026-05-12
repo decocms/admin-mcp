@@ -293,10 +293,18 @@ export const previewEnvironmentTool = createTool({
 		const path = context.path ?? "/";
 		const sep = path.includes("?") ? "&" : "?";
 		const previewUrl = `${environment.url}${path.startsWith("/") ? "" : "/"}${path}${sep}__cb=${crypto.randomUUID()}`;
+		// Cloudflare bot management on decocdn.com blocks server-side fetches.
+		// A custom WAF skip rule lets the probe through when this header matches.
+		const probeHeaders: Record<string, string> = {
+			"User-Agent": "deco-admin-mcp/probe (+https://decocms.com)",
+		};
+		const probeSecret = process.env.DECO_PROBE_SECRET;
+		if (probeSecret) probeHeaders["x-deco-probe"] = probeSecret;
 		try {
 			const response = await fetch(previewUrl, {
 				method: "GET",
 				redirect: "follow",
+				headers: probeHeaders,
 			});
 			if (!response.ok) {
 				return {
