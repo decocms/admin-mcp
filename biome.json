@@ -11,7 +11,8 @@
 			"**",
 			"!**/styles.css",
 			"!**/globals.css",
-			"!storefront-skills/**"
+			"!storefront-skills/**",
+			"!.wrangler/**"
 		]
 	},
 	"formatter": {

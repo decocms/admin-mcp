@@ -1,20 +1,17 @@
 import { withRuntime } from "@decocms/runtime";
-import { storefrontSkillsPrompts } from "./prompts/storefront-skills.ts";
-import { assetsAppResource } from "./resources/assets.ts";
-import { environmentsAppResource } from "./resources/environments.ts";
-import { fileExplorerAppResource } from "./resources/file-explorer.ts";
-import { issuesAppResource } from "./resources/issues.ts";
-import { monitorAppResource } from "./resources/monitor.ts";
-import { pullRequestsAppResource } from "./resources/pull-requests.ts";
-import { releasesAppResource } from "./resources/releases.ts";
-import { renderHtmlAppResource } from "./resources/render-html.ts";
+import { createAssetsAppResource } from "./resources/assets.ts";
+import { createEnvironmentsAppResource } from "./resources/environments.ts";
+import { createFileExplorerAppResource } from "./resources/file-explorer.ts";
+import { createIssuesAppResource } from "./resources/issues.ts";
+import { createMonitorAppResource } from "./resources/monitor.ts";
+import { createPullRequestsAppResource } from "./resources/pull-requests.ts";
+import { createReleasesAppResource } from "./resources/releases.ts";
+import { createRenderHtmlAppResource } from "./resources/render-html.ts";
 import { tools } from "./tools/index.ts";
 import { type Env, StateSchema } from "./types/env.ts";
 
 // biome-ignore lint/suspicious/noExplicitAny: runtime.fetch signature compatibility
 type Fetcher = (req: Request, ...args: any[]) => Response | Promise<Response>;
-
-const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
 
 const colors = {
 	reset: "\x1b[0m",
@@ -42,24 +39,6 @@ function getStatusColor(status: number): string {
 function getMethodColor(method: string): string {
 	return colors[method as keyof typeof colors] || colors.reset;
 }
-
-const runtime = withRuntime<Env, typeof StateSchema>({
-	configuration: {
-		state: StateSchema,
-	},
-	tools,
-	prompts: storefrontSkillsPrompts,
-	resources: [
-		assetsAppResource,
-		environmentsAppResource,
-		fileExplorerAppResource,
-		issuesAppResource,
-		monitorAppResource,
-		pullRequestsAppResource,
-		releasesAppResource,
-		renderHtmlAppResource,
-	],
-});
 
 function withLogging(fetcher: Fetcher): Fetcher {
 	return async (req: Request, ...args) => {
@@ -111,12 +90,36 @@ function withMcpApiRoute(fetcher: Fetcher): Fetcher {
 	};
 }
 
-Bun.serve({
-	idleTimeout: 0,
-	hostname: "0.0.0.0",
-	port: PORT,
-	fetch: withLogging(withMcpApiRoute(runtime.fetch)),
-});
+// biome-ignore lint/suspicious/noExplicitAny: prompts factory shape is opaque to us
+type PromptsOption = any;
 
-console.log(`MCP App server started on http://localhost:${PORT}`);
-console.log(`- MCP endpoint: http://localhost:${PORT}/api/mcp`);
+export interface CreateAppOptions {
+	getClientHTML: () => Promise<string>;
+	// Optional. Bun entry passes the filesystem-walking factory; Workers entry
+	// omits it (the module that produces prompts touches `import.meta.dir`).
+	prompts?: PromptsOption;
+}
+
+export function createApp(opts: CreateAppOptions): Fetcher {
+	const { getClientHTML, prompts } = opts;
+
+	const runtime = withRuntime<Env, typeof StateSchema>({
+		configuration: {
+			state: StateSchema,
+		},
+		tools,
+		...(prompts !== undefined ? { prompts } : {}),
+		resources: [
+			createAssetsAppResource(getClientHTML),
+			createEnvironmentsAppResource(getClientHTML),
+			createFileExplorerAppResource(getClientHTML),
+			createIssuesAppResource(getClientHTML),
+			createMonitorAppResource(getClientHTML),
+			createPullRequestsAppResource(getClientHTML),
+			createReleasesAppResource(getClientHTML),
+			createRenderHtmlAppResource(getClientHTML),
+		],
+	});
+
+	return withLogging(withMcpApiRoute(runtime.fetch));
+}
