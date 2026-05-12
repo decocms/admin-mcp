@@ -14,6 +14,21 @@ binding = "ASSETS"
 [vars]
 # DECO_ADMIN_URL = "https://admin-envs.deco.cx"  # optional override
 
+[observability]
+enabled = false
+head_sampling_rate = 1
+
+[observability.logs]
+enabled = true
+head_sampling_rate = 0.1
+persist = true
+invocation_logs = true
+
+[observability.traces]
+enabled = true
+persist = true
+head_sampling_rate = 0.1
+
 [env.preview]
 name = "admin-mcp-preview"
 workers_dev = true
