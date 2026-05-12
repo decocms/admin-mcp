@@ -1,5 +1,23 @@
 import { analyticsQueryTool } from "./analytics-query.ts";
 import { assetsTool, deleteAssetTool, uploadAssetTool } from "./assets.ts";
+import {
+	cfbDeleteBuildVarTool,
+	cfbListBuildVarsTool,
+	cfbSetBuildVarTool,
+} from "./cfb-build-vars.ts";
+import {
+	cfbGetBuildLogsTool,
+	cfbGetBuildTool,
+	cfbListBuildsTool,
+	cfbTriggerBuildTool,
+} from "./cfb-builds.ts";
+import {
+	cfbDeleteSecretTool,
+	cfbListSecretsTool,
+	cfbSetSecretTool,
+} from "./cfb-secrets.ts";
+import { cfbSetupStatusTool, cfbSetupTool } from "./cfb-setup.ts";
+import { cfbListVersionsTool, cfbRollbackTool } from "./cfb-versions.ts";
 import { suggestCommitMessageTool } from "./commit-summary.ts";
 import {
 	createEnvironmentTool,
@@ -127,4 +145,18 @@ export const tools = [
 	podLogsTool,
 	renderHtmlTool,
 	testLoaderTool,
+	cfbSetupTool,
+	cfbSetupStatusTool,
+	cfbListSecretsTool,
+	cfbSetSecretTool,
+	cfbDeleteSecretTool,
+	cfbListBuildVarsTool,
+	cfbSetBuildVarTool,
+	cfbDeleteBuildVarTool,
+	cfbListBuildsTool,
+	cfbGetBuildTool,
+	cfbGetBuildLogsTool,
+	cfbTriggerBuildTool,
+	cfbListVersionsTool,
+	cfbRollbackTool,
 ];

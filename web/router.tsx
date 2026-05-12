@@ -8,6 +8,11 @@ import {
 } from "@tanstack/react-router";
 import { useMcpHostContext, useMcpState } from "./context.tsx";
 import AssetsPage from "./tools/assets/index.tsx";
+import CfbBuildVarsPage from "./tools/cfb-build-vars/index.tsx";
+import CfbBuildsPage from "./tools/cfb-builds/index.tsx";
+import CfbSecretsPage from "./tools/cfb-secrets/index.tsx";
+import CfbSetupPage from "./tools/cfb-setup/index.tsx";
+import CfbVersionsPage from "./tools/cfb-versions/index.tsx";
 import FileExplorerPage from "./tools/file-explorer/index.tsx";
 import IssuesPage from "./tools/issues/index.tsx";
 import MonitorPage from "./tools/monitor/index.tsx";
@@ -23,6 +28,20 @@ const TOOL_PAGES: Record<string, React.ComponentType> = {
 	list_pull_requests: PullRequestsPage,
 	list_releases: ReleasesPage,
 	render_html: RenderHtmlPage,
+	cfb_setup: CfbSetupPage,
+	cfb_setup_status: CfbSetupPage,
+	cfb_list_secrets: CfbSecretsPage,
+	cfb_set_secret: CfbSecretsPage,
+	cfb_delete_secret: CfbSecretsPage,
+	cfb_list_build_vars: CfbBuildVarsPage,
+	cfb_set_build_var: CfbBuildVarsPage,
+	cfb_delete_build_var: CfbBuildVarsPage,
+	cfb_list_builds: CfbBuildsPage,
+	cfb_get_build: CfbBuildsPage,
+	cfb_get_build_logs: CfbBuildsPage,
+	cfb_trigger_build: CfbBuildsPage,
+	cfb_list_versions: CfbVersionsPage,
+	cfb_rollback: CfbVersionsPage,
 };
 
 function ToolRouter() {

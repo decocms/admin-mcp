@@ -1,6 +1,11 @@
 import { withRuntime } from "@decocms/runtime";
 import { storefrontSkillsPrompts } from "./prompts/storefront-skills.ts";
 import { assetsAppResource } from "./resources/assets.ts";
+import { cfbBuildVarsAppResource } from "./resources/cfb-build-vars.ts";
+import { cfbBuildsAppResource } from "./resources/cfb-builds.ts";
+import { cfbSecretsAppResource } from "./resources/cfb-secrets.ts";
+import { cfbSetupAppResource } from "./resources/cfb-setup.ts";
+import { cfbVersionsAppResource } from "./resources/cfb-versions.ts";
 import { environmentsAppResource } from "./resources/environments.ts";
 import { fileExplorerAppResource } from "./resources/file-explorer.ts";
 import { issuesAppResource } from "./resources/issues.ts";
@@ -58,6 +63,11 @@ const runtime = withRuntime<Env, typeof StateSchema>({
 		pullRequestsAppResource,
 		releasesAppResource,
 		renderHtmlAppResource,
+		cfbSetupAppResource,
+		cfbSecretsAppResource,
+		cfbBuildVarsAppResource,
+		cfbBuildsAppResource,
+		cfbVersionsAppResource,
 	],
 });
 
