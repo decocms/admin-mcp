@@ -7,11 +7,14 @@
 	"scripts": {
 		"dev": "concurrently -k \"bun run dev:api\" \"bun run dev:web\"",
 		"dev:tunnel": "concurrently -k \"bun run dev\" \"ngrok http ${PORT:-3001}\"",
-		"dev:api": "bun run --hot api/main.ts",
+		"dev:api": "bun run --hot api/main.bun.ts",
 		"dev:web": "NODE_OPTIONS='--max-old-space-size=8192' vite build --watch",
-		"build:web": "vite build",
-		"build:server": "NODE_ENV=production bun build api/main.ts --target=bun --minify --outfile=dist/server/main.js",
+		"dev:workers": "bun run build:web && wrangler dev",
+		"build:web": "NODE_OPTIONS='--max-old-space-size=8192' vite build",
+		"build:server": "NODE_ENV=production bun build api/main.bun.ts --target=bun --minify --outfile=dist/server/main.js",
 		"build": "bun run build:web && bun run build:server",
+		"deploy": "bun run build:web && wrangler deploy",
+		"deploy:preview": "bun run build:web && wrangler deploy --env preview",
 		"ci:check": "bunx biome ci .",
 		"check": "tsc --noEmit",
 		"test": "bun test",
@@ -81,6 +84,7 @@
 		"typescript": "^5.9.3",
 		"vite": "^7.3.1",
 		"vite-plugin-singlefile": "^2.3.0",
-		"worktree-devservers": "0.3.1"
+		"worktree-devservers": "0.3.1",
+		"wrangler": "^4.0.0"
 	}
 }

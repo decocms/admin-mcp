@@ -6,3 +6,4 @@ data/
 bun.lock
 *.tsbuildinfo
 .context/
+.wrangler/
