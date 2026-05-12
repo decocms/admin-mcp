@@ -1,0 +1,44 @@
+{
+	"name": "admin-mcp",
+	"main": "api/main.workers.ts",
+	"compatibility_date": "2026-05-12",
+	"compatibility_flags": ["nodejs_compat"],
+	"workers_dev": true,
+
+	// Serve dist/client/ (built by `bun run build:web`) as Workers static assets.
+	// The Worker handles /api/mcp/*; everything else (index.html, Monaco worker
+	// JS chunks) is served by the asset pipeline before the worker runs.
+	"assets": {
+		"directory": "dist/client",
+		"binding": "ASSETS"
+	},
+
+	// "vars": { "DECO_ADMIN_URL": "https://admin-envs.deco.cx" },  // optional override
+
+	"observability": {
+		"enabled": false,
+		"head_sampling_rate": 1,
+		"logs": {
+			"enabled": true,
+			"head_sampling_rate": 0.1,
+			"persist": true,
+			"invocation_logs": true
+		},
+		"traces": {
+			"enabled": true,
+			"persist": true,
+			"head_sampling_rate": 0.1
+		}
+	},
+
+	"env": {
+		"preview": {
+			"name": "admin-mcp-preview",
+			"workers_dev": true,
+			"assets": {
+				"directory": "dist/client",
+				"binding": "ASSETS"
+			}
+		}
+	}
+}
