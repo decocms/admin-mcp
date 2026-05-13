@@ -83,14 +83,22 @@ export const cfbListBuildsTool = createTool({
 	},
 	execute: async ({ context }, ctx) => {
 		const { site, apiKey } = getConfig(ctx);
-		const builds = (await callAdmin(
+		const raw = await callAdmin(
 			"deco-sites/admin/loaders/hosting/cfworkers-builds/builds/list.ts",
 			{
 				sitename: site,
 				...(context.pageSize ? { pageSize: context.pageSize } : {}),
 			},
 			apiKey,
-		)) as CfBuild[];
+		);
+		// Defensive: admin should return CFBuild[] but the CF Builds list endpoint
+		// sometimes wraps results as `{ items: [...] }` or `{ builds: [...] }`,
+		// and admin doesn't always unwrap. Normalize to an array here.
+		const builds: CfBuild[] = Array.isArray(raw)
+			? (raw as CfBuild[])
+			: ((raw as { items?: CfBuild[]; builds?: CfBuild[] })?.items ??
+				(raw as { items?: CfBuild[]; builds?: CfBuild[] })?.builds ??
+				[]);
 		return { builds };
 	},
 });
