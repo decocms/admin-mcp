@@ -56,7 +56,6 @@ export const fileExplorerOutputSchema = z.object({
 	userEnvUrl: z.string().nullable(),
 	productionUrl: z.string(),
 	path: z.string(),
-	isPreviewSupported: z.boolean(),
 });
 export type FileExplorerOutput = z.infer<typeof fileExplorerOutputSchema>;
 
@@ -125,19 +124,6 @@ export const fileExplorerTool = createTool({
 		}
 
 		const productionUrl = `https://${site}.deco.site`;
-		const userEnvUrl = userEnvEntry?.url ?? null;
-
-		// Fetch to wake up the environment — timeout after 15s, failures are non-fatal
-		const timeout = AbortSignal.timeout(15000);
-		const [productionResponse, _userEnvResponse] = await Promise.all([
-			fetch(productionUrl),
-			userEnvUrl
-				? fetch(userEnvUrl, { signal: timeout }).catch(() => null)
-				: null,
-		]);
-		console.log("_userEnvResponse", _userEnvResponse);
-
-		const status = productionResponse?.status;
 
 		return {
 			site,
@@ -145,8 +131,45 @@ export const fileExplorerTool = createTool({
 			userEnvUrl: userEnvEntry?.url ?? null,
 			productionUrl,
 			path: context.path ?? "/",
-			isPreviewSupported: status === 200,
 		};
+	},
+});
+
+// ─── wake_up_env ──────────────────────────────────────────────────────────────
+
+export const wakeUpEnvInputSchema = z.object({});
+export type WakeUpEnvInput = z.infer<typeof wakeUpEnvInputSchema>;
+
+export const wakeUpEnvOutputSchema = z.object({
+	success: z.boolean(),
+});
+export type WakeUpEnvOutput = z.infer<typeof wakeUpEnvOutputSchema>;
+
+export const wakeUpEnvTool = createTool({
+	id: "wake_up_env",
+	description:
+		"Pings the sandbox environment URL to wake it up. Used by the UI during warm-up polling.",
+	inputSchema: wakeUpEnvInputSchema,
+	outputSchema: wakeUpEnvOutputSchema,
+	_meta: { ui: { visibility: ["app"] } },
+	annotations: {
+		readOnlyHint: true,
+		destructiveHint: false,
+		idempotentHint: true,
+		openWorldHint: false,
+	},
+	execute: async (_input, ctx) => {
+		const { site } = getConfig(ctx);
+		const env = await resolveEnv(ctx);
+		const envUrl = buildEnvUrl(site, env);
+
+		const timeout = AbortSignal.timeout(15000);
+		try {
+			await fetch(envUrl, { signal: timeout });
+		} catch {
+			// Non-fatal — environment may still be starting
+		}
+		return { success: true };
 	},
 });
 

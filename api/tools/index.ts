@@ -26,6 +26,7 @@ import {
 	replaceInFileTool,
 	uninstallAppTool,
 	updateJsonTool,
+	wakeUpEnvTool,
 	writeFileTool,
 } from "./files.ts";
 import {
@@ -79,6 +80,7 @@ export const tools = [
 	deleteEnvironmentTool,
 	previewEnvironmentTool,
 	fileExplorerTool,
+	wakeUpEnvTool,
 	listFilesTool,
 	readFileTool,
 	writeFileTool,

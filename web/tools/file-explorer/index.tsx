@@ -292,25 +292,6 @@ function CancelledView() {
 	);
 }
 
-function PreviewErrorFallback() {
-	return (
-		<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background p-6">
-			<Card className="w-full max-w-lg border-muted bg-muted/30">
-				<CardHeader className="pb-1">
-					<CardTitle className="text-base text-foreground/80">
-						Preview not available for this Stack
-					</CardTitle>
-				</CardHeader>
-				<CardContent className="pt-0">
-					<p className="text-sm text-muted-foreground">
-						It is normal for some repositories to not have a preview URL or live
-						application route available.
-					</p>
-				</CardContent>
-			</Card>
-		</div>
-	);
-}
 
 // ─── visual editor script ─────────────────────────────────────────────────────
 
@@ -2400,12 +2381,12 @@ function FileExplorerWorkspace({
 	site,
 	userEnv,
 	userEnvUrl,
-	isPreviewSupported,
+	productionUrl,
 }: {
 	site: string;
 	userEnv: string;
 	userEnvUrl: string | null;
-	isPreviewSupported: boolean;
+	productionUrl: string;
 }) {
 	const app = useMcpApp();
 
@@ -2581,9 +2562,7 @@ function FileExplorerWorkspace({
 			? "vs-dark"
 			: "vs",
 	);
-	const [viewMode, setViewMode] = useState<ViewMode>(
-		isPreviewSupported ? "preview" : "code",
-	);
+	const [viewMode, setViewMode] = useState<ViewMode>("preview");
 	const [previewViewport, setPreviewViewport] =
 		useState<PreviewViewport>("desktop");
 	const [previewPathInput, setPreviewPathInput] = useState("/");
@@ -3133,10 +3112,17 @@ function FileExplorerWorkspace({
 			duration: Number.POSITIVE_INFINITY,
 		});
 
+		const wakeUpEnv = () => {
+			app.callServerTool({ name: "wake_up_env", arguments: {} }).catch(
+				() => {},
+			);
+		};
+
 		const tryListFiles = async (
 			timeoutMs?: number,
 		): Promise<string[] | null> => {
 			try {
+				wakeUpEnv();
 				const callPromise = app.callServerTool({
 					name: "list_files",
 					arguments: { env: userEnv },
@@ -7246,26 +7232,24 @@ function FileExplorerWorkspace({
 												<ResizableHandle withHandle />
 											)}
 											<ResizablePanel className="flex h-full min-w-0 flex-col overflow-hidden">
-												{envStatus === "warming-up" ? (
-													<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background/80">
-														<div className="flex flex-col items-center gap-3 text-muted-foreground">
-															<Loader2 className="h-5 w-5 animate-spin" />
-															<span className="text-sm">
-																Starting your Live Preview…
-															</span>
-														</div>
-													</div>
-												) : envStatus === "waiting" ? (
-													<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background/80">
-														<div className="flex flex-col items-center gap-3 text-muted-foreground">
-															<Loader2 className="h-5 w-5 animate-spin" />
-															<span className="text-sm">
-																Preview is starting. This can take a moment...
-															</span>
-														</div>
+												{envStatus !== "ready" ? (
+													<div className="relative h-full w-full">
+														{productionUrl ? (
+															<iframe
+																src={productionUrl}
+																title="Production preview"
+																className="h-full w-full border-0"
+															/>
+														) : (
+															<div className="flex h-full items-center justify-center">
+																<Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+															</div>
+														)}
 													</div>
 												) : previewError ? (
-													<PreviewErrorFallback />
+													<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background p-6">
+														<p className="text-sm text-muted-foreground">{previewError}</p>
+													</div>
 												) : (
 													<div className="flex h-full items-center justify-center overflow-auto bg-background">
 														<div
@@ -7781,7 +7765,6 @@ function FileExplorerWorkspace({
 				onOpenChange={setPublishDialogOpen}
 				userEnv={userEnv}
 				envUrl={envUrl}
-				showPreviewAction={isPreviewSupported}
 				editorTheme={editorTheme}
 				gitStatus={gitStatus}
 				onGitStatusChange={setGitStatus}
@@ -7865,20 +7848,19 @@ export default function FileExplorerPage() {
 	if (state.status === "tool-input")
 		return <Spinner label="Opening file explorer..." />;
 
-	const { site, userEnv, userEnvUrl, isPreviewSupported } =
-		state.toolResult ?? {
-			site: "",
-			userEnv: "",
-			userEnvUrl: null,
-			isPreviewSupported: true,
-		};
+	const { site, userEnv, userEnvUrl, productionUrl } = state.toolResult ?? {
+		site: "",
+		userEnv: "",
+		userEnvUrl: null,
+		productionUrl: "",
+	};
 
 	return (
 		<FileExplorerWorkspace
 			site={site}
 			userEnv={userEnv}
 			userEnvUrl={userEnvUrl}
-			isPreviewSupported={isPreviewSupported}
+			productionUrl={productionUrl}
 		/>
 	);
 }
