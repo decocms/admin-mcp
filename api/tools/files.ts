@@ -127,8 +127,8 @@ export const fileExplorerTool = createTool({
 		const productionUrl = `https://${site}.deco.site`;
 		const userEnvUrl = userEnvEntry?.url ?? null;
 
-		// Fetch to wake up the environment — timeout after 5s, failures are non-fatal
-		const timeout = AbortSignal.timeout(5000);
+		// Fetch to wake up the environment — timeout after 15s, failures are non-fatal
+		const timeout = AbortSignal.timeout(15000);
 		const [productionResponse, _userEnvResponse] = await Promise.all([
 			fetch(productionUrl),
 			userEnvUrl
