@@ -1,5 +1,10 @@
 import { withRuntime } from "@decocms/runtime";
 import { createAssetsAppResource } from "./resources/assets.ts";
+import { createCfbBuildVarsAppResource } from "./resources/cfb-build-vars.ts";
+import { createCfbBuildsAppResource } from "./resources/cfb-builds.ts";
+import { createCfbSecretsAppResource } from "./resources/cfb-secrets.ts";
+import { createCfbSetupAppResource } from "./resources/cfb-setup.ts";
+import { createCfbVersionsAppResource } from "./resources/cfb-versions.ts";
 import { createEnvironmentsAppResource } from "./resources/environments.ts";
 import { createFileExplorerAppResource } from "./resources/file-explorer.ts";
 import { createIssuesAppResource } from "./resources/issues.ts";
@@ -118,6 +123,11 @@ export function createApp(opts: CreateAppOptions): Fetcher {
 			createPullRequestsAppResource(getClientHTML),
 			createReleasesAppResource(getClientHTML),
 			createRenderHtmlAppResource(getClientHTML),
+			createCfbSetupAppResource(getClientHTML),
+			createCfbSecretsAppResource(getClientHTML),
+			createCfbBuildVarsAppResource(getClientHTML),
+			createCfbBuildsAppResource(getClientHTML),
+			createCfbVersionsAppResource(getClientHTML),
 		],
 	});
 
