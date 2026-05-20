@@ -13,7 +13,10 @@ import {
 	verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { format as formatDate } from "date-fns";
 import {
+	CalendarIcon,
+	Check,
 	ChevronDown,
 	ChevronLeft,
 	ChevronRight,
@@ -22,14 +25,17 @@ import {
 	GripVertical,
 	ImageIcon,
 	Link,
+	List,
+	ListOrdered,
 	Loader2,
 	MoreHorizontal,
+	Pipette,
 	Plus,
+	Quote,
 	Search,
 	Trash2,
 	Upload,
 	VideoIcon,
-	X,
 } from "lucide-react";
 import {
 	createContext,
@@ -40,7 +46,9 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { HexColorPicker } from "react-colorful";
 import { Button } from "@/components/ui/button.tsx";
+import { Calendar } from "@/components/ui/calendar.tsx";
 import {
 	Dialog,
 	DialogContent,
@@ -55,6 +63,11 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.tsx";
 import { Input } from "@/components/ui/input.tsx";
+import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover.tsx";
 import {
 	Select,
 	SelectContent,
@@ -71,6 +84,18 @@ import type {
 	UploadAssetOutput,
 } from "../../../api/tools/assets.ts";
 import type { SchemaProperty } from "../../../api/tools/files.ts";
+import {
+	DateRangeField,
+	IconField,
+	MarkdownField,
+	MultiSelectField,
+	RangeField,
+	ReferenceField,
+	SwitchField,
+	TagsField,
+	TimeField,
+	UrlField,
+} from "./cms-form-extras.tsx";
 import { formatMatcherRule } from "./index.tsx";
 import {
 	isVtexLoader,
@@ -93,12 +118,10 @@ export type FormValue =
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-function nestClass(depth: number): string {
-	// First nesting level: tiny padding, no rule — keeps the form spacious.
-	// Deeper levels get a faint left border to show hierarchy. Indents are
-	// kept small so 3+ levels of nesting don't squeeze the form area.
-	if (depth === 0) return "pl-1";
-	return "border-l border-border/50 pl-3";
+function nestClass(_depth: number): string {
+	// ml-3 lands the rule under the parent's chevron; pl-4 aligns child
+	// content under the parent label text.
+	return "ml-3 border-l border-border/60 pl-4";
 }
 
 function humanize(key: string): string {
@@ -154,13 +177,15 @@ function defaultForSchemaType(
 export function FieldLabel({
 	label,
 	description,
+	className,
 }: {
 	label: string;
 	description?: string;
+	className?: string;
 }) {
 	if (!label) return null;
 	return (
-		<div className="min-w-0 space-y-1">
+		<div className={cn("min-w-0 space-y-1", className)}>
 			<span className="block truncate text-sm font-medium text-foreground">
 				{label}
 			</span>
@@ -199,7 +224,7 @@ export function TextField({
 					setLocal(e.target.value);
 					onChange(e.target.value);
 				}}
-				className="h-9 text-sm"
+				className="h-10 text-sm"
 			/>
 		</div>
 	);
@@ -240,6 +265,45 @@ function TextareaField({
 
 // ─── color input field ───────────────────────────────────────────────────────
 
+// react-colorful styling overrides — applied once per page
+const REACT_COLORFUL_CSS = `
+.cms-color-popover .react-colorful{width:100%;height:180px;gap:12px}
+.cms-color-popover .react-colorful__saturation{border-radius:6px;border-bottom:none}
+.cms-color-popover .react-colorful__hue{height:12px;border-radius:6px}
+.cms-color-popover .react-colorful__pointer{width:16px;height:16px;border-width:2px}
+`;
+let colorfulCssInjected = false;
+function ensureColorfulCss() {
+	if (colorfulCssInjected || typeof document === "undefined") return;
+	colorfulCssInjected = true;
+	const style = document.createElement("style");
+	style.textContent = REACT_COLORFUL_CSS;
+	document.head.appendChild(style);
+}
+
+const COLOR_PRESETS = [
+	"#000000",
+	"#ffffff",
+	"#ef4444",
+	"#f97316",
+	"#eab308",
+	"#22c55e",
+	"#14b8a6",
+	"#3b82f6",
+	"#6366f1",
+	"#a855f7",
+	"#ec4899",
+	"#64748b",
+];
+
+interface EyeDropperResult {
+	sRGBHex: string;
+}
+
+interface EyeDropperConstructor {
+	new (): { open: () => Promise<EyeDropperResult> };
+}
+
 function ColorInputField({
 	label,
 	description,
@@ -251,81 +315,144 @@ function ColorInputField({
 	value: string;
 	onChange: (v: string) => void;
 }) {
-	const [color, setColor] = useState(value || "#000000");
+	const initial = value || "#000000";
+	const [color, setColor] = useState(initial);
+	const [hexInput, setHexInput] = useState(initial.replace(/^#/, ""));
+	const [open, setOpen] = useState(false);
+	const hasEyedropper = typeof window !== "undefined" && "EyeDropper" in window;
 
 	useEffect(() => {
-		setColor(value || "#000000");
+		ensureColorfulCss();
+	}, []);
+
+	useEffect(() => {
+		const next = value || "#000000";
+		setColor(next);
+		setHexInput(next.replace(/^#/, ""));
 	}, [value]);
 
+	const commit = (next: string) => {
+		setColor(next);
+		setHexInput(next.replace(/^#/, ""));
+		onChange(next);
+	};
+
+	const commitHex = (raw: string) => {
+		const cleaned = raw.startsWith("#") ? raw : `#${raw}`;
+		if (/^#[a-f\d]{6}$/i.test(cleaned)) commit(cleaned.toLowerCase());
+	};
+
+	const pickFromScreen = async () => {
+		if (!hasEyedropper) return;
+		try {
+			const Ctor = (window as unknown as { EyeDropper: EyeDropperConstructor })
+				.EyeDropper;
+			const result = await new Ctor().open();
+			commit(result.sRGBHex);
+		} catch {
+			// user dismissed
+		}
+	};
+
 	return (
-		<div className="space-y-1">
+		<div className="space-y-2">
 			<FieldLabel label={label} description={description} />
-			<label className="flex h-7 w-full cursor-pointer items-center gap-2 rounded-md border border-input bg-transparent px-2 text-xs shadow-xs transition-colors focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
-				<style>
-					{`input[type="color"].cms-color-swatch{-webkit-appearance:none;border:none;width:18px;height:18px;border-radius:999px;padding:0;cursor:pointer}
-input[type="color"].cms-color-swatch::-webkit-color-swatch-wrapper{padding:0}
-input[type="color"].cms-color-swatch::-webkit-color-swatch{border:1px solid oklch(0.7 0 0 / 0.25);border-radius:999px}`}
-				</style>
-				<input
-					type="color"
-					className="cms-color-swatch outline-1 outline outline-border"
-					value={color}
-					onChange={(e) => {
-						setColor(e.target.value);
-						onChange(e.target.value);
-					}}
-				/>
-				<input
-					type="text"
-					className="min-w-0 flex-1 bg-transparent uppercase outline-none"
-					value={color}
-					onChange={(e) => {
-						setColor(e.target.value);
-						onChange(e.target.value);
-					}}
-				/>
-			</label>
+			<Popover open={open} onOpenChange={setOpen}>
+				<PopoverTrigger asChild>
+					<button
+						type="button"
+						className="flex h-10 w-full items-center gap-3 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs transition-colors hover:bg-accent/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+					>
+						<span
+							className="h-5 w-5 shrink-0 rounded-full border border-border/60 shadow-inner"
+							style={{ background: color }}
+						/>
+						<span className="flex-1 truncate text-left font-mono uppercase">
+							{color}
+						</span>
+						<ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+					</button>
+				</PopoverTrigger>
+				<PopoverContent className="cms-color-popover w-64 p-3" align="start">
+					<div className="space-y-3">
+						{/* Picker */}
+						<HexColorPicker color={color} onChange={(c) => commit(c)} />
+
+						{/* Hex input + eyedropper */}
+						<div className="flex items-center gap-1.5">
+							<div className="flex h-9 flex-1 items-center rounded-md border border-input bg-transparent shadow-xs focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50">
+								<span className="select-none border-r px-2 font-mono text-xs text-muted-foreground">
+									#
+								</span>
+								<input
+									value={hexInput}
+									onChange={(e) =>
+										setHexInput(
+											e.target.value.replace(/[^a-f\d]/gi, "").slice(0, 6),
+										)
+									}
+									onBlur={() => commitHex(hexInput)}
+									onKeyDown={(e) => {
+										if (e.key === "Enter") {
+											commitHex(hexInput);
+											(e.target as HTMLInputElement).blur();
+										}
+									}}
+									placeholder="000000"
+									className="min-w-0 flex-1 bg-transparent px-2 font-mono text-sm uppercase outline-none placeholder:text-muted-foreground/40"
+								/>
+							</div>
+							{hasEyedropper && (
+								<button
+									type="button"
+									onClick={pickFromScreen}
+									title="Pick color from screen"
+									className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-input bg-transparent text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+								>
+									<Pipette className="h-4 w-4" />
+								</button>
+							)}
+						</div>
+
+						{/* Preset swatches */}
+						<div className="space-y-1.5">
+							<div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+								Presets
+							</div>
+							<div className="grid grid-cols-6 gap-1.5">
+								{COLOR_PRESETS.map((preset) => {
+									const active = color.toLowerCase() === preset.toLowerCase();
+									return (
+										<button
+											key={preset}
+											type="button"
+											onClick={() => commit(preset)}
+											title={preset}
+											className={cn(
+												"h-7 w-full rounded-md border transition-all",
+												active
+													? "ring-2 ring-ring ring-offset-1 ring-offset-popover"
+													: "border-border/60 hover:scale-110",
+											)}
+											style={{ background: preset }}
+										/>
+									);
+								})}
+							</div>
+						</div>
+					</div>
+				</PopoverContent>
+			</Popover>
 		</div>
 	);
 }
 
 // ─── date / datetime field ───────────────────────────────────────────────────
 
-function formatForNativeInput(
-	dateStr: string | undefined,
-	mode: "date" | "date-time",
-): string {
-	if (!dateStr) return "";
-	const date = new Date(dateStr);
-	if (Number.isNaN(date.getTime())) return dateStr;
-	const y = date.getFullYear();
-	const m = String(date.getMonth() + 1).padStart(2, "0");
-	const d = String(date.getDate()).padStart(2, "0");
-	if (mode === "date") return `${y}-${m}-${d}`;
-	const hh = String(date.getHours()).padStart(2, "0");
-	const mm = String(date.getMinutes()).padStart(2, "0");
-	return `${y}-${m}-${d}T${hh}:${mm}`;
-}
-
-function formatDateDisplay(
-	dateStr: string | undefined,
-	mode: "date" | "date-time",
-): string {
-	if (!dateStr) return "";
-	const date = new Date(dateStr);
-	if (Number.isNaN(date.getTime())) return "";
-	return new Intl.DateTimeFormat(
-		"en-US",
-		mode === "date"
-			? { month: "short", day: "numeric", year: "numeric" }
-			: {
-					month: "short",
-					day: "numeric",
-					year: "numeric",
-					hour: "numeric",
-					minute: "2-digit",
-				},
-	).format(date);
+function parseDate(value: string | undefined): Date | undefined {
+	if (!value) return undefined;
+	const d = new Date(value);
+	return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
 function DateField({
@@ -341,155 +468,79 @@ function DateField({
 	onChange: (v: string) => void;
 	mode?: "date" | "date-time";
 }) {
-	const inputType = mode === "date" ? "date" : "datetime-local";
-	const inputRef = useRef<HTMLInputElement>(null);
-	const [local, setLocal] = useState(() => formatForNativeInput(value, mode));
-	const [focused, setFocused] = useState(false);
+	const [open, setOpen] = useState(false);
+	const date = parseDate(value);
+	const timeStr = date ? formatDate(date, "HH:mm") : "";
 
-	// Sync external value changes without clobbering an open picker.
-	const prevFormattedRef = useRef(local);
-	useEffect(() => {
-		const formatted = formatForNativeInput(value, mode);
-		if (formatted !== prevFormattedRef.current) {
-			prevFormattedRef.current = formatted;
-			setLocal(formatted);
-		}
-	}, [value, mode]);
-
-	const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		const raw = e.target.value;
-		setLocal(raw);
-		prevFormattedRef.current = raw;
-		if (!raw) {
+	const updateDate = (next: Date | undefined) => {
+		if (!next) {
 			onChange("");
 			return;
 		}
 		if (mode === "date") {
-			onChange(raw);
+			onChange(formatDate(next, "yyyy-MM-dd"));
 		} else {
-			const parsed = new Date(raw);
-			if (!Number.isNaN(parsed.getTime())) {
-				onChange(parsed.toISOString());
+			// preserve hours/minutes from current value if any
+			if (date) {
+				next.setHours(date.getHours(), date.getMinutes(), 0, 0);
 			}
+			onChange(next.toISOString());
 		}
 	};
 
-	const handleBlur = () => {
-		setFocused(false);
-		const formatted = formatForNativeInput(value, mode);
-		if (formatted !== local) {
-			setLocal(formatted);
-			prevFormattedRef.current = formatted;
-		}
+	const updateTime = (raw: string) => {
+		if (!date || !raw) return;
+		const [h, m] = raw.split(":").map(Number);
+		const next = new Date(date);
+		next.setHours(h ?? 0, m ?? 0, 0, 0);
+		onChange(next.toISOString());
 	};
 
-	const handleClear = () => {
-		setLocal("");
-		prevFormattedRef.current = "";
-		onChange("");
-	};
-
-	const openPicker = () => {
-		inputRef.current?.showPicker();
-	};
-
-	const display = formatDateDisplay(value, mode);
-	const placeholder = mode === "date" ? "Set a date…" : "Set date & time…";
-	const showOverlay = !focused;
+	const display = date
+		? mode === "date"
+			? formatDate(date, "MMM d, yyyy")
+			: formatDate(date, "MMM d, yyyy 'at' HH:mm")
+		: "Select a date";
 
 	return (
-		<div className="space-y-1">
+		<div className="space-y-2">
 			<FieldLabel label={label} description={description} />
-			<div className="relative">
-				<input
-					ref={inputRef}
-					type={inputType}
-					value={local}
-					onChange={handleChange}
-					onFocus={() => setFocused(true)}
-					onBlur={handleBlur}
-					className="flex h-9 w-full rounded-md border border-input bg-background px-3 pr-9 text-sm shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 [&::-webkit-calendar-picker-indicator]:hidden [&::-webkit-calendar-picker-indicator]:appearance-none"
-				/>
-				{showOverlay && (
-					<div className="pointer-events-none absolute inset-0 flex items-center gap-2 rounded-md border border-input bg-background px-3 pr-9 text-sm shadow-xs">
-						<svg
-							width="14"
-							height="14"
-							viewBox="0 0 16 16"
-							fill="none"
-							aria-hidden="true"
-							className="shrink-0 text-muted-foreground"
-						>
-							<rect
-								x="1"
-								y="3"
-								width="14"
-								height="12"
-								rx="2"
-								stroke="currentColor"
-								strokeWidth="1.5"
-							/>
-							<path d="M1 7h14" stroke="currentColor" strokeWidth="1.5" />
-							<path
-								d="M5 1v4M11 1v4"
-								stroke="currentColor"
-								strokeWidth="1.5"
-								strokeLinecap="round"
-							/>
-						</svg>
-						<span
+			<div className="flex gap-2">
+				<Popover open={open} onOpenChange={setOpen}>
+					<PopoverTrigger asChild>
+						<button
+							type="button"
 							className={cn(
-								"flex-1 truncate",
-								!display && "text-muted-foreground/40",
+								"flex h-10 flex-1 items-center gap-2 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs transition-colors hover:bg-accent/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
+								!date && "text-muted-foreground",
 							)}
 						>
-							{display || placeholder}
-						</span>
+							<CalendarIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+							<span className="flex-1 truncate text-left">{display}</span>
+						</button>
+					</PopoverTrigger>
+					<PopoverContent className="w-auto p-0" align="start">
+						<Calendar
+							mode="single"
+							selected={date}
+							onSelect={(d) => {
+								updateDate(d);
+								if (mode === "date") setOpen(false);
+							}}
+							captionLayout="dropdown"
+						/>
+					</PopoverContent>
+				</Popover>
+				{mode === "date-time" && (
+					<div className="w-28 shrink-0">
+						<TimeField
+							label=""
+							value={timeStr}
+							onChange={(v) => updateTime(v)}
+							compact
+						/>
 					</div>
 				)}
-				{value && !focused && (
-					<button
-						type="button"
-						onMouseDown={(e) => e.preventDefault()}
-						onClick={handleClear}
-						className="absolute right-8 top-1/2 z-10 -translate-y-1/2 rounded p-0.5 text-muted-foreground/60 hover:text-foreground"
-						title="Clear"
-					>
-						<X className="h-3.5 w-3.5" />
-					</button>
-				)}
-				<button
-					type="button"
-					onMouseDown={(e) => e.preventDefault()}
-					onClick={openPicker}
-					className="absolute right-1 top-1/2 z-10 -translate-y-1/2 rounded p-1 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
-					title="Open picker"
-				>
-					<svg
-						width="14"
-						height="14"
-						viewBox="0 0 16 16"
-						fill="none"
-						aria-hidden="true"
-					>
-						<rect
-							x="1"
-							y="3"
-							width="14"
-							height="12"
-							rx="2"
-							stroke="currentColor"
-							strokeWidth="1.5"
-						/>
-						<path d="M1 7h14" stroke="currentColor" strokeWidth="1.5" />
-						<path
-							d="M5 1v4M11 1v4"
-							stroke="currentColor"
-							strokeWidth="1.5"
-							strokeLinecap="round"
-						/>
-					</svg>
-				</button>
 			</div>
 		</div>
 	);
@@ -516,9 +567,11 @@ function CodeField({
 		<div className="space-y-1">
 			<FieldLabel label={label} description={description} />
 			<div className="relative overflow-hidden rounded-md border border-input">
-				<div className="flex items-center gap-1.5 border-b bg-muted/30 px-2 py-1">
-					<Code2 className="h-3 w-3 text-muted-foreground" />
-					<span className="text-[10px] text-muted-foreground">Code</span>
+				<div className="flex items-center gap-2 border-b bg-muted/30 px-3 py-2">
+					<Code2 className="h-4 w-4 text-muted-foreground" />
+					<span className="text-xs font-medium text-muted-foreground">
+						Code
+					</span>
 				</div>
 				<textarea
 					value={local}
@@ -730,8 +783,8 @@ function RichTextFieldInner({
 		<div className="space-y-1">
 			<FieldLabel label={label} description={description} />
 			<div className="overflow-hidden rounded-md border border-input">
-				{/* Toolbar */}
-				<div className="flex flex-wrap items-center gap-0.5 border-b bg-muted/30 px-1.5 py-1">
+				{/* Toolbar — no wrap, overflow tucked into a "More" menu */}
+				<div className="flex flex-nowrap items-center gap-1 overflow-hidden border-b bg-muted/30 px-2 py-1.5">
 					{!inline && (
 						<>
 							<TiptapBtn
@@ -827,39 +880,65 @@ function RichTextFieldInner({
 						}}
 						title="Link"
 					>
-						<Link className="h-3 w-3" />
+						<Link className="h-3.5 w-3.5" />
 					</TiptapBtn>
 					{!inline && (
 						<>
+							<div className="ml-auto" />
 							<TiptapSep />
-							<TiptapBtn
-								active={editor.isActive("bulletList")}
-								onClick={() => editor.chain().focus().toggleBulletList().run()}
-								title="Bullet list"
-							>
-								•≡
-							</TiptapBtn>
-							<TiptapBtn
-								active={editor.isActive("orderedList")}
-								onClick={() => editor.chain().focus().toggleOrderedList().run()}
-								title="Ordered list"
-							>
-								1.
-							</TiptapBtn>
-							<TiptapBtn
-								active={editor.isActive("blockquote")}
-								onClick={() => editor.chain().focus().toggleBlockquote().run()}
-								title="Blockquote"
-							>
-								❝
-							</TiptapBtn>
-							<TiptapBtn
-								active={editor.isActive("codeBlock")}
-								onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-								title="Code block"
-							>
-								{"</>"}
-							</TiptapBtn>
+							<DropdownMenu>
+								<DropdownMenuTrigger asChild>
+									<button
+										type="button"
+										title="More formatting"
+										className={cn(
+											"flex h-8 min-w-[32px] items-center justify-center rounded-md px-2 text-sm transition-colors",
+											editor.isActive("bulletList") ||
+												editor.isActive("orderedList") ||
+												editor.isActive("blockquote") ||
+												editor.isActive("codeBlock")
+												? "bg-primary/15 text-primary"
+												: "text-muted-foreground hover:bg-accent hover:text-foreground",
+										)}
+									>
+										<MoreHorizontal className="h-4 w-4" />
+									</button>
+								</DropdownMenuTrigger>
+								<DropdownMenuContent align="end" className="w-44">
+									<TiptapMenuItem
+										icon={<List className="h-4 w-4" />}
+										label="Bullet list"
+										active={editor.isActive("bulletList")}
+										onSelect={() =>
+											editor.chain().focus().toggleBulletList().run()
+										}
+									/>
+									<TiptapMenuItem
+										icon={<ListOrdered className="h-4 w-4" />}
+										label="Ordered list"
+										active={editor.isActive("orderedList")}
+										onSelect={() =>
+											editor.chain().focus().toggleOrderedList().run()
+										}
+									/>
+									<TiptapMenuItem
+										icon={<Quote className="h-4 w-4" />}
+										label="Blockquote"
+										active={editor.isActive("blockquote")}
+										onSelect={() =>
+											editor.chain().focus().toggleBlockquote().run()
+										}
+									/>
+									<TiptapMenuItem
+										icon={<Code2 className="h-4 w-4" />}
+										label="Code block"
+										active={editor.isActive("codeBlock")}
+										onSelect={() =>
+											editor.chain().focus().toggleCodeBlock().run()
+										}
+									/>
+								</DropdownMenuContent>
+							</DropdownMenu>
 						</>
 					)}
 				</div>
@@ -886,7 +965,7 @@ function TiptapBtn({
 			onClick={onClick}
 			title={title}
 			className={cn(
-				"flex h-6 min-w-[24px] items-center justify-center rounded px-1 text-[11px] transition-colors",
+				"flex h-8 min-w-[32px] items-center justify-center rounded-md px-2 text-sm transition-colors",
 				active
 					? "bg-primary/15 text-primary"
 					: "text-muted-foreground hover:bg-accent hover:text-foreground",
@@ -898,7 +977,38 @@ function TiptapBtn({
 }
 
 function TiptapSep() {
-	return <div className="mx-0.5 h-4 w-px bg-border" />;
+	return <div className="mx-1 h-5 w-px bg-border" />;
+}
+
+function TiptapMenuItem({
+	icon,
+	label,
+	active,
+	onSelect,
+}: {
+	icon: React.ReactNode;
+	label: string;
+	active: boolean;
+	onSelect: () => void;
+}) {
+	return (
+		<DropdownMenuItem
+			onSelect={(e) => {
+				e.preventDefault();
+				onSelect();
+			}}
+			className={cn(
+				"flex items-center gap-2 text-sm",
+				active && "bg-primary/10 font-medium text-primary",
+			)}
+		>
+			<span className="flex h-4 w-4 shrink-0 items-center justify-center text-muted-foreground">
+				{icon}
+			</span>
+			<span className="flex-1">{label}</span>
+			{active && <Check className="h-3.5 w-3.5 text-primary" />}
+		</DropdownMenuItem>
+	);
 }
 
 // ─── number field ─────────────────────────────────────────────────────────────
@@ -928,7 +1038,7 @@ export function NumberField({
 					setLocal(e.target.value);
 					onChange(Number(e.target.value));
 				}}
-				className="h-9 text-sm"
+				className="h-10 text-sm"
 			/>
 		</div>
 	);
@@ -1288,62 +1398,60 @@ function ImageField({
 		: undefined;
 	const stem = ext ? filename.slice(0, filename.lastIndexOf(".")) : filename;
 
+	const hasValue = Boolean(value) && !imgError;
+
 	return (
-		<div className="space-y-1.5">
+		<div className="space-y-2">
 			<FieldLabel label={label} description={description} />
-			<div className="overflow-hidden rounded-lg border bg-muted/20">
-				{/* clickable preview area */}
+			<div className="group relative overflow-hidden rounded-lg border">
 				<button
 					type="button"
-					className="w-full text-left"
+					className={cn(
+						"flex h-48 w-full items-center justify-center text-left transition-colors",
+						hasValue
+							? "bg-muted/20"
+							: "border-dashed bg-muted/30 hover:bg-muted/50",
+					)}
+					style={
+						hasValue ? undefined : { borderStyle: "dashed", borderWidth: 0 }
+					}
 					onClick={() => setOpen(true)}
 				>
-					{value && !imgError ? (
+					{hasValue ? (
 						<img
 							src={value}
 							alt={label}
-							className="h-40 w-full object-cover"
+							className="h-full w-full object-cover"
 							onError={() => setImgError(true)}
 						/>
 					) : (
-						<div className="flex h-40 flex-col items-center justify-center gap-1.5 text-muted-foreground">
-							<ImageIcon className="h-8 w-8" />
-							<span className="text-xs">Click to select image</span>
-						</div>
-					)}
-					{value && (
-						<div className="px-3 py-2">
-							<p className="truncate font-mono text-xs font-semibold">{stem}</p>
-							{ext && (
-								<p className="text-[10px] text-muted-foreground">{ext}</p>
-							)}
+						<div className="flex flex-col items-center gap-2 text-muted-foreground">
+							<div className="flex h-12 w-12 items-center justify-center rounded-full bg-background shadow-sm">
+								<ImageIcon className="h-5 w-5" />
+							</div>
+							<span className="text-sm font-medium">Click to upload</span>
+							<span className="text-xs text-muted-foreground/70">
+								or pick from your assets
+							</span>
 						</div>
 					)}
 				</button>
 
-				{/* controls */}
-				<div className="flex gap-2 border-t px-2 py-2">
-					<Button
-						variant="outline"
-						size="sm"
-						className="h-8 flex-1 text-xs"
-						onClick={() => setOpen(true)}
-					>
-						{value ? (
-							<>
-								Change <ChevronDown className="ml-1 h-3 w-3" />
-							</>
-						) : (
-							<>
-								<ImageIcon className="mr-1 h-3 w-3" /> Add image
-							</>
-						)}
-					</Button>
-					{value && (
+				{/* Hover overlay actions when has value */}
+				{hasValue && (
+					<div className="pointer-events-none absolute inset-x-2 top-2 flex justify-end gap-1.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
 						<Button
-							variant="outline"
+							variant="secondary"
+							size="sm"
+							className="h-8 shadow-md"
+							onClick={() => setOpen(true)}
+						>
+							Change
+						</Button>
+						<Button
+							variant="secondary"
 							size="icon"
-							className="h-8 w-8 shrink-0"
+							className="h-8 w-8 shadow-md"
 							onClick={() => {
 								onChange("");
 								setImgError(false);
@@ -1351,8 +1459,24 @@ function ImageField({
 						>
 							<Trash2 className="h-3.5 w-3.5" />
 						</Button>
-					)}
-				</div>
+					</div>
+				)}
+
+				{/* Filename strip when has value */}
+				{hasValue && stem && (
+					<div className="border-t bg-muted/30 px-3 py-2">
+						<div className="flex items-center gap-2">
+							<p className="min-w-0 flex-1 truncate font-mono text-xs">
+								{stem}
+							</p>
+							{ext && (
+								<span className="shrink-0 rounded bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+									{ext}
+								</span>
+							)}
+						</div>
+					</div>
+				)}
 			</div>
 
 			<ImagePickerModal
@@ -1388,7 +1512,6 @@ function MediaField({
 	const Icon = mediaType === "video" ? VideoIcon : FileIcon;
 	const placeholder =
 		mediaType === "video" ? "Click to select video" : "Click to select file";
-	const addLabel = mediaType === "video" ? "Add video" : "Add file";
 
 	const filename = value
 		? (() => {
@@ -1415,84 +1538,81 @@ function MediaField({
 				: `${value}#t=0.1`
 			: null;
 
+	const showVideoPreview = Boolean(value && videoThumbSrc && !thumbError);
+	const showFileBadge = Boolean(value) && !showVideoPreview;
+	const hasValue = Boolean(value);
+
 	return (
-		<div className="space-y-1.5">
+		<div className="space-y-2">
 			<FieldLabel label={label} description={description} />
-			<div className="overflow-hidden rounded-lg border bg-muted/20">
+			<div className="group relative overflow-hidden rounded-lg border">
 				<button
 					type="button"
-					className="w-full text-left"
+					className={cn(
+						"flex h-48 w-full items-center justify-center text-left transition-colors",
+						hasValue ? "bg-black" : "bg-muted/30 hover:bg-muted/50",
+					)}
 					onClick={() => setOpen(true)}
 				>
-					{value && videoThumbSrc && !thumbError ? (
-						<>
-							<div className="relative h-40 w-full bg-black">
-								<video
-									src={videoThumbSrc}
-									preload="metadata"
-									muted
-									playsInline
-									className="h-full w-full object-cover"
-									onError={() => setThumbError(true)}
-								>
-									<track kind="captions" />
-								</video>
-								<div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-									<div className="flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm">
-										<VideoIcon className="h-4 w-4" />
-									</div>
+					{showVideoPreview && videoThumbSrc ? (
+						<div className="relative h-full w-full">
+							<video
+								src={videoThumbSrc}
+								preload="metadata"
+								muted
+								playsInline
+								className="h-full w-full object-cover"
+								onError={() => setThumbError(true)}
+							>
+								<track kind="captions" />
+							</video>
+							<div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+								<div className="flex h-12 w-12 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm">
+									<VideoIcon className="h-5 w-5" />
 								</div>
 							</div>
-							<div className="px-3 py-2">
-								<p className="truncate font-mono text-xs font-semibold">
-									{stem}
-								</p>
-								{ext && (
-									<p className="text-[10px] text-muted-foreground">{ext}</p>
-								)}
+						</div>
+					) : showFileBadge ? (
+						<div className="flex flex-col items-center gap-2 text-muted-foreground">
+							<div className="flex h-14 w-14 items-center justify-center rounded-lg bg-background shadow-sm">
+								<Icon className="h-6 w-6" />
 							</div>
-						</>
-					) : value ? (
-						<div className="flex items-center gap-2 px-3 py-3">
-							<Icon className="h-5 w-5 shrink-0 text-muted-foreground" />
-							<div className="min-w-0 flex-1">
-								<p className="truncate font-mono text-xs font-semibold">
-									{stem}
-								</p>
-								{ext && (
-									<p className="text-[10px] text-muted-foreground">{ext}</p>
-								)}
-							</div>
+							<span className="text-sm font-medium text-foreground">
+								{stem}
+							</span>
+							{ext && (
+								<span className="rounded bg-background px-1.5 py-0.5 text-[10px] font-medium">
+									{ext}
+								</span>
+							)}
 						</div>
 					) : (
-						<div className="flex h-20 flex-col items-center justify-center gap-1.5 text-muted-foreground">
-							<Icon className="h-8 w-8" />
-							<span className="text-xs">{placeholder}</span>
+						<div className="flex flex-col items-center gap-2 text-muted-foreground">
+							<div className="flex h-12 w-12 items-center justify-center rounded-full bg-background shadow-sm">
+								<Icon className="h-5 w-5" />
+							</div>
+							<span className="text-sm font-medium">{placeholder}</span>
+							<span className="text-xs text-muted-foreground/70">
+								or pick from your assets
+							</span>
 						</div>
 					)}
 				</button>
-				<div className="flex gap-2 border-t px-2 py-2">
-					<Button
-						variant="outline"
-						size="sm"
-						className="h-8 flex-1 text-xs"
-						onClick={() => setOpen(true)}
-					>
-						{value ? (
-							<>
-								Change <ChevronDown className="ml-1 h-3 w-3" />
-							</>
-						) : (
-							<>
-								<Icon className="mr-1 h-3 w-3" /> {addLabel}
-							</>
-						)}
-					</Button>
-					{value && (
+
+				{hasValue && (
+					<div className="pointer-events-none absolute inset-x-2 top-2 flex justify-end gap-1.5 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
 						<Button
-							variant="outline"
+							variant="secondary"
+							size="sm"
+							className="h-8 shadow-md"
+							onClick={() => setOpen(true)}
+						>
+							Change
+						</Button>
+						<Button
+							variant="secondary"
 							size="icon"
-							className="h-8 w-8 shrink-0"
+							className="h-8 w-8 shadow-md"
 							onClick={() => {
 								onChange("");
 								setThumbError(false);
@@ -1500,8 +1620,23 @@ function MediaField({
 						>
 							<Trash2 className="h-3.5 w-3.5" />
 						</Button>
-					)}
-				</div>
+					</div>
+				)}
+
+				{showVideoPreview && stem && (
+					<div className="border-t bg-muted/30 px-3 py-2">
+						<div className="flex items-center gap-2">
+							<p className="min-w-0 flex-1 truncate font-mono text-xs">
+								{stem}
+							</p>
+							{ext && (
+								<span className="shrink-0 rounded bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+									{ext}
+								</span>
+							)}
+						</div>
+					</div>
+				)}
 			</div>
 
 			<ImagePickerModal
@@ -1648,6 +1783,7 @@ function SortableArrayRow({
 		transition,
 		isDragging,
 	} = useSortable({ id });
+	const [menuOpen, setMenuOpen] = useState(false);
 
 	return (
 		<div
@@ -1657,7 +1793,10 @@ function SortableArrayRow({
 				transition,
 				opacity: isDragging ? 0.4 : 1,
 			}}
-			className="group flex cursor-pointer select-none items-center gap-2 rounded-md border border-transparent px-2 py-2 text-sm text-foreground transition-colors hover:border-border hover:bg-accent/40"
+			className={cn(
+				"group flex cursor-pointer select-none items-center gap-2 rounded-md border border-transparent px-2 py-2 text-sm text-foreground transition-colors hover:border-border hover:bg-accent/40",
+				menuOpen && "border-border bg-accent/40",
+			)}
 		>
 			<span
 				{...listeners}
@@ -1670,13 +1809,16 @@ function SortableArrayRow({
 			<span className="flex-1 truncate" onClick={onSelect}>
 				{getItemLabel(value, index, titleBy, schemaTitle)}
 			</span>
-			<DropdownMenu>
+			<DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
 				<DropdownMenuTrigger asChild>
 					<button
 						type="button"
 						onPointerDown={(e) => e.stopPropagation()}
 						onClick={(e) => e.stopPropagation()}
-						className="shrink-0 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-background/80 group-hover:opacity-100"
+						className={cn(
+							"shrink-0 rounded p-1 text-muted-foreground transition-opacity hover:bg-background/80 group-hover:opacity-100",
+							menuOpen ? "opacity-100" : "opacity-0",
+						)}
 					>
 						<MoreHorizontal className="h-3.5 w-3.5" />
 					</button>
@@ -2054,18 +2196,21 @@ function ObjectField({
 				<button
 					type="button"
 					onClick={() => setOpen((o) => !o)}
-					className="flex w-full items-center gap-1.5 text-left"
+					className="flex h-10 w-full items-center gap-2 rounded-md border border-input bg-transparent px-3 text-left text-sm shadow-xs transition-colors hover:bg-accent/40 focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
 				>
-					{open ? (
-						<ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-					) : (
-						<ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-					)}
-					<span className="text-sm font-medium text-foreground">{label}</span>
+					<ChevronRight
+						className={cn(
+							"h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+							open && "rotate-90",
+						)}
+					/>
+					<span className="flex-1 truncate font-medium text-foreground">
+						{label}
+					</span>
 				</button>
 			)}
 			{description && !hideLabel && (
-				<span className="block pl-5 text-xs leading-snug text-muted-foreground">
+				<span className="block pl-3 text-xs leading-snug text-muted-foreground">
 					{description}
 				</span>
 			)}
@@ -2133,7 +2278,7 @@ function SelectField({
 				value={toSelectValue(value)}
 				onValueChange={(v) => onChange(fromSelectValue(v))}
 			>
-				<SelectTrigger className="h-9 text-sm">
+				<SelectTrigger className="h-10 text-sm">
 					<SelectValue placeholder="Select…" />
 				</SelectTrigger>
 				<SelectContent>
@@ -2141,7 +2286,11 @@ function SelectField({
 						const raw = String(opt);
 						const selectVal = toSelectValue(raw);
 						return (
-							<SelectItem key={selectVal} value={selectVal} className="text-xs">
+							<SelectItem
+								key={selectVal}
+								value={selectVal}
+								className="py-2 text-sm"
+							>
 								{raw === "" ? "—" : raw}
 							</SelectItem>
 						);
@@ -2519,6 +2668,28 @@ function FormField({
 				: typeof effectiveValue;
 
 	if (renderType === "array" || Array.isArray(effectiveValue)) {
+		if (schemaFormat === "tags" && itemSchema?.type !== "object") {
+			return (
+				<TagsField
+					label={label || name}
+					description={description}
+					value={(effectiveValue as FormValue[]).map(String)}
+					onChange={(v) => (onChange as (v: FormValue[]) => void)(v)}
+				/>
+			);
+		}
+		const enumOpts = itemSchema?.enum;
+		if (schemaFormat === "multi-select" && Array.isArray(enumOpts)) {
+			return (
+				<MultiSelectField
+					label={label || name}
+					description={description}
+					value={(effectiveValue as FormValue[]).map(String)}
+					options={enumOpts.map(String)}
+					onChange={(v) => (onChange as (v: FormValue[]) => void)(v)}
+				/>
+			);
+		}
 		return (
 			<ArrayField
 				label={label || name}
@@ -2534,6 +2705,16 @@ function FormField({
 
 	switch (renderType) {
 		case "boolean":
+			if (schemaFormat === "switch") {
+				return (
+					<SwitchField
+						label={label}
+						description={description}
+						value={effectiveValue as boolean}
+						onChange={onChange as (v: boolean) => void}
+					/>
+				);
+			}
 			return (
 				<CheckboxField
 					label={label}
@@ -2544,6 +2725,16 @@ function FormField({
 			);
 		case "number":
 		case "integer":
+			if (schemaFormat === "range") {
+				return (
+					<RangeField
+						label={label}
+						description={description}
+						value={effectiveValue as number}
+						onChange={onChange as (v: number) => void}
+					/>
+				);
+			}
 			return (
 				<NumberField
 					label={label}
@@ -2565,6 +2756,56 @@ function FormField({
 				);
 			}
 			// ── format-based widgets ──────────────────────────────────
+			if (schemaFormat === "url") {
+				return (
+					<UrlField
+						label={label}
+						description={description}
+						value={effectiveValue as string}
+						onChange={onChange as (v: string) => void}
+					/>
+				);
+			}
+			if (schemaFormat === "markdown") {
+				return (
+					<MarkdownField
+						label={label}
+						description={description}
+						value={effectiveValue as string}
+						onChange={onChange as (v: string) => void}
+					/>
+				);
+			}
+			if (schemaFormat === "time") {
+				return (
+					<TimeField
+						label={label}
+						description={description}
+						value={effectiveValue as string}
+						onChange={onChange as (v: string) => void}
+					/>
+				);
+			}
+			if (schemaFormat === "icon") {
+				return (
+					<IconField
+						label={label}
+						description={description}
+						value={effectiveValue as string}
+						onChange={onChange as (v: string) => void}
+					/>
+				);
+			}
+			if (schemaFormat === "reference") {
+				return (
+					<ReferenceField
+						label={label}
+						description={description}
+						value={effectiveValue as string}
+						onChange={onChange as (v: string) => void}
+					/>
+				);
+			}
 			if (schemaFormat === "color-input") {
 				return (
 					<ColorInputField
@@ -2688,6 +2929,20 @@ function FormField({
 				typeof effectiveValue === "object" &&
 				!Array.isArray(effectiveValue)
 			) {
+				if (schemaFormat === "date-range") {
+					return (
+						<DateRangeField
+							label={label}
+							description={description}
+							value={effectiveValue as { from?: string; to?: string }}
+							onChange={(v) =>
+								(onChange as (v: Record<string, FormValue>) => void)(
+									v as Record<string, FormValue>,
+								)
+							}
+						/>
+					);
+				}
 				return (
 					<ObjectField
 						label={label}
