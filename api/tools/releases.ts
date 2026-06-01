@@ -60,6 +60,7 @@ export type ListReleasesOutput = z.infer<typeof listReleasesOutputSchema>;
 
 export const listReleasesTool = createTool({
 	id: "list_releases",
+	title: "Releases",
 	description:
 		"List the commit history (releases) for the configured deco.cx site. Shows each commit's SHA, message, author, and date. Use this to view the release history and optionally promote or revert a specific commit.",
 	inputSchema: listReleasesInputSchema,

@@ -2,8 +2,6 @@ import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
 import { callAdmin, getConfig, resolveEnv } from "../lib/admin.ts";
 
-export const ISSUES_RESOURCE_URI = "ui://mcp-app/issues";
-
 // ─── shared schema ────────────────────────────────────────────────────────────
 
 export const issueSchema = z.object({
@@ -63,7 +61,6 @@ export const listIssuesTool = createTool({
 		"List all open issues for the configured deco.cx site's GitHub repository. Returns issue title, number, labels, and GitHub URL.",
 	inputSchema: listIssuesInputSchema,
 	outputSchema: listIssuesOutputSchema,
-	_meta: { ui: { resourceUri: ISSUES_RESOURCE_URI } },
 	annotations: {
 		readOnlyHint: true,
 		destructiveHint: false,

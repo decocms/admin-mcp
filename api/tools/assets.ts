@@ -56,6 +56,7 @@ export type AssetsOutput = z.infer<typeof assetsOutputSchema>;
 
 export const assetsTool = createTool({
 	id: "fetch_assets",
+	title: "Assets",
 	description:
 		"Fetch media assets (images, videos, documents, fonts) for the configured deco.cx site. Returns a paginated gallery of all uploaded assets with URLs, labels, and MIME types. Supports optional search by filename.",
 	inputSchema: assetsInputSchema,
