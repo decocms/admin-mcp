@@ -1,8 +1,6 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
 
-export const RENDER_HTML_RESOURCE_URI = "ui://mcp-app/render-html";
-
 // ─── render_html ──────────────────────────────────────────────────────────────
 
 export const renderHtmlInputSchema = z.object({
@@ -21,7 +19,6 @@ export const renderHtmlTool = createTool({
 		"Render arbitrary HTML visually in the chat. Use this to display visual examples, previews, mockups, or any HTML content the user needs to see.",
 	inputSchema: renderHtmlInputSchema,
 	outputSchema: renderHtmlOutputSchema,
-	_meta: { ui: { resourceUri: RENDER_HTML_RESOURCE_URI } },
 	annotations: {
 		readOnlyHint: true,
 		destructiveHint: false,

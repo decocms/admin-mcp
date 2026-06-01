@@ -292,7 +292,6 @@ function CancelledView() {
 	);
 }
 
-
 // ─── visual editor script ─────────────────────────────────────────────────────
 
 function visualEditorScript() {
@@ -3113,9 +3112,9 @@ function FileExplorerWorkspace({
 		});
 
 		const wakeUpEnv = () => {
-			app.callServerTool({ name: "wake_up_env", arguments: {} }).catch(
-				() => {},
-			);
+			app
+				.callServerTool({ name: "wake_up_env", arguments: {} })
+				.catch(() => {});
 		};
 
 		const tryListFiles = async (
@@ -7248,7 +7247,9 @@ function FileExplorerWorkspace({
 													</div>
 												) : previewError ? (
 													<div className="flex h-full items-center justify-center rounded-lg border border-dashed bg-background p-6">
-														<p className="text-sm text-muted-foreground">{previewError}</p>
+														<p className="text-sm text-muted-foreground">
+															{previewError}
+														</p>
 													</div>
 												) : (
 													<div className="flex h-full items-center justify-center overflow-auto bg-background">

@@ -2,11 +2,8 @@ import { withRuntime } from "@decocms/runtime";
 import { createAssetsAppResource } from "./resources/assets.ts";
 import { createEnvironmentsAppResource } from "./resources/environments.ts";
 import { createFileExplorerAppResource } from "./resources/file-explorer.ts";
-import { createIssuesAppResource } from "./resources/issues.ts";
 import { createMonitorAppResource } from "./resources/monitor.ts";
-import { createPullRequestsAppResource } from "./resources/pull-requests.ts";
 import { createReleasesAppResource } from "./resources/releases.ts";
-import { createRenderHtmlAppResource } from "./resources/render-html.ts";
 import { tools } from "./tools/index.ts";
 import { type Env, StateSchema } from "./types/env.ts";
 
@@ -113,11 +110,8 @@ export function createApp(opts: CreateAppOptions): Fetcher {
 			createAssetsAppResource(getClientHTML),
 			createEnvironmentsAppResource(getClientHTML),
 			createFileExplorerAppResource(getClientHTML),
-			createIssuesAppResource(getClientHTML),
 			createMonitorAppResource(getClientHTML),
-			createPullRequestsAppResource(getClientHTML),
 			createReleasesAppResource(getClientHTML),
-			createRenderHtmlAppResource(getClientHTML),
 		],
 	});
 

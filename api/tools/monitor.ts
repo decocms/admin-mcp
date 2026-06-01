@@ -100,6 +100,7 @@ function extractHostname(raw: string): string {
 
 export const getMonitorDataTool = createTool({
 	id: "get_monitor_data",
+	title: "Monitor",
 	description:
 		"Open the performance monitoring dashboard for the configured deco.cx site. Resolves the site's primary production hostname and launches the interactive monitor UI.",
 	inputSchema: z.object({}),

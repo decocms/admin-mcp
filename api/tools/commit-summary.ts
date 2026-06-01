@@ -243,8 +243,6 @@ export const suggestCommitMessageTool = createTool({
 			apiKey,
 		)) as GitStatus;
 
-		console.log("status", status);
-
 		const isGeneratedFile = (f: string) => /^static\/.*\.css$/.test(f);
 
 		const changedFiles = [

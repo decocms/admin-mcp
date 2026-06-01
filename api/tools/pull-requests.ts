@@ -2,8 +2,6 @@ import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
 import { callAdmin, getConfig, resolveEnv } from "../lib/admin.ts";
 
-export const PULL_REQUESTS_RESOURCE_URI = "ui://mcp-app/pull-requests";
-
 // ─── shared schema ────────────────────────────────────────────────────────────
 
 export const pullRequestUserSchema = z.object({
@@ -61,7 +59,6 @@ export const listPullRequestsTool = createTool({
 		"List all open pull requests for the configured deco.cx site's GitHub repository. Returns PR title, author, branch, labels, and GitHub URL.",
 	inputSchema: listPullRequestsInputSchema,
 	outputSchema: listPullRequestsOutputSchema,
-	_meta: { ui: { resourceUri: PULL_REQUESTS_RESOURCE_URI } },
 	annotations: {
 		readOnlyHint: true,
 		destructiveHint: false,
