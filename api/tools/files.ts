@@ -61,6 +61,7 @@ export type FileExplorerOutput = z.infer<typeof fileExplorerOutputSchema>;
 
 export const fileExplorerTool = createTool({
 	id: "file_explorer",
+	title: "Preview",
 	description:
 		"Browse and edit files in a sandbox environment for the configured deco.cx site. Optionally preselect an environment and initial path.",
 	inputSchema: fileExplorerInputSchema,
