@@ -8,14 +8,12 @@ import {
 } from "@tanstack/react-router";
 import { useMcpHostContext, useMcpState } from "./context.tsx";
 import AssetsPage from "./tools/assets/index.tsx";
-import FileExplorerPage from "./tools/file-explorer/index.tsx";
 import LogsPage from "./tools/logs/index.tsx";
 import MonitorPage from "./tools/monitor/index.tsx";
 import ReleasesPage from "./tools/releases/index.tsx";
 
 const TOOL_PAGES: Record<string, React.ComponentType> = {
 	fetch_assets: AssetsPage,
-	file_explorer: FileExplorerPage,
 	get_logs_data: LogsPage,
 	get_monitor_data: MonitorPage,
 	list_releases: ReleasesPage,
