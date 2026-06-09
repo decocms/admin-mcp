@@ -1,7 +1,6 @@
 import { createTool } from "@decocms/runtime/tools";
 import { z } from "zod";
 import { callAdmin, getConfig } from "../lib/admin.ts";
-import type { environmentSchema } from "./environments.ts";
 
 export const RELEASES_RESOURCE_URI = "ui://mcp-app/releases";
 
@@ -279,7 +278,7 @@ export const revertCommitTool = createTool({
 			"deco-sites/admin/actions/environments/create.ts",
 			{ site, name: envName, platform: "sandbox" },
 			apiKey,
-		)) as z.infer<typeof environmentSchema>;
+		)) as { name: string; url?: string };
 
 		// Wait for the sandbox daemon to be ready before running git commands
 		if (created.url) {

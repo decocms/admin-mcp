@@ -1,49 +1,10 @@
 import { analyticsQueryTool } from "./analytics-query.ts";
 import { assetsTool, deleteAssetTool, uploadAssetTool } from "./assets.ts";
-import { suggestCommitMessageTool } from "./commit-summary.ts";
-import {
-	createEnvironmentTool,
-	deleteEnvironmentTool,
-	getEnvironmentTool,
-	listEnvironmentsTool,
-	previewEnvironmentTool,
-} from "./environments.ts";
-import {
-	createPageTool,
-	deleteFileTool,
-	duplicateFileTool,
-	fileExplorerTool,
-	getBlockSchemaTool,
-	getPageSectionsTool,
-	getPagesTool,
-	grepFilesTool,
-	installAppTool,
-	listAppsTool,
-	listFilesTool,
-	listMatchersTool,
-	listSectionsTool,
-	readFileTool,
-	replaceInFileTool,
-	uninstallAppTool,
-	updateJsonTool,
-	wakeUpEnvTool,
-	writeFileTool,
-} from "./files.ts";
-import {
-	fsUnlinkTool,
-	gitCheckoutBranchTool,
-	gitDiffTool,
-	gitDiscardTool,
-	gitPublishTool,
-	gitRawTool,
-	gitStatusTool,
-} from "./git.ts";
 import {
 	getErrorPatternsTool,
 	getErrorRateSeriesTool,
 	getErrorsOverTimeTool,
 } from "./hyperdx.ts";
-import { getIssueDetailsTool, listIssuesTool } from "./issues.ts";
 import { getLogsDataTool } from "./logs.ts";
 import {
 	getAnalyticsDataTool,
@@ -55,57 +16,18 @@ import {
 	getMonitorTopCountriesTool,
 	getMonitorTopPathsTool,
 } from "./monitor.ts";
-import { podLogsTool } from "./pod-logs.ts";
-import {
-	listPullRequestsTool,
-	mergePullRequestTool,
-	openPullRequestTool,
-} from "./pull-requests.ts";
 import {
 	getProductionShaTool,
 	listReleasesTool,
 	promoteToProductionTool,
 	revertCommitTool,
 } from "./releases.ts";
-import { renderHtmlTool } from "./render-html.ts";
-import { testLoaderTool } from "./test-loader.ts";
 
 export const tools = [
 	analyticsQueryTool,
 	assetsTool,
 	uploadAssetTool,
 	deleteAssetTool,
-	listEnvironmentsTool,
-	getEnvironmentTool,
-	createEnvironmentTool,
-	deleteEnvironmentTool,
-	previewEnvironmentTool,
-	fileExplorerTool,
-	wakeUpEnvTool,
-	listFilesTool,
-	readFileTool,
-	writeFileTool,
-	deleteFileTool,
-	grepFilesTool,
-	replaceInFileTool,
-	updateJsonTool,
-	getPagesTool,
-	getPageSectionsTool,
-	createPageTool,
-	duplicateFileTool,
-	listAppsTool,
-	installAppTool,
-	uninstallAppTool,
-	listMatchersTool,
-	listSectionsTool,
-	getBlockSchemaTool,
-	gitStatusTool,
-	gitDiffTool,
-	gitPublishTool,
-	gitDiscardTool,
-	gitCheckoutBranchTool,
-	gitRawTool,
-	fsUnlinkTool,
 	getLogsDataTool,
 	getMonitorDataTool,
 	getMonitorSummaryTool,
@@ -115,12 +37,6 @@ export const tools = [
 	getMonitorCacheStatusTool,
 	getMonitorStatusCodesTool,
 	getAnalyticsDataTool,
-	getIssueDetailsTool,
-	listIssuesTool,
-	listPullRequestsTool,
-	mergePullRequestTool,
-	openPullRequestTool,
-	suggestCommitMessageTool,
 	listReleasesTool,
 	promoteToProductionTool,
 	revertCommitTool,
@@ -128,7 +44,4 @@ export const tools = [
 	getErrorPatternsTool,
 	getErrorsOverTimeTool,
 	getErrorRateSeriesTool,
-	podLogsTool,
-	renderHtmlTool,
-	testLoaderTool,
 ];
