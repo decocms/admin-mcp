@@ -20,7 +20,12 @@ export const getLogsDataTool = createTool({
 		"Open the observability logs viewer for the configured deco.cx site. Embeds HyperDX for searching, filtering, and exploring application logs and traces.",
 	inputSchema: getLogsDataInputSchema,
 	outputSchema: getLogsDataOutputSchema,
-	_meta: { ui: { resourceUri: LOGS_RESOURCE_URI } },
+	_meta: {
+		ui: {
+			resourceUri: LOGS_RESOURCE_URI,
+			visibility: ["app"],
+		},
+	},
 	annotations: {
 		readOnlyHint: true,
 		destructiveHint: false,
