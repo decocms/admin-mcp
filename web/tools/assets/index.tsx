@@ -332,13 +332,7 @@ function UploadQueue({
 
 // ─── AssetsGallery ────────────────────────────────────────────────────────────
 
-function AssetsGallery({
-	initialAssets,
-	sitename,
-}: {
-	initialAssets: Asset[];
-	sitename: string;
-}) {
+function AssetsGallery({ initialAssets }: { initialAssets: Asset[] }) {
 	const app = useMcpApp();
 	const [assets, setAssets] = useState<Asset[]>(initialAssets);
 	const [search, setSearch] = useState("");
@@ -497,14 +491,7 @@ function AssetsGallery({
 			onDragLeave={() => setIsDragging(false)}
 			onDrop={handleDrop}
 		>
-			{/* Header */}
-			<div className="flex items-start justify-between gap-3">
-				<div>
-					<h1 className="text-base font-semibold">Assets</h1>
-					{sitename && (
-						<p className="text-sm text-muted-foreground mt-0.5">{sitename}</p>
-					)}
-				</div>
+			<div className="flex items-start justify-end gap-3">
 				<Button
 					size="sm"
 					onClick={() => fileInputRef.current?.click()}
@@ -704,11 +691,11 @@ export default function AssetsPage() {
 	}
 
 	// tool-result
-	const { assets, sitename } = state.toolResult ?? { assets: [], sitename: "" };
+	const { assets } = state.toolResult ?? { assets: [] };
 
 	return (
 		<div className="p-5">
-			<AssetsGallery initialAssets={assets} sitename={sitename} />
+			<AssetsGallery initialAssets={assets} />
 		</div>
 	);
 }

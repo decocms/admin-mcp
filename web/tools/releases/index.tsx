@@ -606,16 +606,7 @@ function ReleasesView({
 
 	return (
 		<section className="flex flex-col gap-6">
-			{/* Title */}
-			<div className="flex flex-wrap items-center justify-between gap-3">
-				<div className="min-w-0">
-					<h1 className="text-xl font-medium leading-tight">Releases</h1>
-					{site && (
-						<p className="text-sm text-muted-foreground mt-1 truncate">
-							{site}
-						</p>
-					)}
-				</div>
+			<div className="flex flex-wrap items-center justify-end gap-3">
 				<Badge variant="secondary" className="text-xs shrink-0">
 					{commits.length} commits
 				</Badge>
