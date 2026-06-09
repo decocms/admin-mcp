@@ -44,6 +44,7 @@ import {
 	getErrorsOverTimeTool,
 } from "./hyperdx.ts";
 import { getIssueDetailsTool, listIssuesTool } from "./issues.ts";
+import { getLogsDataTool } from "./logs.ts";
 import {
 	getAnalyticsDataTool,
 	getMonitorCacheStatusTool,
@@ -105,6 +106,7 @@ export const tools = [
 	gitCheckoutBranchTool,
 	gitRawTool,
 	fsUnlinkTool,
+	getLogsDataTool,
 	getMonitorDataTool,
 	getMonitorSummaryTool,
 	getMonitorTimelineTool,

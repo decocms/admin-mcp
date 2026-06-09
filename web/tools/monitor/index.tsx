@@ -1022,12 +1022,6 @@ export default function MonitorPage() {
 
 	return (
 		<div className="w-full flex flex-col gap-4 pb-8 p-4">
-			{/* Header */}
-			<div className="flex flex-col gap-1">
-				<h1 className="text-xl font-bold">Monitor</h1>
-				<p className="text-xs text-muted-foreground font-mono">{hostname}</p>
-			</div>
-
 			<Tabs defaultValue="performance">
 				<TabsList className="mb-4">
 					<TabsTrigger value="performance">
