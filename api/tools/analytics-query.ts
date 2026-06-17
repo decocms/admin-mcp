@@ -4,7 +4,7 @@ import { callAdmin, getConfig } from "../lib/admin.ts";
 
 const ANALYTICS_QUERY_LOADER = "deco-sites/admin/loaders/analytics/query.ts";
 
-// Mirrors QueryOptionsObject from admin/clients/plausible.v2.ts (AI-friendly object shape)
+// Mirrors QueryOptionsObject from admin (AI-friendly object shape)
 const dateRangePreset = z.enum([
 	"day",
 	"7d",
@@ -90,13 +90,13 @@ const analyticsOptionsSchema = z.object({
 });
 
 /**
- * analytics_query – run the site analytics query (Plausible / OneDollarStats).
+ * analytics_query – run the site analytics query.
  * Uses the same loader as the admin analytics UI; options match QueryOptionsObject.
  */
 export const analyticsQueryTool = createTool({
 	id: "analytics_query",
 	description:
-		"Query site analytics (Plausible or OneDollarStats). Pass hostname and options (date_range, metrics, optional dimensions, filters, order_by, include, pagination). Site from MCP context.",
+		"Query site analytics. Pass hostname and options (date_range, metrics, optional dimensions, filters, order_by, include, pagination). Site from MCP context.",
 	inputSchema: z.object({
 		hostname: z.string().describe("Site hostname (e.g. www.example.com)"),
 		options: analyticsOptionsSchema,
