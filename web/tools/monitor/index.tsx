@@ -623,13 +623,18 @@ const ADMIN_BASE_URL =
 		(window as Window & { __ADMIN_BASE_URL__?: string }).__ADMIN_BASE_URL__) ||
 	"https://admin.deco.cx";
 
-function loadScript(src: string) {
-	if (typeof document === "undefined") return;
-	if (document.querySelector(`script[src="${src}"]`)) return;
-	const s = document.createElement("script");
-	s.src = src;
-	s.defer = true;
-	document.head.appendChild(s);
+function loadScript(src: string): Promise<void> {
+	return new Promise((resolve, reject) => {
+		if (typeof document === "undefined") return resolve();
+		const existing = document.querySelector(`script[src="${src}"]`);
+		if (existing) return resolve();
+		const s = document.createElement("script");
+		s.src = src;
+		s.defer = true;
+		s.onload = () => resolve();
+		s.onerror = () => reject(new Error(`Failed to load ${src}`));
+		document.head.appendChild(s);
+	});
 }
 
 function AnalyticsTab({ hostname }: { hostname: string }) {
@@ -641,7 +646,7 @@ function AnalyticsTab({ hostname }: { hostname: string }) {
 	const hostnameRef = useRef(hostname);
 	hostnameRef.current = hostname;
 
-	const scriptsLoaded = useRef(false);
+	const [scriptsReady, setScriptsReady] = useState(false);
 
 	useEffect(() => {
 		// Set up the bridge that the stonks web component calls for all analytics requests.
@@ -678,14 +683,13 @@ function AnalyticsTab({ hostname }: { hostname: string }) {
 
 		// Load scripts only after the bridge is registered so the web component
 		// can call fetchAnalytics as soon as it initialises.
-		if (!scriptsLoaded.current) {
-			scriptsLoaded.current = true;
-			loadScript(`${ADMIN_BASE_URL}/onedollarstats/stonks-dashboard.js?v=1`);
-			loadScript(`${ADMIN_BASE_URL}/onedollarstats/stonks-insights.js?v=1`);
-		}
+		Promise.all([
+			loadScript(`${ADMIN_BASE_URL}/onedollarstats/stonks-dashboard.js?v=1`),
+			loadScript(`${ADMIN_BASE_URL}/onedollarstats/stonks-insights.js?v=1`),
+		]).then(() => setScriptsReady(true)).catch(() => {});
 	}, []);
 
-	if (!hostname) return null;
+	if (!hostname || !scriptsReady) return null;
 
 	return <StonksDashboardElement website={hostname} />;
 }
