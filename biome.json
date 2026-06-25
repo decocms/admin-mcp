@@ -7,13 +7,7 @@
 	},
 	"files": {
 		"ignoreUnknown": true,
-		"includes": [
-			"**",
-			"!**/styles.css",
-			"!**/globals.css",
-			"!storefront-skills/**",
-			"!.wrangler/**"
-		]
+		"includes": ["**", "!**/styles.css", "!**/globals.css", "!.wrangler/**"]
 	},
 	"formatter": {
 		"enabled": true,

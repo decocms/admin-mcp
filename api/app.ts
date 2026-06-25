@@ -86,25 +86,18 @@ function withMcpApiRoute(fetcher: Fetcher): Fetcher {
 	};
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: prompts factory shape is opaque to us
-type PromptsOption = any;
-
 export interface CreateAppOptions {
 	getClientHTML: () => Promise<string>;
-	// Optional. Bun entry passes the filesystem-walking factory; Workers entry
-	// omits it (the module that produces prompts touches `import.meta.dir`).
-	prompts?: PromptsOption;
 }
 
 export function createApp(opts: CreateAppOptions): Fetcher {
-	const { getClientHTML, prompts } = opts;
+	const { getClientHTML } = opts;
 
 	const runtime = withRuntime<Env, typeof StateSchema>({
 		configuration: {
 			state: StateSchema,
 		},
 		tools,
-		...(prompts !== undefined ? { prompts } : {}),
 		resources: [
 			createAssetsAppResource(getClientHTML),
 			createLogsAppResource(getClientHTML),

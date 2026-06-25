@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createApp } from "./app.ts";
-import { storefrontSkillsPrompts } from "./prompts/storefront-skills.ts";
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
 
@@ -13,7 +12,6 @@ function getDistPath(): string {
 
 const handler = createApp({
 	getClientHTML: () => readFile(getDistPath(), "utf-8"),
-	prompts: storefrontSkillsPrompts,
 });
 
 Bun.serve({
