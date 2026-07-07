@@ -1,6 +1,11 @@
 import { analyticsQueryTool } from "./analytics-query.ts";
 import { assetsTool, deleteAssetTool, uploadAssetTool } from "./assets.ts";
 import {
+	createExperimentTool,
+	experimentResultsTool,
+	listExperimentsTool,
+} from "./experiments.ts";
+import {
 	getErrorPatternsTool,
 	getErrorRateSeriesTool,
 	getErrorsOverTimeTool,
@@ -44,4 +49,7 @@ export const tools = [
 	getErrorPatternsTool,
 	getErrorsOverTimeTool,
 	getErrorRateSeriesTool,
+	listExperimentsTool,
+	experimentResultsTool,
+	createExperimentTool,
 ];
