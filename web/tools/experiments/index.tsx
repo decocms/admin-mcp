@@ -128,6 +128,7 @@ const DEFAULT_GOALS = [
 	"view_item",
 	"select_promotion",
 	"add_to_cart",
+	"form_submit",
 	"begin_checkout",
 	"Visit /checkout",
 	"Visit /checkout#/cart",
