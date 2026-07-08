@@ -385,9 +385,11 @@ function ResultsView({
 		callTool,
 	]);
 
+	// Tables (Funnel / By Goal) show every goal including the visitors baseline,
+	// matching the admin. The bar chart drops visitors (its conversion would
+	// always be 100% and would flatten the other goals).
 	const sortedGoals = useMemo(
-		() =>
-			data ? sortByTotal(data.goals.filter((g) => g.goal !== "visitors")) : [],
+		() => (data ? sortByTotal(data.goals) : []),
 		[data],
 	);
 
@@ -415,11 +417,13 @@ function ResultsView({
 			"Test Variant 1": point.variant,
 		})) ?? [];
 
-	const barData = sortedGoals.map((g) => ({
-		goal: g.goal,
-		Default: percentage(g.default, visitors.default),
-		"Test Variant 1": percentage(g.variant, visitors.variant),
-	}));
+	const barData = sortedGoals
+		.filter((g) => g.goal !== "visitors")
+		.map((g) => ({
+			goal: g.goal,
+			Default: percentage(g.default, visitors.default),
+			"Test Variant 1": percentage(g.variant, visitors.variant),
+		}));
 
 	return (
 		<div className="flex flex-col gap-6">
