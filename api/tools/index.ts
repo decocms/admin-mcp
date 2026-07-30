@@ -6,11 +6,6 @@ import {
 	listExperimentsTool,
 } from "./experiments.ts";
 import {
-	getErrorPatternsTool,
-	getErrorRateSeriesTool,
-	getErrorsOverTimeTool,
-} from "./hyperdx.ts";
-import {
 	getAnalyticsDataTool,
 	getMonitorCacheStatusTool,
 	getMonitorDataTool,
@@ -33,9 +28,6 @@ export const tools = [
 	getMonitorCacheStatusTool,
 	getMonitorStatusCodesTool,
 	getAnalyticsDataTool,
-	getErrorPatternsTool,
-	getErrorsOverTimeTool,
-	getErrorRateSeriesTool,
 	listExperimentsTool,
 	experimentResultsTool,
 	createExperimentTool,
