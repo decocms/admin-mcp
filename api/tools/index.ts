@@ -10,7 +10,6 @@ import {
 	getErrorRateSeriesTool,
 	getErrorsOverTimeTool,
 } from "./hyperdx.ts";
-import { getLogsDataTool } from "./logs.ts";
 import {
 	getAnalyticsDataTool,
 	getMonitorCacheStatusTool,
@@ -21,19 +20,11 @@ import {
 	getMonitorTopCountriesTool,
 	getMonitorTopPathsTool,
 } from "./monitor.ts";
-import {
-	getProductionShaTool,
-	listReleasesTool,
-	promoteToProductionTool,
-	revertCommitTool,
-} from "./releases.ts";
-
 export const tools = [
 	analyticsQueryTool,
 	assetsTool,
 	uploadAssetTool,
 	deleteAssetTool,
-	getLogsDataTool,
 	getMonitorDataTool,
 	getMonitorSummaryTool,
 	getMonitorTimelineTool,
@@ -42,10 +33,6 @@ export const tools = [
 	getMonitorCacheStatusTool,
 	getMonitorStatusCodesTool,
 	getAnalyticsDataTool,
-	listReleasesTool,
-	promoteToProductionTool,
-	revertCommitTool,
-	getProductionShaTool,
 	getErrorPatternsTool,
 	getErrorsOverTimeTool,
 	getErrorRateSeriesTool,
