@@ -1,5 +1,4 @@
 import { withRuntime } from "@decocms/runtime";
-import { createAssetsAppResource } from "./resources/assets.ts";
 import { createExperimentsAppResource } from "./resources/experiments.ts";
 import { createMonitorAppResource } from "./resources/monitor.ts";
 import { tools } from "./tools/index.ts";
@@ -98,7 +97,6 @@ export function createApp(opts: CreateAppOptions): Fetcher {
 		},
 		tools,
 		resources: [
-			createAssetsAppResource(getClientHTML),
 			createExperimentsAppResource(getClientHTML),
 			createMonitorAppResource(getClientHTML),
 		],
