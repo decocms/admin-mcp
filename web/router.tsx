@@ -7,12 +7,10 @@ import {
 	RouterProvider,
 } from "@tanstack/react-router";
 import { useMcpHostContext, useMcpState } from "./context.tsx";
-import AssetsPage from "./tools/assets/index.tsx";
 import ExperimentsPage from "./tools/experiments/index.tsx";
 import MonitorPage from "./tools/monitor/index.tsx";
 
 const TOOL_PAGES: Record<string, React.ComponentType> = {
-	fetch_assets: AssetsPage,
 	get_monitor_data: MonitorPage,
 	list_experiments: ExperimentsPage,
 };

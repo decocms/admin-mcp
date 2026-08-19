@@ -1,5 +1,4 @@
 import { analyticsQueryTool } from "./analytics-query.ts";
-import { assetsTool, deleteAssetTool, uploadAssetTool } from "./assets.ts";
 import {
 	createExperimentTool,
 	experimentResultsTool,
@@ -17,9 +16,6 @@ import {
 } from "./monitor.ts";
 export const tools = [
 	analyticsQueryTool,
-	assetsTool,
-	uploadAssetTool,
-	deleteAssetTool,
 	getMonitorDataTool,
 	getMonitorSummaryTool,
 	getMonitorTimelineTool,
